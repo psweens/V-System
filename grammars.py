@@ -1,6 +1,4 @@
-import random
-from libGenerator import setProperties, calBifurcation
-from vSystem import *
+from vSystem import F
 
 # def F(n, d0, properties=None): 
 #     if n > 0:
@@ -20,9 +18,9 @@ def transform_multiple(sequence, transformations=None, iterations=2, d0=2,
     '''
     transformations = {'F': 'F[-F][+F]'}
     # for i in range(iterations):
-    sequence = F(iterations,d0=2,properties=properties)
+    sequence = F(iterations,d0=10,properties=properties)
         # sequence = transform_sequence(sequence, transformations)
-    print(sequence)
+    # print(sequence)
     return sequence
 
 

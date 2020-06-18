@@ -1,11 +1,11 @@
 import random
 import numpy as np
-import matplotlib.pyplot as plt
 
-from math import pi, sin, cos, isnan
+from math import pi, sin, cos, sqrt
+from aux_func import rotate, normalise, magnitude
 DEGREES_TO_RADIANS = pi / 180
 
-def branching_turtle_to_coords(turtle_program, theta=22.5, phi=22.5, precision=1):
+def branching_turtle_to_coords(turtle_program, theta=20., phi=20.):
     
     '''
     Working with discontinuous paths i.e. tree formation
@@ -16,65 +16,67 @@ def branching_turtle_to_coords(turtle_program, theta=22.5, phi=22.5, precision=1
             from the stack
     '''
     saved_states = list()
-    state = (0, 0, 0, 90, 90, 5)
-    yield (0, 0, 0, 0)
+    state = (0, 0, 0, 0, 0, 20.)
+    yield  (0,0,0,0,0,0)
     
     index = 0
-    vessel = 0
+    lseg = 5.
+    origin = (0, 0, 0)
+    surface = 80
+    tx = 0
+    ty = 0
+    tz = 0
+
     for command in turtle_program:
+        # print(command)
         x, y, z, alpha, beta, diam = state
-        
-        if command == '{':
-            vessel == 1
-        
-        elif command == '}':
-            vessel = 0
+    
         
         if command.lower() in 'abcdefghijs':        # Move forward (matches a-j and A-J)
             # segment start
-            lseg = 5
-            # eval_brackets(index, turtle_program)
-            # print(command)
-            # print('%f %f %f %f' %(x, y, angle, diam))
-            state = (x - lseg*cos(alpha * DEGREES_TO_RADIANS),
-                     y + lseg*sin(alpha * DEGREES_TO_RADIANS),
-                     z + lseg*cos(beta * DEGREES_TO_RADIANS),                     
-                     alpha, 
-                     beta,
-                     diam + 5)
-
-            #  segment end
-            # print(state)
+            
             if command.islower():# Add a break in the line if command matches a-j (lowercase)
                 lseg, diam = eval_brackets(index, turtle_program)
-                # print('%f %f' %(lseg, diam))
-                # yield (float('nan'), float('nan'), float('nan'), float('nan'))
+            
+                if not magnitude(np.array([x,y,z])) == 0.0:
+                    tx, ty, tz = rotate(p=beta*DEGREES_TO_RADIANS,
+                                        r=alpha*DEGREES_TO_RADIANS,
+                                        v=normalise(np.array([x,y,z]),lseg))
+                    x += tx
+                    y += ty
+                    z += tz
+                    
+                else:
+                    y = lseg
 
-            yield (state[0], state[1], state[2], state[5])
+            state = (x, y, z, alpha, beta, diam)
+            
+            #  segment end
+            yield (state[0], state[1], state[2], state[3], state[4], state[5])
 
         elif command == '+':                       # Turn clockwise
-            theta = eval_brackets(index, turtle_program)
-            state = (x, y, z, alpha + theta, beta, diam)
+            phi = eval_brackets(index, turtle_program)
+            state = (x, y, z, alpha + phi, beta, diam)
 
         elif command == '-':                       # Turn counterclockwise
-            theta = eval_brackets(index, turtle_program)
-            state = (x, y, z, alpha - theta, beta, diam)
+            phi = eval_brackets(index, turtle_program)
+            state = (x, y, z, alpha - phi, beta, diam)
             
         elif command == '/':
-            phi = eval_brackets(index, turtle_program)
-            state = (x, y, z, alpha, beta + posneg()*phi, diam)
+            theta = eval_brackets(index, turtle_program)
+            state = (x, y, z, alpha, beta + theta, diam)
 
         elif command == '[':                       # Remember current state
             saved_states.append(state)
 
         elif command == ']':                       # Return to previous state
             state = saved_states.pop()
-            yield (float('nan'), float('nan'), float('nan'), float('nan'))
+            yield (float('nan'), float('nan'), float('nan'), float('nan'), float('nan'), float('nan'))
             x, y, z, alpha, beta, diam = state
-            yield (x, y, z, diam)
+            yield (x, y, z, alpha, beta, diam)
 
         index += 1
-        # Note: We silently ignore unknown commands
+        # Note: silently ignore unknown commands
         
 def eval_brackets(index, turtle):
     
@@ -83,6 +85,7 @@ def eval_brackets(index, turtle):
     double = 0
     for i in range(index+2, len(turtle)):
         if turtle[i] == ')':
+            
             if double == 1:
                 return eval(a), eval(b)
             else:
@@ -97,3 +100,11 @@ def eval_brackets(index, turtle):
             
 def posneg():
     return 1 if random.random() < 0.5 else -1
+
+def raddist(origin, location, radius=80):
+    return bool(sqrt(pow(origin[0]-location[0],2) + pow(origin[1]-location[1],2) +
+                pow(origin[2]-location[2],2)) > radius)
+
+# def proximity(state,p0):
+    
+

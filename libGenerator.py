@@ -49,7 +49,8 @@ def calBifurcation(d0):
         d1 = dOpti # Elimate possibility of d1 being greater than d0
         
     d2 = (d0 ** k - d1 ** k) ** (1.0 / k) # Calculate second diameter
-    alpha = d2 / d1 # Rate of symmetry of daughters (=1 symmetrical ?)
+    alpha = abs(np.random.uniform(1., 0.25)) * (d2 / d1) # Rate of symmetry of daughters (=1 symmetrical ?)
+    # alpha = d2 / d1
     
     '''
     Equations which mimic bifurcation angles in the human body
@@ -57,11 +58,17 @@ def calBifurcation(d0):
     '''
     xtmp = (1 + alpha * alpha * alpha) ** (4.0 / 3) + 1 - alpha ** 4
     xtmpb = 2 * ((1 + alpha * alpha * alpha ) ** (2.0 / 3))
+    val = xtmp / xtmpb
+    # if (val) > 1.0: a1 = 0.0
+    # else: a1 = npm.acos(xtmp / xtmpb)
     a1 = npm.acos(xtmp / xtmpb)
     
     xtmp = (1 + alpha * alpha * alpha) ** (4.0 / 3) + (alpha ** 4) - 1
     xtmpb = 2 * alpha * alpha * ((1 + alpha * alpha * alpha) ** (2.0/3))
-    a2 = npm.acos(xtmp/xtmpb)
+    val = xtmp / xtmpb
+    # if (val) > 1.0: a2 = 0.0
+    # else: a2 = npm.acos(xtmp / xtmpb)
+    a2 = npm.acos(xtmp / xtmpb)
     
     resp["d1"] = d1
     resp["d2"] = d2
@@ -73,4 +80,6 @@ def calBifurcation(d0):
     return resp
     
 def getLength(d0):
+    # d0 * epsilon
+    # abs(np.random.normal(50,10))
     return d0 * epsilon
