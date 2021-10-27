@@ -2,7 +2,7 @@
 
 V-System if a Python project to generate synthetic vascular networks which utilises [Linenmayer Systems](https://en.wikipedia.org/wiki/L-system), known as L-Systems; a type of [formal grammar](https://en.wikipedia.org/wiki/Formal_grammar).
 
-V-System uses the grammars of [M. Galarreta-Valverde et al. (2013)](https://www.spiedigitallibrary.org/conference-proceedings-of-spie/8669/86691I/Three-dimensional-synthetic-blood-vessel-generation-using-stochastic-L-systems/10.1117/12.2007532.full?SSO=1) which extends the traditional L-System by adding stochastic rules and parameters in the grammar to generate synthetic 3D blood vessels.
+V-System uses the grammars of [M. Galarreta-Valverde et al. (2013)](https://www.spiedigitallibrary.org/conference-proceedings-of-spie/8669/86691I/Three-dimensional-synthetic-blood-vessel-generation-using-stochastic-L-systems/10.1117/12.2007532.full?SSO=1) who extended the traditional L-System by adding stochastic rules and parameters in the grammar to generate synthetic 3D blood vessels.
 
 The V-System is split into three processes:
 * Generate a grammatical string for a user-defined number of iterations.
