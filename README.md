@@ -10,7 +10,7 @@ The V-System is split into three processes:
 * Perform 3D voxel traversal to generate a 3D binary mask of the generated vascular network.
 
 ## Installation
-Reanimate is compatible with C++11, and has been tested on Ubuntu 18.04 Lts and macOS Big Sur. 
+V-System is compatible with C++11, and has been tested on Ubuntu 18.04 Lts and macOS Big Sur. 
 Other distributions of Linux and Windows should work as well.
 
 To install V-System from source, download zip file on GitHub page or run the following in a terminal:
