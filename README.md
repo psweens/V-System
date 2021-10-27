@@ -14,9 +14,13 @@ Reanimate is compatible with C++11, and has been tested on Ubuntu 18.04 Lts and 
 Other distributions of Linux and Windows should work as well.
 
 To install V-System from source, download zip file on GitHub page or run the following in a terminal:
-
 ```bash
 git clone https://github.com/psweens/V-System.git
+```
+
+The required Python packages can be found [here](https://github.com/psweens/V-System/blob/master/REQUIREMENTS.txt). The package list can be installed, for example, using Conda by running:
+```bash
+conda create --name <env> --file REQUIREMENTS.txt
 ```
 
 ## Acknowledgements
