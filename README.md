@@ -18,7 +18,7 @@ To install V-System from source, download zip file on GitHub page or run the fol
 git clone https://github.com/psweens/V-System.git
 ```
 
-The required Python packages can be found [here](https://github.com/psweens/V-System/blob/master/REQUIREMENTS.txt). The package list can be installed, for example, using Conda by running:
+The required Python packages can be found [here](https://github.com/psweens/V-System/blob/master/REQUIREMENTS.txt). The package list can be installed, for example, using creating a Conda environment by running:
 ```bash
 conda create --name <env> --file REQUIREMENTS.txt
 ```
