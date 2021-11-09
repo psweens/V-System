@@ -9,6 +9,9 @@ The V-System is split into three processes:
 * Convert the string into a list of coordinates.
 * Perform 3D voxel traversal to generate a 3D binary mask of the generated vascular network.
 
+An example of generated synthetic vascular trees of increasing complexity is shown below.
+![alt text](https://github.com/psweens/V-System/blob/master/Lnet_Generations.jpg)
+
 ## Installation
 V-System is compatible with C++11, and has been tested on Ubuntu 18.04 LTS and macOS Big Sur. 
 Other distributions of Linux and Windows should work as well.
