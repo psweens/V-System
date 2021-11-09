@@ -13,6 +13,11 @@ An example of generated synthetic vascular trees of increasing complexity is sho
 
 ![alt text](https://github.com/psweens/V-System/blob/master/Lnet_Generations.jpg)
 
+## References 
+To reference this repository please use the below ciation.
+
+***TBA***
+
 ## Installation
 V-System is compatible with C++11, and has been tested on Ubuntu 18.04 LTS and macOS Big Sur. 
 Other distributions of Linux and Windows should work as well.
