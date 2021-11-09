@@ -14,7 +14,7 @@ An example of generated synthetic vascular trees of increasing complexity is sho
 ![alt text](https://github.com/psweens/V-System/blob/master/Lnet_Generations.jpg)
 
 ## References 
-To reference this repository please use the below ciation.
+To reference this repository please use the below citation.
 
 ***TBA***
 
