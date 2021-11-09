@@ -10,6 +10,7 @@ The V-System is split into three processes:
 * Perform 3D voxel traversal to generate a 3D binary mask of the generated vascular network.
 
 An example of generated synthetic vascular trees of increasing complexity is shown below.
+
 ![alt text](https://github.com/psweens/V-System/blob/master/Lnet_Generations.jpg)
 
 ## Installation
