@@ -16,7 +16,7 @@ An example of generated synthetic vascular trees of increasing complexity is sho
 ## References 
 To reference this repository please use the below citation.
 
-> [Quantification of vascular networks in photoacoustic mesoscopy]https://www.biorxiv.org/content/10.1101/2021.11.22.469541v1)<br>
+> [Quantification of vascular networks in photoacoustic mesoscopy](https://www.biorxiv.org/content/10.1101/2021.11.22.469541v1)<br>
 > Emma L. Brown, Thierry L. Lefebvre, Paul W. Sweeney et al.
 
 ## Installation
