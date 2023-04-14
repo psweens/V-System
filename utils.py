@@ -2,45 +2,145 @@ import numpy as np
 import bezier as bz
 import matplotlib.pyplot as plt
 from mpl_toolkits.mplot3d import Axes3D
-from numpy import math as npm
 
-def yaw(angle):
+def yaw(angle_degrees):
+    """
+    Computes a 3x3 yaw rotation matrix for a given angle of rotation around the z-axis.
 
-    A = np.array([[npm.cos(angle), -npm.sin(angle), 0.0],
-                   [npm.sin(angle), npm.cos(angle), 0.0],
+    Args:
+    - angle_degrees: float representing the angle of rotation around the z-axis, in degrees.
+
+    Returns:
+    - 3x3 numpy array representing the rotation matrix.
+    """
+
+    # convert angle to radians
+    angle = np.deg2rad(angle_degrees)
+
+    # create rotation matrix
+    A = np.array([[np.cos(angle), -np.sin(angle), 0.0],
+                   [np.sin(angle), np.cos(angle), 0.0],
                    [0.0, 0.0, 1.0]])
 
     return A
 
 def pitch(angle):
+    """
+    Apply a pitch transformation to a 3D object represented as a numpy array.
 
-    A = np.array([[npm.cos(angle), 0.0, npm.sin(angle)],
-                   [0.0, 1.0, 0.0],
-                   [-npm.sin(angle), 0.0, npm.cos(angle)]])
+    Args:
+        angle (float): the angle (in radians) by which to pitch the object
 
+    Returns:
+        np.ndarray: a 3x3 numpy array representing the pitch transformation matrix
+    """
+    # Define the pitch transformation matrix
+    A = np.array([[np.cos(angle), 0.0, np.sin(angle)],
+                  [0.0, 1.0, 0.0],
+                  [-np.sin(angle), 0.0, np.cos(angle)]])
+
+    # Return the transformation matrix
     return A
 
 def roll(angle):
+    """
+    Applies a roll transformation to a 3x3 numpy array.
 
+    Args:
+    angle (float): The angle (in radians) of the desired roll transformation.
+
+    Returns:
+    A (numpy.ndarray): A 3x3 numpy array representing the roll transformation.
+    """
     A = np.array([[1.0, 0.0, 0.0],
-                  [0.0, npm.cos(angle), -npm.sin(angle)],
-                  [0.0, npm.sin(angle), npm.cos(angle)]])
+                  [0.0, np.cos(angle), -np.sin(angle)],
+                  [0.0, np.sin(angle), np.cos(angle)]])
 
     return A
 
-def rotate(y=0.0,p=0.0,r=0.0,v=None):
-    return yaw(y).dot(pitch(p).dot(roll(r).dot(v)))
+def rotate(yaw_angle=0.0, pitch_angle=0.0, roll_angle=0.0, vector=None):
+    """
+    Applies a sequence of yaw, pitch, and roll rotations to a vector.
 
-def normalise(x,scale=1.0):
-    if magnitude(x) == 0.:
+    Args:
+    - yaw_angle (float): Angle in radians to rotate around the z-axis (yaw).
+    - pitch_angle (float): Angle in radians to rotate around the y-axis (pitch).
+    - roll_angle (float): Angle in radians to rotate around the x-axis (roll).
+    - vector (ndarray): A numpy array of shape (3,) representing the vector to rotate.
+
+    Returns:
+    - ndarray: A numpy array of shape (3,) representing the rotated vector.
+
+    """
+    # Apply the yaw, pitch, and roll rotations in sequence
+    rotated_vector = yaw(yaw_angle).dot(pitch(pitch_angle).dot(roll(roll_angle).dot(vector)))
+
+    return rotated_vector
+
+def normalise(x, scale=1.0):
+    """
+    Normalizes a given numpy array by scaling it to a specified magnitude.
+
+    Args:
+    - x (np.ndarray): The input numpy array to be normalized.
+    - scale (float): The desired magnitude to scale the array to (default=1.0).
+
+    Returns:
+    - np.ndarray: The normalized numpy array.
+
+    Raises:
+    - TypeError: If the input array is not a numpy array.
+    """
+
+    # Check if input is a numpy array
+    if not isinstance(x, np.ndarray):
+        raise TypeError("Input x must be a numpy array.")
+
+    # Calculate the magnitude of the input array
+    mag = magnitude(x)
+
+    # Check if the magnitude is zero and return the input array if true
+    if mag == 0.:
         return x
     else:
-        return (scale / magnitude(x)) * x
+        # Scale the array to the desired magnitude and return the result
+        return (scale / mag) * x
 
 def magnitude(x):
-    return npm.sqrt(x[0]**2 + x[1]**2 + x[2]**2)
+    """
+    Computes the magnitude (or length) of a three-dimensional vector x.
+    
+    Args:
+        x (numpy.ndarray): A three-dimensional vector.
+    
+    Returns:
+        float: The magnitude of the vector x.
+    """
+    return np.sqrt(x[0]**2 + x[1]**2 + x[2]**2)
+
 
 def bezier_interpolation(coords=None):
+    """
+    Interpolates a series of Bezier curves defined by input coordinates.
+
+    Args:
+    - coords (list): A list of tuples, each containing the 10 variables representing a point in space. 
+    The variables are ordered as: x, y, z, curvature, torsion, diameter, length segment, generation, 
+    bifurcation angle, and euclidean distance to parent node.
+
+    Returns:
+    - newNodes (ndarray): An array containing the new interpolated points.
+
+    Raises:
+    - TypeError: If the input is not a list.
+    - ValueError: If the input list is empty.
+    """
+
+    # Error checks
+    if type(coords) != list:
+        raise TypeError("Input must be a list.")
+    if len(coords) == 0:
+        raise ValueError("Input list is empty.")
 
     # Store coordinates
     X, Y, Z, _, _, diam, lseg, _, _, _ = zip(*coords)
@@ -65,7 +165,7 @@ def bezier_interpolation(coords=None):
                     if j == 0:
                         theChosenOne = vessel[:,j:(j+6)]
                     else:
-                        theChosenOne = vessel[:,j:(j+6)]
+                        theChosenOne = vessel[:,j:(j+6)]wo
                     points = theChosenOne
                     # points = interpolate_this(theChosenOne)
                     newNodes = generate_points(newNodes,points)
@@ -80,22 +180,50 @@ def bezier_interpolation(coords=None):
     return newNodes
 
 def interpolate_this(vessel=None):
+    """
+    Interpolates a Bezier curve based on a given set of points.
 
+    Args:
+    - vessel (numpy.ndarray): Array of shape (n, m) representing the coordinates of the points. Each column
+                              of the array should represent a point in n-dimensional space.
+
+    Returns:
+    - points (numpy.ndarray): Array of shape (n, k) representing the interpolated points, where k is the number
+                              of points generated based on the interpolation.
+    """
+    
+    # Generate a Bezier curve based on the given set of points
     curve = bz.Curve(vessel, degree=(vessel.shape[1]-1))
+    
+    # Evaluate the curve at evenly spaced points between 0 and 1
     t = np.linspace(0, 1, 10)
-    # curve = curve.elevate()
     points = curve.evaluate_multi(t)
 
     return points
 
-def generate_points(newNodes=None,points=None, usenan=True):
+def generate_points(newNodes=None, points=None, usenan=True):
+    """
+    Generate new points by appending them to existing nodes.
 
+    Args:
+    - newNodes: numpy.ndarray, the existing nodes to which the new points will be appended
+    - points: numpy.ndarray, the new points to be added
+    - usenan: bool, optional, whether to insert NaN values between the new points, default is True
+
+    Returns:
+    - newNodes: numpy.ndarray, the updated array of nodes with the new points appended
+
+    """
     if newNodes.size == 0:
+        # if there are no existing nodes, set the new nodes to be the points
         newNodes = points
     else:
+        # otherwise, append the new points to the existing nodes
         newNodes = np.hstack((newNodes, points))
 
     if usenan:
+        # if the user wants to insert NaN values between the new points,
+        # create a vector of NaN values and append it to the updated nodes
         nanVec = np.empty((4,1))
         nanVec[:] = np.NaN
         newNodes = np.hstack((newNodes, nanVec))
@@ -104,14 +232,21 @@ def generate_points(newNodes=None,points=None, usenan=True):
 
 def addsalt_pepper(img, SNR):
     '''
-    Taken from https://www.programmersought.com/article/3363136769/#:~:text=Salt%20and%20pepper%20noise%2C%20also,noise%20(based%20on%20python).
+    Adds salt and pepper noise to an image.
+
+    Parameters:
+    img (numpy.ndarray): A 3D numpy array representing an image.
+    SNR (float): Signal to noise ratio. Probability of salt and pepper noise.
+
+    Returns:
+    numpy.ndarray: A 3D numpy array representing the input image with salt and pepper noise added.
     '''
-    img_ = img.copy()
-    c, h, w = img_.shape
-    mask = np.random.choice((0, 1, 2), size=(1, h, w), p=[SNR, (1 - SNR) / 2., (1 - SNR) / 2.])
-    mask = np.repeat(mask, c, axis=0) # Copy by channel to have the same shape as img
-    img_[mask == 1] = 255 # salt noise
-    img_[mask == 2] = 0 # 
+    img_ = img.copy() # Create a copy of the input image to avoid modifying the original image
+    c, h, w = img_.shape # Get the number of channels, height and width of the input image
+    mask = np.random.choice((0, 1, 2), size=(1, h, w), p=[SNR, (1 - SNR) / 2., (1 - SNR) / 2.]) # Generate a random mask to add noise to the image
+    mask = np.repeat(mask, c, axis=0) # Copy the mask by channel to have the same shape as the input image
+    img_[mask == 1] = 255 # Add salt noise
+    img_[mask == 2] = 0 # Add pepper noise
     return img_
 
 def norm_data(data):
