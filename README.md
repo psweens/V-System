@@ -16,8 +16,12 @@ An example of generated synthetic vascular trees of increasing complexity is sho
 ## References 
 To reference this repository please use the below citation.
 
+Version 1.0:
 > [Quantification of vascular networks in photoacoustic mesoscopy](https://www.biorxiv.org/content/10.1101/2021.11.22.469541v1)<br>
 > Emma L. Brown, Thierry L. Lefebvre, Paul W. Sweeney et al.
+
+Version 2.0:
+TBA
 
 ## Installation
 V-System is compatible with C++11, and has been tested on Ubuntu 18.04 LTS and macOS Big Sur. 
@@ -28,9 +32,9 @@ To install V-System from source, download zip file on GitHub page or run the fol
 git clone https://github.com/psweens/V-System.git
 ```
 
-The required Python packages can be found [here](https://github.com/psweens/V-System/blob/master/REQUIREMENTS.txt). The package list can be installed, for example, using creating a Conda environment by running:
+The required Python packages can be found [here](https://github.com/psweens/V-System/blob/master/REQUIREMENTS.txt). The package list can be installed, for example, using creating a Conda environment and by installing the packages using PIP:
 ```bash
-conda create --name <env> --file REQUIREMENTS.txt
+Pip install scikit-image opencv-python bezier matplotlib itk
 ```
 
 ## Acknowledgements
