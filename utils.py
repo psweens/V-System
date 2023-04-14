@@ -1,7 +1,9 @@
+import itk
 import numpy as np
 import bezier as bz
 import matplotlib.pyplot as plt
 from mpl_toolkits.mplot3d import Axes3D
+from numpy import math as npm
 
 def yaw(angle_degrees):
     """
@@ -58,7 +60,7 @@ def roll(angle):
 
     return A
 
-def rotate(yaw_angle=0.0, pitch_angle=0.0, roll_angle=0.0, vector=None):
+def rotate(pitch_angle=0.0, roll_angle=0.0, yaw_angle=0.0, vector=None):
     """
     Applies a sequence of yaw, pitch, and roll rotations to a vector.
 
@@ -118,8 +120,8 @@ def magnitude(x):
     """
     return np.sqrt(x[0]**2 + x[1]**2 + x[2]**2)
 
-
 def bezier_interpolation(coords=None):
+
     """
     Interpolates a series of Bezier curves defined by input coordinates.
 
@@ -136,14 +138,21 @@ def bezier_interpolation(coords=None):
     - ValueError: If the input list is empty.
     """
 
-    # Error checks
-    if type(coords) != list:
-        raise TypeError("Input must be a list.")
-    if len(coords) == 0:
-        raise ValueError("Input list is empty.")
-
     # Store coordinates
-    X, Y, Z, _, _, diam, lseg, _, _, _ = zip(*coords)
+    X = []
+    Y = []
+    Z = []
+    diam = []
+
+    try:
+        for c in coords:
+            X.append(float((c[0])))
+            Y.append(float((c[1])))
+            Z.append(float((c[2])))
+            diam.append(float((c[5])))
+    except:
+        pass
+    
     nodes = np.vstack((X, Y, Z, diam))
 
     # Define the Bezier curve
@@ -165,7 +174,7 @@ def bezier_interpolation(coords=None):
                     if j == 0:
                         theChosenOne = vessel[:,j:(j+6)]
                     else:
-                        theChosenOne = vessel[:,j:(j+6)]wo
+                        theChosenOne = vessel[:,j:(j+6)]
                     points = theChosenOne
                     # points = interpolate_this(theChosenOne)
                     newNodes = generate_points(newNodes,points)

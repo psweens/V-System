@@ -1,6 +1,5 @@
-import ast
-import random
 import numpy as np
+import random
 from numpy import math as npm
 
 default={"k": 3,
@@ -19,16 +18,12 @@ def setProperties(properties):
     Returns:
         None
 
-    Raises:
-        None
     """
-
-    # Check if properties is None and assign default value
-    if properties is None:
+    if properties == None:
         properties = default
 
-    # Define global variables based on the input dictionary
     global k, epsilon, randmarg, sigma, stochparams
+
     k = properties['k']
     epsilon = properties['epsilon']
     randmarg = properties['randmarg']
@@ -49,43 +44,37 @@ def calParam(text, params):
     '''
 
     txt = text[:]
-    for i in params:
-        txt = txt.replace(i, str(params[i]))
-    try:
-        result = ast.literal_eval(txt)
-        return str(params['co'] / result)
-    except:
-        return 'Error: Invalid expression'
+    for i in params: txt = txt.replace(i, str(params[i]))
+        
+    return str(params['co'] / eval(txt))
 
 def calBifurcation(d0):
-
-'''
+    '''
     Calculates the diameters and angles of bifurcation given an input diameter
     
-    Parameters:
+    Args:
     d0 (float): input diameter
     
     Returns:
     resp (dict): a dictionary containing the calculated values for d1, d2, d0, th1, th2, and co
     '''
+
     resp = {}
-    
-    # Calculate optimal diameter and adjust if stochastic parameter is set to True
+
     dOpti = d0 / 2 ** (1.0 / k)
-    if stochparams:
-        d1 = abs(np.random.normal(dOpti, dOpti / sigma))
-    else:
-        d1 = dOpti # Optimal diameter
-    
-    # Ensure that d1 is not greater than d0
-    if d1 >= d0:
-        d1 = dOpti
-        
-    # Calculate second diameter using the first diameter and the rate of symmetry between daughters
+    if stochparams: d1 = abs(np.random.normal(dOpti, dOpti / sigma))
+    else: d1 = dOpti # Optimal diameter
+
+    if d1 >= d0: d1 = dOpti # Elimate possibility of d1 being greater than d0
+
+    d2 = (d0 ** k - d1 ** k) ** (1.0 / k) # Calculate second diameter
+    # alpha = abs(np.random.uniform(1., 0.25)) * (d2 / d1) # Rate of symmetry of daughters (=1 symmetrical ?)
     alpha = d2 / d1
-    d2 = (d0 ** k - d1 ** k) ** (1.0 / k)
-    
-    # Equations which mimic bifurcation angles in the human body (Liu et al. (2010) and Zamir et al. (1988))
+
+    '''
+    Equations which mimic bifurcation angles in the human body
+    Liu et al. (2010) and Zamir et al. (1988)
+    '''
     xtmp = (1 + alpha * alpha * alpha) ** (4.0 / 3) + 1 - alpha ** 4
     xtmpb = 2 * ((1 + alpha * alpha * alpha ) ** (2.0 / 3))
     a1 = npm.acos(xtmp / xtmpb)
@@ -93,15 +82,14 @@ def calBifurcation(d0):
     xtmp = (1 + alpha * alpha * alpha) ** (4.0 / 3) + (alpha ** 4) - 1
     xtmpb = 2 * alpha * alpha * ((1 + alpha * alpha * alpha) ** (2.0/3))
     a2 = npm.acos(xtmp / xtmpb)
-    
-    # Store calculated values in a dictionary and return
+
     resp["d1"] = d1
     resp["d2"] = d2
     resp["d0"] = d0
     resp["th1"] = a1 * 180 / npm.pi
     resp["th2"] = a2 * 180 / npm.pi
     resp["co"] = getLength(d0)
-    
+
     return resp
 
 def getLength(d0):
@@ -114,6 +102,6 @@ def getLength(d0):
     Returns:
     float: The length of the branch.
     """
-    c0 = d0 * epsilon # calculate c0 based on the parent branch diameter and epsilon
-          
-    return np.random.uniform(c0, randmarg * 2)
+    c0 = d0 * epsilon
+    # abs(np.random.normal(50,10))
+    return np.random.uniform(c0 - randmarg, c0 + randmarg)

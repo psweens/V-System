@@ -6,6 +6,7 @@ from utils import rotate, normalise, magnitude
 DEGREES_TO_RADIANS = pi / 180
 
 def branching_turtle_to_coords(turtle_program, d0, theta=20., phi=20.):
+
     '''
     Working with discontinuous paths i.e. tree formation
     '+' : postive rotation by (deg)
@@ -22,17 +23,14 @@ def branching_turtle_to_coords(turtle_program, d0, theta=20., phi=20.):
     Returns
     tuple: A list of tuples which provide the coordinates of the branches
     '''
-
-    # Initialize variables
-    saved_states = list()        # Stack for saving and restoring states
-    stateSize = 10               # Number of elements in each state tuple
-    dx = 0                       # x displacement
-    dy = 0                       # y displacement
-    dz = 0                       # z displacement
-    lseg = 1.                    # Length of each segment
-    rim = 400                   # Rim radius for proximity calculation
-
-    # Choose the starting direction randomly
+    saved_states = list()
+    stateSize = 10
+    dx = 0
+    dy = 0
+    dz = 0
+    lseg = 1.
+    rim = 400
+    
     startidx = 3#random.randint(1,3)
     if startidx == 1:
         state = (1., 0.1, 0.1, 0, 0, d0, lseg, dx, dy, dz)
@@ -40,69 +38,68 @@ def branching_turtle_to_coords(turtle_program, d0, theta=20., phi=20.):
         state = (0.1, 1., 0, 0, 0, d0, lseg, dx, dy, dz)
     else:
         state = (0.1, 0.1, 1., 0, 0, d0, lseg, dx, dy, dz)
+    
     yield  state
 
-    index = 0                   # Keeps track of the index of the command being executed
-    origin = (0.1, 0.1, 1.)     # Origin point for proximity calculation
+    index = 0
+    origin = (0.1, 0.1, 1.)
 
-    # Loop through each command in the turtle program
     for command in turtle_program:
-        # Get the current state of the turtle
         x, y, z, alpha, beta, diam, lseg, dx, dy, dz = state
 
-        # If the command is a move forward command
-        if command.lower() in 'abcdefghijs':        # Move forward (matches a-j and A-J)
 
-            # Start a new segment
+        if command.lower() in 'abcdefghijs':        # Move forward (matches a-j and A-J)
+            # segment start
+
+
             if command.islower():
-                # Get the length and diameter of the segment from the brackets
                 lseg, tdiam = eval_brackets(index, turtle_program)
-                # Calculate the displacement vector based on the current direction and segment length
-                dx, dy, dz = rotate(p=beta*DEGREES_TO_RADIANS,
-                                    r=alpha*DEGREES_TO_RADIANS,
-                                    v=normalise(np.array([x,y,z]),lseg))
-                # If the diameter is specified, update the current diameter
-                if tdiam > 0.0:
-                    diam = tdiam
-                # Move the turtle forward by the displacement vector
+                dx, dy, dz = rotate(pitch_angle=beta*DEGREES_TO_RADIANS,
+                                    roll_angle=alpha*DEGREES_TO_RADIANS,
+                                    vector=normalise(np.array([x,y,z]),lseg))
+                
+                if tdiam > 0.0: diam = tdiam
+
+                #dx, dy, dz, alpha = proximity(state,origin,rim)
+
                 x += dx
                 y += dy
                 z += dz
 
-            # Save the current state
             state = (x, y, z, alpha, beta, diam, lseg, dx, dy, dz)
+
+            #  segment end
             yield state
 
-            elif command == '+':                       # Turn clockwise
-                phi, _ = eval_brackets(index, turtle_program)  # Get the angle to rotate by
-                state = (x, y, z, alpha + phi, beta, diam, lseg, dx, dy, dz)  # Update the state with new angle
+        elif command == '+':                       # Turn clockwise
+            phi, _ = eval_brackets(index, turtle_program)
+            state = (x, y, z, alpha + phi, beta, diam, lseg, dx, dy, dz)
 
-            elif command == '-':                       # Turn counterclockwise
-                phi, _ = eval_brackets(index, turtle_program)  # Get the angle to rotate by
-                state = (x, y, z, alpha - phi, beta, diam, lseg, dx, dy, dz)  # Update the state with new angle
+        elif command == '-':                       # Turn counterclockwise
+            phi, _ = eval_brackets(index, turtle_program)
+            state = (x, y, z, alpha - phi, beta, diam, lseg, dx, dy, dz)
 
-            elif command == '/':                       # Turn around y-axis
-                theta, _ = eval_brackets(index, turtle_program)  # Get the angle to rotate by
-                state = (x, y, z, alpha, beta + theta, diam, lseg, dx, dy, dz)  # Update the state with new angle
+        elif command == '/':
+            theta, _ = eval_brackets(index, turtle_program)
+            state = (x, y, z, alpha, beta + theta, diam, lseg, dx, dy, dz)
 
-            elif command == '[':                       # Remember current state
-                saved_states.append(state)  # Push the current state onto the stack
+        elif command == '[':                       # Remember current state
+            saved_states.append(state)
 
-            elif command == ']':                       # Return to previous state
-                state = saved_states.pop()  # Pop the previous state from the stack and update the current state
+        elif command == ']':                       # Return to previous state
+            state = saved_states.pop()
 
-                # Yield a tuple of NaN values to indicate the start of a new branch
-                nanValues = []
-                for i in range(stateSize): nanValues.append(float('nan'))
-                yield tuple(nanValues)
+            nanValues = []
+            for i in range(stateSize): nanValues.append(float('nan'))
+            yield tuple(nanValues)
 
-                x, y, z, alpha, beta, diam, lseg, dx, dy, dz = state  # Update the current state with previous state
-                yield state  # Yield the current state
+            x, y, z, alpha, beta, diam, lseg, dx, dy, dz = state
+            yield state
 
-            index += 1  # Increment the command index
-            # Note: silently ignore unknown commands
+        index += 1
 
 def eval_brackets(index, turtle):
+
     """
     Extracts values within brackets in the turtle program and evaluates them to return tuple of values.
     
@@ -145,7 +142,6 @@ def eval_brackets(index, turtle):
         if neg1 == 1: aa *= -1      # if neg1 flag is set, negate first value
         return aa, 0.0
 
-
 def randomposneg():
     """
     Return either 1 or -1 with a 50/50 probability.
@@ -154,8 +150,6 @@ def randomposneg():
     int: Either 1 or -1 with a 50/50 probability.
     """
     return 1 if random.random() < 0.5 else -1
-
-
 
 def raddist(origin, location, shell=80, core=False):
     """
@@ -180,8 +174,6 @@ def raddist(origin, location, shell=80, core=False):
     else:
         # check if location is outside the shell
         return distance > shell
-
-
 
 def proximity(state: tuple, origin: np.ndarray, rim: float) -> tuple:
     """
@@ -245,4 +237,3 @@ def posneg(value: float) -> float:
         return 1.
     else:
         return -1.
-
