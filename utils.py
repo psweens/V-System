@@ -113,3 +113,96 @@ def addsalt_pepper(img, SNR):
     img_[mask == 1] = 255 # salt noise
     img_[mask == 2] = 0 # 
     return img_
+
+def norm_data(data):
+    """
+    Normalizes the input data.
+
+    Args:
+    data (numpy.ndarray): The input data to be normalized.
+
+    Returns:
+    numpy.ndarray: The normalized data.
+    """
+    # Subtract the minimum value of the data and divide by the range to normalize
+    # the data between 0 and 1
+    return (data - np.min(data)) / (np.max(data) - np.min(data))
+
+def load_volume(file, size=(600, 600, 700), ext='*.tif', datatype='uint8'):
+    """
+    Load a volume from a file, resample it to the given size and convert it to the specified data type.
+    
+    Parameters:
+    file (str): path to the volume file
+    size (tuple): target size of the volume in (z, y, x) format
+    ext (str): file extension of the volume file
+    datatype (str): target data type of the volume array
+    
+    Returns:
+    numpy.ndarray: volume array with the specified target size and data type
+    """
+    # Load the volume and rescale the values to the range [0, 255]
+    vol = np.array(itk.imread(file, itk.F))
+    vol = (255 * norm_data(vol)).astype(datatype)
+    
+    return vol
+
+def wrap_vessel(img, thresh=0):
+    """
+    Wrap a binary vessel segmentation image with a specified thickness.
+    Any voxel with intensity value of 1 (representing the vessel) will be wrapped with 
+    127 intensity value in a cube around it with radius = thresh.
+
+    Args:
+        img (numpy.ndarray): A 3D binary vessel segmentation image.
+        thresh (int): The radius of the cube around the vessel to be wrapped. Default is 0.
+
+    Returns:
+        numpy.ndarray: A 3D binary vessel segmentation image with wrapped vessels.
+
+    Raises:
+        ValueError: If input image is not binary.
+
+    """
+    
+    if not np.array_equal(np.unique(img), np.array([0,1])):
+        raise ValueError("Input image is not binary.")
+    
+    # Get dimensions of input array
+    d1, d2, d3 = img.shape
+    
+    # Find indices of non-zero voxels in the image
+    idx = np.transpose(np.nonzero(img))
+    
+    # Create a new array to store the wrapped image data
+    wrapped_img = np.copy(img)
+    
+    # Iterate over all non-zero voxels
+    for i, j, k in idx:
+        skip = False
+        # Create a 3D boolean mask to identify neighboring voxels within threshold distance
+        mask = np.sqrt(np.square(np.arange(-thresh, thresh+1, dtype=float)[:, np.newaxis, np.newaxis]) +
+                       np.square(np.arange(-thresh, thresh+1, dtype=float)[:, np.newaxis]) +
+                       np.square(np.arange(-thresh, thresh+1, dtype=float))) < thresh
+        # Use boolean mask to identify neighbor voxels to update
+        neighbor_indices = np.transpose(np.nonzero(mask))
+        neighbor_indices -= np.array([thresh, thresh, thresh])  # Adjust indices to match center voxel
+        neighbor_indices += np.array([i, j, k])  # Apply current voxel position
+        
+        # Iterate over all neighboring voxels
+        for n_i, n_j, n_k in neighbor_indices:
+            # Skip if the neighboring voxel is out of bounds
+            if not (0 <= n_i < d1 and 0 <= n_j < d2 and 0 <= n_k < d3):
+                continue
+            # Skip if the neighboring voxel is already wrapped
+            if wrapped_img[n_i, n_j, n_k] == 127:
+                continue
+            # Set the voxel to wrapped value and flag for skip
+            wrapped_img[n_i, n_j, n_k] = 127
+            skip = True
+            break  # Exit neighbor loop if a voxel was wrapped
+        
+        if skip:
+            break  # Exit non-zero voxel loop if a voxel was wrapped
+    
+    return wrapped_img
