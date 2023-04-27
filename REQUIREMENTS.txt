@@ -12,7 +12,6 @@ bezier==2021.2.12
 binaryornot==0.4.4
 black==23.3.0
 bleach==6.0.0
-certifi @ file:///croot/certifi_1671487769961/work/certifi
 cffi==1.15.1
 chardet==5.1.0
 charset-normalizer==3.1.0
