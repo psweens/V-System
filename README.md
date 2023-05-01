@@ -17,11 +17,12 @@ An example of generated synthetic vascular trees of increasing complexity is sho
 To reference this repository please use the below citation.
 
 Version 1.0:
-> [Quantification of vascular networks in photoacoustic mesoscopy](https://www.biorxiv.org/content/10.1101/2021.11.22.469541v1)<br>
+> [Quantification of vascular networks in photoacoustic mesoscopy](https://www.sciencedirect.com/science/article/pii/S221359792200026X)<br>
 > Emma L. Brown, Thierry L. Lefebvre, Paul W. Sweeney et al.
 
 Version 2.0:
-TBA
+> [Segmentation of 3D blood vessel networks using unsupervised deep learning](https://doi.org/10.1101/2023.04.30.538453)<br>
+> Paul W. Sweeney et al.
 
 ## Installation
 V-System is compatible with C++11, and has been tested on Ubuntu 18.04 LTS and macOS Big Sur. 
