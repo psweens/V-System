@@ -80,7 +80,7 @@ nest-asyncio==1.5.6
 networkx==3.1
 numpy==1.24.2
 numpydoc==1.5.0
-opencv-python==4.7.0.72
+opencv-python==4.8.1.78
 packaging==23.1
 pandas==2.0.0
 pandocfilters==1.5.0
