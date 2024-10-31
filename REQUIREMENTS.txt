@@ -169,4 +169,4 @@ wrapt==1.15.0
 wurlitzer==3.0.3
 yapf==0.32.0
 yarg==0.1.9
-zipp==3.15.0
+zipp==3.19.1
