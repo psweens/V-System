@@ -10,7 +10,7 @@ backcall==0.2.0
 beautifulsoup4==4.12.2
 bezier==2021.2.12
 binaryornot==0.4.4
-black==24.3.0
+black==24.10.0
 bleach==6.0.0
 cffi==1.15.1
 chardet==5.1.0
@@ -20,7 +20,7 @@ cloudpickle==2.2.1
 comm==0.1.3
 contourpy==1.0.7
 cookiecutter==2.1.1
-cryptography==43.0.1
+cryptography==43.0.3
 cycler==0.11.0
 debugpy==1.6.7
 decorator==5.1.1
@@ -33,8 +33,8 @@ docutils==0.19
 executing==1.2.0
 fastjsonschema==2.16.3
 flake8==6.0.0
-fonttools==4.43.0
-idna==3.7
+fonttools==4.54.1
+idna==3.10
 imageio==2.27.0
 imagesize==1.4.1
 importlib-metadata==6.3.0
@@ -80,7 +80,7 @@ nest-asyncio==1.5.6
 networkx==3.1
 numpy==1.24.2
 numpydoc==1.5.0
-opencv-python==4.8.1.78
+opencv-python==4.10.0.84
 packaging==23.1
 pandas==2.0.0
 pandocfilters==1.5.0
@@ -127,7 +127,7 @@ qstylizer==0.2.2
 QtAwesome==1.2.3
 qtconsole==5.4.2
 QtPy==2.3.1
-requests==2.32.2
+requests==2.32.3
 rope==1.7.0
 Rtree==1.0.1
 scikit-image==0.20.0
@@ -160,7 +160,7 @@ traitlets==5.9.0
 typing_extensions==4.5.0
 tzdata==2023.3
 ujson==5.7.0
-urllib3==1.26.19
+urllib3==2.2.3
 watchdog==3.0.0
 wcwidth==0.2.6
 webencodings==0.5.1
@@ -169,4 +169,4 @@ wrapt==1.15.0
 wurlitzer==3.0.3
 yapf==0.32.0
 yarg==0.1.9
-zipp==3.19.1
+zipp==3.20.2
