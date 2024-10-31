@@ -10,7 +10,7 @@ backcall==0.2.0
 beautifulsoup4==4.12.2
 bezier==2021.2.12
 binaryornot==0.4.4
-black==23.3.0
+black==24.3.0
 bleach==6.0.0
 cffi==1.15.1
 chardet==5.1.0
@@ -20,7 +20,7 @@ cloudpickle==2.2.1
 comm==0.1.3
 contourpy==1.0.7
 cookiecutter==2.1.1
-cryptography==40.0.2
+cryptography==43.0.1
 cycler==0.11.0
 debugpy==1.6.7
 decorator==5.1.1
@@ -33,8 +33,8 @@ docutils==0.19
 executing==1.2.0
 fastjsonschema==2.16.3
 flake8==6.0.0
-fonttools==4.39.3
-idna==3.4
+fonttools==4.43.0
+idna==3.7
 imageio==2.27.0
 imagesize==1.4.1
 importlib-metadata==6.3.0
@@ -56,7 +56,7 @@ jaraco.classes==3.2.3
 jedi==0.18.2
 jeepney==0.8.0
 jellyfish==0.11.2
-Jinja2==3.1.2
+Jinja2==3.1.4
 jinja2-time==0.2.0
 jsonschema==4.17.3
 jupyter_client==8.2.0
@@ -80,7 +80,7 @@ nest-asyncio==1.5.6
 networkx==3.1
 numpy==1.24.2
 numpydoc==1.5.0
-opencv-python==4.7.0.72
+opencv-python==4.8.1.78
 packaging==23.1
 pandas==2.0.0
 pandocfilters==1.5.0
@@ -127,7 +127,7 @@ qstylizer==0.2.2
 QtAwesome==1.2.3
 qtconsole==5.4.2
 QtPy==2.3.1
-requests==2.28.2
+requests==2.32.2
 rope==1.7.0
 Rtree==1.0.1
 scikit-image==0.20.0
@@ -155,12 +155,12 @@ tinycss2==1.2.1
 toml==0.10.2
 tomli==2.0.1
 tomlkit==0.11.7
-tornado==6.2
+tornado==6.4.1
 traitlets==5.9.0
 typing_extensions==4.5.0
 tzdata==2023.3
 ujson==5.7.0
-urllib3==1.26.15
+urllib3==1.26.19
 watchdog==3.0.0
 wcwidth==0.2.6
 webencodings==0.5.1
@@ -169,4 +169,4 @@ wrapt==1.15.0
 wurlitzer==3.0.3
 yapf==0.32.0
 yarg==0.1.9
-zipp==3.15.0
+zipp==3.19.1
