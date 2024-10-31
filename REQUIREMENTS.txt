@@ -127,7 +127,7 @@ qstylizer==0.2.2
 QtAwesome==1.2.3
 qtconsole==5.4.2
 QtPy==2.3.1
-requests==2.28.2
+requests==2.32.2
 rope==1.7.0
 Rtree==1.0.1
 scikit-image==0.20.0
