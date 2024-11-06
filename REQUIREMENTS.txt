@@ -113,7 +113,7 @@ PyQtWebEngine-Qt5==5.15.2
 pyrsistent==0.19.3
 python-dateutil==2.8.2
 python-lsp-black==1.2.1
-python-lsp-jsonrpc==1.0.0
+python-lsp-jsonrpc==1.1.2
 python-lsp-server==1.7.2
 python-slugify==8.0.1
 pytoolconfig==1.2.5
