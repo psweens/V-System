@@ -118,7 +118,7 @@ python-lsp-server==1.7.2
 python-slugify==8.0.1
 pytoolconfig==1.2.5
 pytz==2023.3
-PyWavelets==1.4.1
+PyWavelets==1.7.0
 pyxdg==0.28
 PyYAML==6.0
 pyzmq==25.0.2
