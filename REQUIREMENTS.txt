@@ -125,7 +125,7 @@ pyzmq==25.0.2
 QDarkStyle==3.1
 qstylizer==0.2.2
 QtAwesome==1.2.3
-qtconsole==5.4.2
+qtconsole==5.6.1
 QtPy==2.4.2
 requests==2.32.3
 rope==1.7.0
