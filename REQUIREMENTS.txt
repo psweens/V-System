@@ -82,7 +82,7 @@ numpy==1.24.2
 numpydoc==1.8.0
 opencv-python==4.10.0.84
 packaging==23.1
-pandas==2.0.0
+pandas==2.2.3
 pandocfilters==1.5.1
 parso==0.8.3
 pathspec==0.12.1
