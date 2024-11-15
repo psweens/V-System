@@ -73,7 +73,7 @@ mccabe==0.7.0
 mistune==2.0.5
 more-itertools==9.1.0
 mypy-extensions==1.0.0
-nbclient==0.7.3
+nbclient==0.10.0
 nbconvert==7.16.4
 nbformat==5.8.0
 nest-asyncio==1.6.0
