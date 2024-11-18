@@ -167,6 +167,6 @@ webencodings==0.5.1
 whatthepatch==1.0.4
 wrapt==1.15.0
 wurlitzer==3.0.3
-yapf==0.32.0
+yapf==0.43.0
 yarg==0.1.9
 zipp==3.20.2
