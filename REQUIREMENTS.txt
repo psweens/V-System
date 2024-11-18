@@ -35,7 +35,7 @@ fastjsonschema==2.20.0
 flake8==6.0.0
 fonttools==4.54.1
 idna==3.10
-imageio==2.27.0
+imageio==2.36.0
 imagesize==1.4.1
 importlib-metadata==8.5.0
 importlib-resources==5.12.0
