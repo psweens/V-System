@@ -28,7 +28,7 @@ defusedxml==0.7.1
 diff-match-patch==20200713
 dill==0.3.6
 docopt==0.6.2
-docstring-to-markdown==0.12
+docstring-to-markdown==0.15
 docutils==0.21.2
 executing==1.2.0
 fastjsonschema==2.20.0
