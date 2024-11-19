@@ -109,7 +109,7 @@ PyQt5==5.15.11
 PyQt5-Qt5==5.15.2
 PyQt5-sip==12.12.0
 PyQtWebEngine==5.15.7
-PyQtWebEngine-Qt5==5.15.2
+PyQtWebEngine-Qt5==5.15.15
 pyrsistent==0.19.3
 python-dateutil==2.8.2
 python-lsp-black==1.2.1
