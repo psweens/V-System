@@ -38,7 +38,7 @@ idna==3.10
 imageio==2.36.0
 imagesize==1.4.1
 importlib-metadata==8.5.0
-importlib-resources==5.12.0
+importlib-resources==6.4.5
 inflection==0.5.1
 intervaltree==3.1.0
 ipykernel==6.22.0
