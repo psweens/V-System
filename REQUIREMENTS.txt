@@ -65,7 +65,7 @@ jupyterlab-pygments==0.2.2
 keyring==25.5.0
 kiwisolver==1.4.7
 lazy-object-proxy==1.10.0
-lazy_loader==0.2
+lazy_loader==0.4
 MarkupSafe==3.0.2
 matplotlib==3.7.1
 matplotlib-inline==0.1.7
