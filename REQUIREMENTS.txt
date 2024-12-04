@@ -84,7 +84,7 @@ opencv-python==4.10.0.84
 packaging==23.1
 pandas==2.2.3
 pandocfilters==1.5.1
-parso==0.8.3
+parso==0.8.4
 pathspec==0.12.1
 pexpect==4.9.0
 pickleshare==0.7.5
