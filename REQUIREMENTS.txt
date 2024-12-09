@@ -157,7 +157,7 @@ tomli==2.2.1
 tomlkit==0.13.2
 tornado==6.4.2
 traitlets==5.14.3
-typing_extensions==4.5.0
+typing_extensions==4.12.2
 tzdata==2024.2
 ujson==5.10.0
 urllib3==2.2.3
