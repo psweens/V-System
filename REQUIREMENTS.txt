@@ -154,7 +154,7 @@ tifffile==2024.9.20
 tinycss2==1.4.0
 toml==0.10.2
 tomli==2.2.1
-tomlkit==0.11.7
+tomlkit==0.13.2
 tornado==6.4.2
 traitlets==5.14.3
 typing_extensions==4.5.0
