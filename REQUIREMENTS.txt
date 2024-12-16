@@ -67,7 +67,7 @@ kiwisolver==1.4.7
 lazy-object-proxy==1.10.0
 lazy_loader==0.4
 MarkupSafe==3.0.2
-matplotlib==3.9.3
+matplotlib==3.10.0
 matplotlib-inline==0.1.7
 mccabe==0.7.0
 mistune==3.0.2
