@@ -104,7 +104,7 @@ Pygments==2.18.0
 pylint==3.3.1
 pylint-venv==3.0.4
 pyls-spyder==0.4.0
-pyparsing==3.0.9
+pyparsing==3.2.0
 PyQt5==5.15.11
 PyQt5-Qt5==5.15.15
 PyQt5-sip==12.16.0
