@@ -168,5 +168,5 @@ whatthepatch==1.0.7
 wrapt==1.17.0
 wurlitzer==3.0.3
 yapf==0.43.0
-yarg==0.1.9
+yarg==0.1.10
 zipp==3.21.0
