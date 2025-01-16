@@ -97,7 +97,7 @@ psutil==6.1.1
 ptyprocess==0.7.0
 pure-eval==0.2.3
 pycodestyle==2.12.1
-pycparser==2.21
+pycparser==2.22
 pydocstyle==6.3.0
 pyflakes==3.2.0
 Pygments==2.18.0
