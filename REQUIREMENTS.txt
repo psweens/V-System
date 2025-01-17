@@ -53,7 +53,7 @@ itk-numerics==5.4.0
 itk-registration==5.4.0
 itk-segmentation==5.3.0
 jaraco.classes==3.4.0
-jedi==0.19.1
+jedi==0.19.2
 jeepney==0.8.0
 jellyfish==1.1.0
 Jinja2==3.1.5
