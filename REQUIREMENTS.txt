@@ -78,7 +78,7 @@ nbconvert==7.16.5
 nbformat==5.10.4
 nest-asyncio==1.6.0
 networkx==3.4.2
-numpy==2.2.1
+numpy==2.2.2
 numpydoc==1.8.0
 opencv-python==4.10.0.84
 packaging==23.1
