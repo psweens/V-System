@@ -81,7 +81,7 @@ networkx==3.4.2
 numpy==2.2.2
 numpydoc==1.8.0
 opencv-python==4.10.0.84
-packaging==23.1
+packaging==24.2
 pandas==2.2.3
 pandocfilters==1.5.1
 parso==0.8.4
