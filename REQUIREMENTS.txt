@@ -4,7 +4,7 @@ astroid==3.3.8
 asttokens==3.0.0
 atomicwrites==1.4.1
 attrs==24.3.0
-autopep8==2.0.2
+autopep8==2.3.2
 Babel==2.16.0
 backcall==0.2.0
 beautifulsoup4==4.12.3
