@@ -130,7 +130,7 @@ QtPy==2.4.2
 requests==2.32.3
 rope==1.13.0
 Rtree==1.3.0
-scikit-image==0.25.0
+scikit-image==0.25.1
 scipy==1.15.1
 SecretStorage==3.3.3
 six==1.16.0
