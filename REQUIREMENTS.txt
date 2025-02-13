@@ -46,7 +46,7 @@ ipython==8.32.0
 ipython-genutils==0.2.0
 isort==6.0.0
 itk==5.4.0
-itk-core==5.4.2
+itk-core==5.4.2.post1
 itk-filtering==5.4.2.post1
 itk-io==5.4.2
 itk-numerics==5.4.2
