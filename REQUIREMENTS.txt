@@ -48,7 +48,7 @@ isort==6.0.0
 itk==5.4.0
 itk-core==5.4.2.post1
 itk-filtering==5.4.2.post1
-itk-io==5.4.2
+itk-io==5.4.2.post1
 itk-numerics==5.4.2.post1
 itk-registration==5.4.2
 itk-segmentation==5.4.2.post1
