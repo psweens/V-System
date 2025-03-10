@@ -42,7 +42,7 @@ importlib-resources==6.5.2
 inflection==0.5.1
 intervaltree==3.1.0
 ipykernel==6.29.5
-ipython==9.0.1
+ipython==9.0.2
 ipython-genutils==0.2.0
 isort==6.0.1
 itk==5.4.2.post1
