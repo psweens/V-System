@@ -96,7 +96,7 @@ prompt-toolkit==3.0.50
 psutil==7.0.0
 ptyprocess==0.7.0
 pure-eval==0.2.3
-pycodestyle==2.12.1
+pycodestyle==2.13.0
 pycparser==2.22
 pydocstyle==6.3.0
 pyflakes==3.2.0
