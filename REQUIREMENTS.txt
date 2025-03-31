@@ -32,7 +32,7 @@ docstring-to-markdown==0.16
 docutils==0.21.2
 executing==2.2.0
 fastjsonschema==2.21.1
-flake8==7.1.2
+flake8==7.2.0
 fonttools==4.56.0
 idna==3.10
 imageio==2.37.0
