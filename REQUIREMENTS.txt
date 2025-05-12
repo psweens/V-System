@@ -134,7 +134,7 @@ scikit-image==0.25.2
 scipy==1.15.2
 SecretStorage==3.3.3
 six==1.17.0
-snowballstemmer==2.2.0
+snowballstemmer==3.0.1
 sortedcontainers==2.4.0
 soupsieve==2.7
 Sphinx==8.2.3
