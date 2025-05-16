@@ -91,7 +91,7 @@ pickleshare==0.7.5
 Pillow==11.2.1
 pipreqs==0.5.0
 platformdirs==4.3.8
-pluggy==1.5.0
+pluggy==1.6.0
 prompt-toolkit==3.0.51
 psutil==7.0.0
 ptyprocess==0.7.0
