@@ -60,7 +60,7 @@ Jinja2==3.1.6
 jinja2-time==0.2.0
 jsonschema==4.24.0
 jupyter_client==8.6.3
-jupyter_core==5.7.2
+jupyter_core==5.8.1
 jupyterlab-pygments==0.3.0
 keyring==25.6.0
 kiwisolver==1.4.8
