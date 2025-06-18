@@ -121,7 +121,7 @@ pytz==2025.2
 PyWavelets==1.8.0
 pyxdg==0.28
 PyYAML==6.0.2
-pyzmq==26.4.0
+pyzmq==27.0.0
 QDarkStyle==3.2.3
 qstylizer==0.2.4
 QtAwesome==1.4.0
