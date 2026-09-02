@@ -1,10 +1,10 @@
+import math
 import numpy as np
 import random
-from numpy import math as npm
 
 default={"k": 3,
           "epsilon": 10 , # Proportion between length & diameter
-          "randmarg": 3 , # Randomness margin between length & diameter
+          "randmarg": 0.2 , # Relative half-width of the segment-length distribution (fraction of epsilon*d0)
           "sigma": 5, # Determines type deviation for Gaussian distributions
           "stochparams": True} # Whether the generated parameters will also be stochastic
 
@@ -19,7 +19,7 @@ def setProperties(properties):
         None
 
     """
-    if properties == None:
+    if properties is None:
         properties = default
 
     global k, epsilon, randmarg, sigma, stochparams
@@ -27,6 +27,10 @@ def setProperties(properties):
     k = properties['k']
     epsilon = properties['epsilon']
     randmarg = properties['randmarg']
+    if not 0.0 <= randmarg < 1.0:
+        raise ValueError(
+            f"randmarg must be a fraction in [0, 1), got {randmarg!r}: it is the relative "
+            "half-width of the segment-length distribution, not an absolute margin")
     sigma = properties['sigma']
     stochparams = properties['stochparams']
 
@@ -61,6 +65,9 @@ def calBifurcation(d0):
 
     resp = {}
 
+    if not d0 > 0:
+        raise ValueError(f"bifurcation requires a positive parent diameter, got {d0!r}")
+
     dOpti = d0 / 2 ** (1.0 / k)
     if stochparams: d1 = abs(np.random.normal(dOpti, dOpti / sigma))
     else: d1 = dOpti # Optimal diameter
@@ -77,17 +84,17 @@ def calBifurcation(d0):
     '''
     xtmp = (1 + alpha * alpha * alpha) ** (4.0 / 3) + 1 - alpha ** 4
     xtmpb = 2 * ((1 + alpha * alpha * alpha ) ** (2.0 / 3))
-    a1 = npm.acos(xtmp / xtmpb)
+    a1 = math.acos(xtmp / xtmpb)
 
     xtmp = (1 + alpha * alpha * alpha) ** (4.0 / 3) + (alpha ** 4) - 1
     xtmpb = 2 * alpha * alpha * ((1 + alpha * alpha * alpha) ** (2.0/3))
-    a2 = npm.acos(xtmp / xtmpb)
+    a2 = math.acos(xtmp / xtmpb)
 
     resp["d1"] = d1
     resp["d2"] = d2
     resp["d0"] = d0
-    resp["th1"] = a1 * 180 / npm.pi
-    resp["th2"] = a2 * 180 / npm.pi
+    resp["th1"] = a1 * 180 / math.pi
+    resp["th2"] = a2 * 180 / math.pi
     resp["co"] = getLength(d0)
 
     return resp
@@ -96,6 +103,10 @@ def getLength(d0):
     """
     Returns the length of the branch based on the diameter of the parent branch.
 
+    The length is epsilon * d0 scaled by a uniform factor in
+    [1 - randmarg, 1 + randmarg]. Because the margin is relative, the length
+    stays positive and proportional to the diameter at every generation.
+
     Parameters:
     d0 (float): The diameter of the parent branch.
 
@@ -103,5 +114,4 @@ def getLength(d0):
     float: The length of the branch.
     """
     c0 = d0 * epsilon
-    # abs(np.random.normal(50,10))
-    return np.random.uniform(c0 - randmarg, c0 + randmarg)
+    return c0 * np.random.uniform(1.0 - randmarg, 1.0 + randmarg)

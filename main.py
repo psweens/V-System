@@ -14,6 +14,7 @@ from utils import bezier_interpolation
 n = 5  # No. of networks to be created
 d0_mean = 20.0  # Diameter of base of tree
 d0_std = 5.0  # Standard deviation of base diameter
+d0_min = 1.0  # Smallest base diameter accepted from the normal draw
 tissue_volume = (512, 512, 140)  # Specify number of pixels in the tissue volume
 outpath = "/home/sweene01/Documents/Test/"  # Output path
 
@@ -22,12 +23,14 @@ for file in range(n):
     properties = {
         "k": 3,
         "epsilon": random.uniform(4, 10),  # Proportion between length & diameter
-        "randmarg": random.uniform(2, 4),  # Randomness margin between length & diameter
+        "randmarg": random.uniform(0.1, 0.3),  # Relative half-width of the segment-length distribution
         "sigma": 5,  # Determines type deviation for Gaussian distributions
         "stochparams": True,  # Whether the generated parameters will also be stochastic
     }
 
     d0 = np.random.normal(d0_mean, d0_std)  # Randomly assign base diameter (no dimension)
+    while d0 < d0_min:  # Truncated draw: a non-positive diameter has no bifurcation solution
+        d0 = np.random.normal(d0_mean, d0_std)
     niter = random.randint(6, 14)  # Randomly assign number of V-System recursive loops
     setProperties(properties)  # Setting V-Sytem properties
     print(f"Creating image ... {file} with {niter} iterations")
@@ -48,7 +51,7 @@ for file in range(n):
     image = process_network(update, tVol=tissue_volume)
 
     # Convert to 8-bit format
-    image = (255 * image).astype("int8")
+    image = (255 * image).astype(np.uint8)
 
     # Save image volume
     io.imsave(

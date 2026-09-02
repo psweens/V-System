@@ -1,14 +1,81 @@
+import math
 import random
+import re
 import numpy as np
 
 from math import pi, sin, cos, sqrt
 from utils import rotate, normalise, magnitude
 DEGREES_TO_RADIANS = pi / 180
 
+# A token is a single-character command, optionally followed by a parenthesised,
+# comma-separated operand list: 'f(46.1,20.0)', '+(-37.5)', '[', '{'.
+_TOKEN = re.compile(r"(?P<cmd>[A-Za-z\[\]{}+\-/])(?:\((?P<args>[^()]*)\))?")
+
+# Lower-case terminals that move the turtle. Every other letter is a
+# non-terminal left over from the recursion and draws nothing.
+MOVE_COMMANDS = frozenset("fg")
+
+
+def tokenise(turtle_program):
+    """
+    Splits a turtle program into (command, operands) pairs.
+
+    Operands are converted with float(), so signs, decimals and exponent
+    notation ('3.9e-05') are read as numbers rather than scanned as commands.
+
+    Args:
+    turtle_program (str): the L-system string to interpret.
+
+    Yields:
+    tuple: (command, operands) where command is a one-character string and
+           operands is a tuple of floats (empty when the command has none).
+
+    Whitespace between tokens is ignored.
+
+    Raises:
+    ValueError: on unexpected characters, an empty or non-numeric operand,
+                or a non-finite operand.
+    """
+    pos = 0
+    for match in _TOKEN.finditer(turtle_program):
+        gap = turtle_program[pos:match.start()]
+        if gap and not gap.isspace():
+            raise ValueError(
+                f"unexpected text {gap!r} at position {pos} of the turtle program")
+        pos = match.end()
+        args = match.group("args")
+        if args is None:
+            params = ()
+        else:
+            try:
+                params = tuple(float(a) for a in args.split(","))
+            except ValueError as exc:
+                raise ValueError(
+                    f"could not parse operands {args!r} of command "
+                    f"{match.group('cmd')!r} at position {match.start()}") from exc
+            if not all(math.isfinite(v) for v in params):
+                raise ValueError(
+                    f"non-finite operand in {match.group(0)!r} "
+                    f"at position {match.start()}")
+        yield match.group("cmd"), params
+    tail = turtle_program[pos:]
+    if tail and not tail.isspace():
+        raise ValueError(
+            f"unexpected text {tail!r} at position {pos} of the turtle program")
+
+
+def _angle(command, params):
+    if not params:
+        raise ValueError(f"turn command {command!r} requires an angle operand")
+    return params[0]
+
 def branching_turtle_to_coords(turtle_program, d0, theta=20., phi=20.):
 
     '''
-    Working with discontinuous paths i.e. tree formation
+    Working with discontinuous paths i.e. tree formation.
+    The program is read as tokens (see tokenise): a command character with an
+    optional '(...)' operand list.
+    'f(length[,diameter])' : move forward; a positive diameter replaces the current one
     '+' : postive rotation by (deg)
     '-' : negative rotation by (deg)
     '[' : Save state of turtle by pushing to stack (location and angle)
@@ -41,30 +108,24 @@ def branching_turtle_to_coords(turtle_program, d0, theta=20., phi=20.):
     
     yield  state
 
-    index = 0
-    origin = (0.1, 0.1, 1.)
-
-    for command in turtle_program:
+    for command, params in tokenise(turtle_program):
         x, y, z, alpha, beta, diam, lseg, dx, dy, dz = state
 
+        if command in MOVE_COMMANDS:               # Move forward
+            if not params:
+                raise ValueError(
+                    f"move command {command!r} requires a length operand")
+            lseg = params[0]
+            tdiam = params[1] if len(params) > 1 else 0.0
+            dx, dy, dz = rotate(pitch_angle=beta*DEGREES_TO_RADIANS,
+                                roll_angle=alpha*DEGREES_TO_RADIANS,
+                                vector=normalise(np.array([x,y,z]),lseg))
 
-        if command.lower() in 'abcdefghijs':        # Move forward (matches a-j and A-J)
-            # segment start
+            if tdiam > 0.0: diam = tdiam
 
-
-            if command.islower():
-                lseg, tdiam = eval_brackets(index, turtle_program)
-                dx, dy, dz = rotate(pitch_angle=beta*DEGREES_TO_RADIANS,
-                                    roll_angle=alpha*DEGREES_TO_RADIANS,
-                                    vector=normalise(np.array([x,y,z]),lseg))
-                
-                if tdiam > 0.0: diam = tdiam
-
-                #dx, dy, dz, alpha = proximity(state,origin,rim)
-
-                x += dx
-                y += dy
-                z += dz
+            x += dx
+            y += dy
+            z += dz
 
             state = (x, y, z, alpha, beta, diam, lseg, dx, dy, dz)
 
@@ -72,16 +133,13 @@ def branching_turtle_to_coords(turtle_program, d0, theta=20., phi=20.):
             yield state
 
         elif command == '+':                       # Turn clockwise
-            phi, _ = eval_brackets(index, turtle_program)
-            state = (x, y, z, alpha + phi, beta, diam, lseg, dx, dy, dz)
+            state = (x, y, z, alpha + _angle(command, params), beta, diam, lseg, dx, dy, dz)
 
         elif command == '-':                       # Turn counterclockwise
-            phi, _ = eval_brackets(index, turtle_program)
-            state = (x, y, z, alpha - phi, beta, diam, lseg, dx, dy, dz)
+            state = (x, y, z, alpha - _angle(command, params), beta, diam, lseg, dx, dy, dz)
 
-        elif command == '/':
-            theta, _ = eval_brackets(index, turtle_program)
-            state = (x, y, z, alpha, beta + theta, diam, lseg, dx, dy, dz)
+        elif command == '/':                       # Pitch
+            state = (x, y, z, alpha, beta + _angle(command, params), diam, lseg, dx, dy, dz)
 
         elif command == '[':                       # Remember current state
             saved_states.append(state)
@@ -96,51 +154,12 @@ def branching_turtle_to_coords(turtle_program, d0, theta=20., phi=20.):
             x, y, z, alpha, beta, diam, lseg, dx, dy, dz = state
             yield state
 
-        index += 1
+        elif command in '{}' or command.isupper():
+            pass                                   # Grouping braces and non-terminals carry no geometry
 
-def eval_brackets(index, turtle):
+        else:
+            raise ValueError(f"unknown turtle command {command!r}")
 
-    """
-    Extracts values within brackets in the turtle program and evaluates them to return tuple of values.
-    
-    Args:
-    index (int): integer value of the index position within turtle string.
-    turtle (str): a string containing the turtle program.
-    
-    Returns
-    tuple: A tuple of two floats containing the values within the brackets. If only one value, second value is 0.0.
-    """
-
-    a = ''                          # initialize string variable to hold first value
-    b = ''                          # initialize string variable to hold second value
-    double = 0                      # initialize integer variable to 0 for checking if there are two values
-    neg1 = 0                        # initialize integer variable to 0 for checking if the first value is negative
-    neg2 = 0                        # initialize integer variable to 0 for checking if the second value is negative
-
-    for i in range(index+2, len(turtle)):      # loop through turtle string starting from the index position+2
-        if turtle[i] == ')':            # stop if end of bracket is reached
-            break
-        elif turtle[i] == ',':          # set double flag if comma is reached
-            double = 1
-        elif turtle[i] == '-':          # set neg1 flag if minus sign is reached before the comma
-            if double == 0: neg1 = 1
-            else: neg2 = 1;
-        elif not (turtle[i] == '(' or turtle[i] == '+'):    # add digit to string variables if not brackets or plus sign
-            if double == 0:
-                a = a + str(turtle[i])
-            else:
-                b = b + str(turtle[i])
-                
-    if double == 1:                 # if double flag is set, evaluate both string variables as floats and return tuple
-        aa = eval(a)
-        bb = eval(b)
-        if neg1 == 1: aa *= -1      # if neg1 flag is set, negate first value
-        if neg2 == 1: bb *= -1      # if neg2 flag is set, negate second value
-        return aa, bb
-    else:                           # if double flag is not set, evaluate first string variable as float and return tuple
-        aa = eval(a)
-        if neg1 == 1: aa *= -1      # if neg1 flag is set, negate first value
-        return aa, 0.0
 
 def randomposneg():
     """

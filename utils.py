@@ -1,9 +1,4 @@
-import itk
 import numpy as np
-import bezier as bz
-import matplotlib.pyplot as plt
-from mpl_toolkits.mplot3d import Axes3D
-from numpy import math as npm
 
 def yaw(angle_degrees):
     """
@@ -201,6 +196,8 @@ def interpolate_this(vessel=None):
                               of points generated based on the interpolation.
     """
     
+    import bezier as bz  # optional dependency, only needed for Bezier interpolation
+
     # Generate a Bezier curve based on the given set of points
     curve = bz.Curve(vessel, degree=(vessel.shape[1]-1))
     
@@ -233,8 +230,7 @@ def generate_points(newNodes=None, points=None, usenan=True):
     if usenan:
         # if the user wants to insert NaN values between the new points,
         # create a vector of NaN values and append it to the updated nodes
-        nanVec = np.empty((4,1))
-        nanVec[:] = np.NaN
+        nanVec = np.full((4, 1), np.nan)
         newNodes = np.hstack((newNodes, nanVec))
 
     return newNodes
@@ -285,6 +281,8 @@ def load_volume(file, size=(600, 600, 700), ext='*.tif', datatype='uint8'):
     Returns:
     numpy.ndarray: volume array with the specified target size and data type
     """
+    import itk  # optional dependency, only needed for reading volumes with ITK
+
     # Load the volume and rescale the values to the range [0, 255]
     vol = np.array(itk.imread(file, itk.F))
     vol = (255 * norm_data(vol)).astype(datatype)

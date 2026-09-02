@@ -243,8 +243,9 @@ def process_network(data,tVol):
     # Initializing new array
     newarray = np.array([])
 
-    # Creating an empty 3D array with the given shape
-    img_stack = np.empty(tVol, dtype=int)
+    # Zero-initialised binary volume; uint8 keeps the working set small and
+    # makes the 0/255 conversion in the writer exact
+    img_stack = np.zeros(tVol, dtype=np.uint8)
 
     # Loop over columns of data
     for i in range(data.shape[1]):
