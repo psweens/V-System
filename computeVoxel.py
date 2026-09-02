@@ -1,275 +1,160 @@
-'''
-Cohen, D. Voxel traversal along a 3D line.
-from Heckbert, P.S. Graphics Gems IV. Morgan Kaufmann.
+"""
+Voxelisation of a vessel network into a binary volume.
 
-Visits Subroutine visits all voxels along the line
-segment (x,y,z) and (x+dx,y+dy,z+dz).
-'''
+The network arrives as a (4, N) array whose rows are x, y, z and diameter,
+with all-NaN columns separating branches. Consecutive non-NaN columns are
+connected by tapered capsules: every voxel whose centre lies within the
+linearly interpolated radius of the segment is set. This is the binary
+analogue of convolving the centreline with a diameter-scaled spherical kernel
+(Galarreta-Valverde 2012, section 3.4.4) and is rotation invariant, so a vessel
+has the same calibre whatever its orientation.
+
+Before rasterisation the network is mapped into the volume. The default
+mapping is a single isotropic scale factor chosen so that the network, plus its
+largest radius and an explicit voxel margin, fits the volume; the diameters are
+scaled by the same factor, so bifurcation angles and the length-to-diameter
+ratio survive into the image. Two alternatives exist: `voxel_size` maps grammar
+units to voxels at a fixed physical resolution (the network is centred and
+clipped), and `stretch` reproduces the historical behaviour of scaling every
+axis independently to fill the volume with unscaled diameters. The isotropic
+fit can also be told to ignore some axes (`clip_axes`), so that a network
+fills a slab's two wide axes and is clipped along its depth, as a real imaging
+slab would clip it.
+"""
 
 import numpy as np
-from utils import generate_points
 
-def check_boundary(image):
+
+FITS = ("isotropic", "voxel_size", "stretch")
+
+
+def fit_to_volume(data, tVol, fit="isotropic", voxel_size=None, margin=1.0, clip_axes=()):
     """
-    Sets the values of the boundary pixels of a 3D numpy array to zero.
+    Maps network coordinates into voxel coordinates.
 
     Args:
-    image (numpy.ndarray): 3D numpy array representing the image.
+        data (ndarray): (4, N) array of x, y, z, diameter; NaN columns separate branches.
+        tVol (sequence): volume shape (nx, ny, nz).
+        fit (str): "isotropic" (default), "voxel_size" or "stretch".
+        voxel_size (float): grammar units per voxel, required when fit == "voxel_size".
+        margin (float): empty border, in voxels, kept around the network for the
+            fitted modes.
+        clip_axes (sequence of int): axes (0, 1, 2) left out of the isotropic
+            fit; the network is centred on them and clipped by the rasteriser.
 
     Returns:
-    numpy.ndarray: 3D numpy array with boundary pixels set to zero.
+        tuple: (points, radii) with points a (3, N) array in voxel coordinates
+        (NaN preserved) and radii an (N,) array in voxels.
     """
-    image[0,] = 0
-    image[-1,] = 0
+    data = np.asarray(data, dtype=float)
+    if data.ndim != 2 or data.shape[0] < 4:
+        raise ValueError("data must be a (4, N) array of x, y, z, diameter")
+    shape = np.asarray(tVol, dtype=float)
+    if shape.shape != (3,) or np.any(shape < 3):
+        raise ValueError("tVol must be three dimensions of at least 3 voxels")
+    if fit not in FITS:
+        raise ValueError(f"fit must be one of {FITS}, got {fit!r}")
 
-    image[:, 0, :] = 0
-    image[:, -1, :] = 0
+    xyz = data[:3]
+    diam = data[3]
+    if not np.any(~np.isnan(xyz[0])):
+        raise ValueError("the network has no points")
+    lo = np.nanmin(xyz, axis=1)
+    hi = np.nanmax(xyz, axis=1)
+    extent = hi - lo
+    rmax = float(np.nanmax(diam)) / 2.0
 
-    image[..., 0] = 0
-    image[..., -1] = 0
+    if fit == "isotropic":
+        available = shape - 2.0 * margin
+        keep = [a for a in range(3) if a not in tuple(clip_axes)]
+        if not keep:
+            raise ValueError("clip_axes cannot exclude every axis")
+        s = float(np.min((available / (extent + 2.0 * rmax))[keep]))
+        scale = np.full(3, s)
+        radius_scale = s
+    elif fit == "voxel_size":
+        if voxel_size is None or voxel_size <= 0:
+            raise ValueError("voxel_size must be a positive number of grammar units per voxel")
+        s = 1.0 / float(voxel_size)
+        scale = np.full(3, s)
+        radius_scale = s
+    else:  # stretch: legacy per-axis fill, diameters already in voxels
+        scale = (shape - 2.0 * (margin + rmax)) / np.maximum(extent, 1e-12)
+        radius_scale = 1.0
+    if np.any(scale <= 0):
+        raise ValueError("the volume is too small for the network's largest radius and margin")
 
-    return image
+    offset = (shape - scale * extent) / 2.0
+    points = (xyz - lo[:, None]) * scale[:, None] + offset[:, None]
+    radii = diam / 2.0 * radius_scale
+    return points, radii
 
-def transversal(x, y, z, dx, dy, dz, diam, 
-                img_stack=None, tVol=(600,600,700), resolution=(1,1,1)):
 
+def rasterise_capsule(volume, p0, p1, r0, r1):
     """
-    Finds the voxels transversed by a segment between two points.
-
-    Args:
-    x (int): X-coordinate of the starting point.
-    y (int): Y-coordinate of the starting point.
-    z (int): Z-coordinate of the starting point.
-    dx (int): Change in X-coordinate between starting and ending points.
-    dy (int): Change in Y-coordinate between starting and ending points.
-    dz (int): Change in Z-coordinate between starting and ending points.
-    diam (float): Diameter of the segment.
-    img_stack (np.ndarray, optional): Image stack. Defaults to None.
-    tVol (tuple, optional): Tissue volume. Defaults to (600, 600, 700).
-    resolution (tuple, optional): Voxel resolution. Defaults to (1, 1, 1).
-
-    Returns:
-    np.ndarray: Image stack with voxels transversed by the segment.
-
+    Sets every voxel whose centre lies within the tapered capsule from p0
+    (radius r0) to p1 (radius r1). Coordinates are voxel indices; the capsule
+    is clipped to the volume.
     """
-    # Calculate change in coordinates
-    dx = dx - x
-    dy = dy - y
-    dz = dz - z
-
-    # Calculate sign and absolute value of the change in coordinates
-    sx = np.sign(dx)
-    sy = np.sign(dy)
-    sz = np.sign(dz)
-
-    ax = abs(dx)
-    ay = abs(dy)
-    az = abs(dz)
-
-    bx = 2 * ax
-    by = 2 * ay
-    bz = 2 * az
-
-    exy = ay - ax
-    exz = az - ax
-    ezy = ay - az
-
-    n = ax + ay + az
-
-    # Calculate radius
-    r = int(np.floor(0.5 * diam))
-    mx, my, mz = np.minimum((x + r, y + r, z + r), tVol) - (x, y, z)
-
-    # Find voxels within the tube/vessel
-    while n > 0:
-        if exy < 0:
-            if exz < 0:
-                x += sx
-                exy += by
-                exz += bz
-                if 0 <= x < tVol[0]:
-                    img_stack = diamVoxels(x, y, z, 0, r, img_stack, tVol, res=resolution)
-            else:
-                z += sz
-                exz -= bx
-                ezy += by
-                if 0 <= z < tVol[2]:
-                    img_stack = diamVoxels(x, y, z, 2, r, img_stack, tVol, res=resolution)
-        else:
-            if ezy < 0:
-                z += sz
-                exz -= bx
-                ezy += by
-                if 0 <= z < tVol[2]:
-                    img_stack = diamVoxels(x, y, z, 2, r, img_stack, tVol, res=resolution)
-            else:
-                y += sy
-                exy -= bx
-                ezy -= bz
-                if 0 <= y < tVol[1]:
-                    img_stack = diamVoxels(x, y, z, 1, r, img_stack, tVol, res=resolution)
-
-        n -= 1
-
-    return img_stack
-
-def discretisation(p1, dmin, dmax, tVol):
-    """
-    Converts a 3D point from real coordinates to discrete voxels coordinates.
-
-    Args:
-    - p1 (ndarray): 3D point in real coordinates with the format [x, y, z, d].
-    - dmin (ndarray): 3D point representing the minimum values for x, y and z.
-    - dmax (ndarray): 3D point representing the maximum values for x, y and z.
-    - tVol (tuple): tuple with the 3 dimensions of the target 3D image volume.
-
-    Returns:
-    - ndarray: the converted 3D point in discrete voxels coordinates with the format [x, y, z, d].
-    """
-    # Calculate the discrete voxel coordinates
-    x = np.floor(tVol[0] * (p1[0] - dmin[0]) / (dmax[0] - dmin[0]))
-    y = np.floor(tVol[1] * (p1[1] - dmin[1]) / (dmax[1] - dmin[1]))
-    z = np.floor(tVol[2] * (p1[2] - dmin[2]) / (dmax[2] - dmin[2]))
-
-    # Return the converted point as a column vector
-    return np.array([x, y, z, p1[3]]).reshape(-1, 1)
-
-def diamVoxels(x, y, z, idx, r, img_stack, tVol, res):
-    '''
-    Creates a binary image of the voxels in a sphere centered at (x, y, z) with radius r. 
-    The size of the pixels is relative to the diameter of the sphere.
-
-    Args:
-        x (int): x-coordinate of the center of the sphere.
-        y (int): y-coordinate of the center of the sphere.
-        z (int): z-coordinate of the center of the sphere.
-        idx (int): The axis index of the diameter. 0, 1, or 2.
-        r (int): Radius of the sphere.
-        img_stack (ndarray): 3D numpy array representing the stack of images.
-        tVol (tuple): Tuple of three integers representing the dimensions of the image stack.
-        res (tuple): Tuple of three floats representing the resolution of each voxel in x, y, and z directions.
-
-    Returns:
-        ndarray: A binary 3D numpy array of the voxels within the sphere.
-    '''
-
-    t0, t1, t2 = tVol[0], tVol[1], tVol[2]
-    r0, r1, r2 = res[0], res[1], res[2]
-
-    # Calculate the indices of the voxels within the sphere and set them to 1
-    if idx == 0:
-        for i in range(-r, r+1):
-            if (int(y+i) < t1) & (int(y+i) >= 0):
-                for j in range(-r, r+1):
-                    if (int(z+j) < t2) & (int(z+j) >= 0):
-                        if pow(pow(i*r1, 2) + pow(j*r2, 2), 0.5) <= r:
-                            img_stack[int(x-1), int(y+i-1), int(z+j-1)] = 1
-    elif idx == 1:
-        for i in range(-r, r+1):
-            if (int(x+i) < t0) & (int(x+i) >= 0):
-                for j in range(-r, r+1):
-                    if (int(z+j) < t2) & (int(z+j) >= 0):
-                        if pow(pow(i*r0, 2) + pow(j*r2, 2), 0.5) <= r:
-                            img_stack[int(x+i-1), int(y-1), int(z+j-1)] = 1
+    p0 = np.asarray(p0, dtype=float)
+    p1 = np.asarray(p1, dtype=float)
+    shape = np.asarray(volume.shape)
+    rmax = max(r0, r1)
+    lo = np.maximum(np.floor(np.minimum(p0, p1) - rmax).astype(int), 0)
+    hi = np.minimum(np.ceil(np.maximum(p0, p1) + rmax).astype(int), shape - 1)
+    if np.any(hi < lo):
+        return
+    grid = np.stack(np.mgrid[lo[0]:hi[0] + 1, lo[1]:hi[1] + 1, lo[2]:hi[2] + 1], axis=-1).astype(float)
+    axis = p1 - p0
+    length2 = float(axis @ axis)
+    if length2 == 0.0:
+        t = np.zeros(grid.shape[:-1])
     else:
-        for i in range(-r, r+1):
-            if (int(x+i) < t0) & (int(x+i) >= 0):
-                for j in range(-r, r+1):
-                    if (int(y+j) < t1) & (int(y+j) >= 0):
-                        if pow(pow(i*r0, 2) + pow(j*r1, 2), 0.5) <= r:
-                            img_stack[int(x+i-1), int(y+j-1), int(z-1)] = 1
-
-    return img_stack
+        t = np.clip(((grid - p0) @ axis) / length2, 0.0, 1.0)
+    closest = p0 + t[..., None] * axis
+    dist2 = np.sum((grid - closest) ** 2, axis=-1)
+    radius = r0 + t * (r1 - r0)
+    inside = dist2 <= radius * radius
+    volume[lo[0]:hi[0] + 1, lo[1]:hi[1] + 1, lo[2]:hi[2] + 1][inside] = 1
 
 
-def findVessel(i, data):
+def rasterise_segments(points, radii, tVol):
     """
-    Returns a vessel (a numpy array) that contains data from column i until it encounters NaN value. 
-    It also returns the index of the next column to be read. 
-    
-    Args:
-    i (int): The index of the column to start reading the data from.
-    data (numpy.ndarray): The input data, with each column representing a different variable and each row representing a different observation.
-    
-    Returns:
-    Tuple[int, numpy.ndarray]: The index of the next column to be read and the vessel containing the read data.
-    """
-    
-    # Initialize an empty array to hold the read data
-    vessel = np.array([])
-    # Initialize a flag variable to indicate if the function should stop reading data
-    stop = False
-    
-    # While the function hasn't encountered a NaN value, it keeps reading data from the next column
-    while not stop:
-        # If the data in the current column isn't NaN, read it into the vessel
-        if not np.isnan(data[0,i]):
-            # If the vessel is empty, add the data as a column vector
-            if vessel.size == 0:
-                vessel = data[:,i].reshape(-1,1)
-            # If the vessel already contains data, add the new column to the right of the previous columns
-            else:
-                vessel = np.hstack((vessel, data[:,i]))
-            # Move to the next column
-            i += 1
-        # If the data in the current column is NaN, stop reading data
-        else:
-            stop = True
-    
-    # Return the index of the next column to be read and the vessel containing the read data
-    return i, vessel
-
-
-def process_network(data,tVol):
-    
-    """
-    Processes a 3D medical image data, generates point data,
-    and finds the voxels transversed by segments between two points.
-
-    Args:
-    data (np.ndarray): a 2D array of medical image data where each column represents a vessel
-    tVol (tuple): a tuple of integers (x, y, z) representing the size of the tissue volume
+    Rasterises a polyline network. Consecutive non-NaN columns of `points`
+    are joined by capsules; a NaN column breaks the chain.
 
     Returns:
-    np.ndarray: A 3D array of integers representing the voxels transversed by segments
-    between two points after checking for boundary violations
+        ndarray: uint8 volume of shape tVol with 1 inside vessels.
     """
+    points = np.asarray(points, dtype=float)
+    radii = np.asarray(radii, dtype=float)
+    volume = np.zeros(tuple(int(v) for v in tVol), dtype=np.uint8)
+    previous = None
+    for i in range(points.shape[1]):
+        p = points[:, i]
+        if np.isnan(p[0]):
+            previous = None
+            continue
+        if previous is not None:
+            q, rq = previous
+            if not np.array_equal(p, q):
+                rasterise_capsule(volume, q, p, rq, radii[i])
+        previous = (p, radii[i])
+    return volume
 
-    # Find non-NaN min/max values across data leaving a 10% margin in case of
-    # vessel/tissue boundary contact
-    dmin = np.nanmin(data, axis=1) * 1.1
-    dmax = np.nanmax(data, axis=1) * 1.1
 
-    # Initializing new array
-    newarray = np.array([])
+def process_network(data, tVol, fit="isotropic", voxel_size=None, margin=1.0, clip_axes=()):
+    """
+    Maps a network into the volume and rasterises it.
 
-    # Zero-initialised binary volume; uint8 keeps the working set small and
-    # makes the 0/255 conversion in the writer exact
-    img_stack = np.zeros(tVol, dtype=np.uint8)
+    Args:
+        data (ndarray): (4, N) array of x, y, z, diameter with NaN separators.
+        tVol (sequence): volume shape (nx, ny, nz).
+        fit, voxel_size, margin, clip_axes: see fit_to_volume.
 
-    # Loop over columns of data
-    for i in range(data.shape[1]):
-        if not np.isnan(data[0, i]):
-            # Discretise data into defined tissue volume
-            tempvec = discretisation(data[:, i], dmin, dmax, tVol)
-        else:
-            tempvec = data[:, i].reshape(-1, 1)
-
-        # Generating & organising point data into array
-        newarray = generate_points(newarray, tempvec, usenan=False)
-
-    # Loop over rows of newarray
-    j = 0
-    for i in range(newarray.shape[1] - 1):
-        j += 1
-        if not np.isnan(newarray[0, i]):
-            if not np.isnan(newarray[0, j]):
-                # Calculate diameter and pass into function to find voxels transversed by
-                # by segment between two points
-                diam = 0.5 * (newarray[3, i] + newarray[3, j])
-                transversal(newarray[0, i], newarray[1, i], newarray[2, i],
-                            newarray[0, j], newarray[1, j], newarray[2, j],
-                            diam, img_stack, tVol)
-
-    # Check boundary violations and return img_stack
-    return check_boundary(img_stack)
+    Returns:
+        ndarray: uint8 volume with 1 inside vessels and 0 elsewhere.
+    """
+    points, radii = fit_to_volume(data, tVol, fit=fit, voxel_size=voxel_size, margin=margin,
+                                  clip_axes=clip_axes)
+    return rasterise_segments(points, radii, tVol)

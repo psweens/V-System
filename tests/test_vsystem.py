@@ -23,7 +23,7 @@ from libGenerator import setProperties, calBifurcation, getLength  # noqa: E402
 from vSystem import F  # noqa: E402
 from analyseGrammar import branching_turtle_to_coords, tokenise  # noqa: E402
 from utils import bezier_interpolation  # noqa: E402
-from computeVoxel import process_network, transversal  # noqa: E402
+from computeVoxel import process_network, rasterise_segments, fit_to_volume  # noqa: E402
 
 PROPERTIES = {"k": 3, "epsilon": 7.0, "randmarg": 0.2, "sigma": 5, "stochparams": True}
 
@@ -134,26 +134,65 @@ class VoxelTests(unittest.TestCase):
         self.assertTrue(set(np.unique(volume).tolist()) <= {0, 1})
         self.assertGreater(int(volume.sum()), 0)
 
-    LENGTH, DIAMETER = 40, 10
-    IDEAL = math.pi * (DIAMETER / 2) ** 2 * LENGTH
+    def test_capsule_voxel_count_matches_the_analytic_volume_at_three_orientations(self):
+        length, radius = 40.0, 5.0
+        ideal = math.pi * radius ** 2 * length + 4.0 / 3.0 * math.pi * radius ** 3  # cylinder plus end caps
+        step2 = length / math.sqrt(2)
+        step3 = length / math.sqrt(3)
+        cases = {
+            "axis": ((20, 40, 40), (60, 40, 40)),
+            "xy-diagonal": ((20, 20, 40), (20 + step2, 20 + step2, 40)),
+            "xyz-diagonal": ((20, 20, 20), (20 + step3, 20 + step3, 20 + step3)),
+        }
+        for name, (start, end) in cases.items():
+            with self.subTest(orientation=name):
+                points = np.array([start, end], dtype=float).T
+                volume = rasterise_segments(points, np.array([radius, radius]), (80, 80, 80))
+                self.assertAlmostEqual(int(volume.sum()) / ideal, 1.0, delta=0.05)
 
-    def rasterised_fraction(self, start, end):
-        volume = np.zeros((80, 80, 80), dtype=np.uint8)
-        transversal(*start, *end, self.DIAMETER, volume, (80, 80, 80))
-        return int(volume.sum()) / self.IDEAL
+    def test_isotropic_fit_preserves_angles_and_the_length_to_diameter_ratio(self):
+        # a 60 degree bifurcation with very unequal extents per axis
+        p0 = np.array([0.0, 0.0, 0.0])
+        p1 = np.array([100.0, 0.0, 0.0])
+        p2 = p1 + 50.0 * np.array([math.cos(math.radians(60)), math.sin(math.radians(60)), 0.0])
+        p3 = p1 + 50.0 * np.array([math.cos(math.radians(-60)), math.sin(math.radians(-60)), 0.2])
+        nan = np.full(4, np.nan)
+        data = np.array([[*p0, 20.0], [*p1, 20.0], [*p2, 12.0], nan, [*p1, 20.0], [*p3, 12.0]]).T
+        points, radii = fit_to_volume(data, (100, 60, 40), fit="isotropic", margin=1.0)
+        a = points[:, 1] - points[:, 0]
+        b = points[:, 2] - points[:, 1]
+        angle = math.degrees(math.acos(a @ b / (np.linalg.norm(a) * np.linalg.norm(b))))
+        self.assertAlmostEqual(angle, 60.0, places=6)
+        self.assertAlmostEqual(2 * radii[0] / np.linalg.norm(a), 20.0 / 100.0, places=9)
+        # nothing outside the margin, and the largest radius still fits
+        finite = ~np.isnan(points[0])
+        self.assertTrue(np.all(points[:, finite] - radii[finite] >= 1.0 - 1e-9))
+        self.assertTrue(np.all(points[:, finite] + radii[finite] <= np.array([[100], [60], [40]]) - 1.0 + 1e-9))
 
-    def test_axis_aligned_cylinder_voxel_count_matches_pi_r_squared_l(self):
-        self.assertAlmostEqual(self.rasterised_fraction((20, 40, 40), (60, 40, 40)), 1.0, delta=0.05)
+    def test_rendered_network_never_touches_the_volume_faces(self):
+        _, _, volume = generate(seed=5, niter=7, tVol=(64, 48, 32))
+        self.assertGreater(int(volume.sum()), 0)
+        for face in (volume[0], volume[-1], volume[:, 0], volume[:, -1], volume[..., 0], volume[..., -1]):
+            self.assertEqual(int(face.sum()), 0)
 
-    @unittest.expectedFailure
-    def test_oblique_cylinder_voxel_count_matches_pi_r_squared_l(self):
-        # Known defect: cross-section discs are drawn perpendicular to the stepped
-        # axis rather than to the segment, so oblique vessels come out thinner.
-        # This test starts passing once the rasteriser draws true capsules.
-        step = int(self.LENGTH / math.sqrt(2))
-        self.assertAlmostEqual(self.rasterised_fraction((20, 20, 40), (20 + step, 20 + step, 40)), 1.0, delta=0.05)
-        step = int(self.LENGTH / math.sqrt(3))
-        self.assertAlmostEqual(self.rasterised_fraction((20, 20, 20), (20 + step,) * 3), 1.0, delta=0.05)
+    def test_clipped_isotropic_fit_fills_the_kept_axes(self):
+        _, nodes, _ = generate(seed=2, niter=6)
+        tVol = (100, 80, 20)
+        points, radii = fit_to_volume(nodes, tVol, fit="isotropic", margin=1.0, clip_axes=(2,))
+        rmax = float(np.nanmax(radii))
+        span = np.nanmax(points, axis=1) - np.nanmin(points, axis=1)
+        available = np.array(tVol) - 2 * (1.0 + rmax)
+        self.assertTrue(np.isclose(span[0], available[0]) or np.isclose(span[1], available[1]))
+        self.assertTrue(np.all(span[:2] <= available[:2] + 1e-9))
+        self.assertGreater(span[2], available[2])  # the depth axis is left to be clipped
+
+    def test_stretch_mode_fills_every_axis(self):
+        _, nodes, _ = generate(seed=2, niter=6)
+        tVol = (100, 80, 60)
+        points, radii = fit_to_volume(nodes, tVol, fit="stretch", margin=1.0)
+        rmax = float(np.nanmax(radii))
+        span = np.nanmax(points, axis=1) - np.nanmin(points, axis=1)
+        self.assertTrue(np.allclose(span, np.array(tVol) - 2 * (1.0 + rmax)))
 
 
 class DeterminismTests(unittest.TestCase):
