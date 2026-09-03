@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "vsystem"
-version = "3.0.0"
+version = "3.1.0"
 description = "Synthetic 3D vascular networks from stochastic parametric L-systems"
 readme = "README.md"
 requires-python = ">=3.10"

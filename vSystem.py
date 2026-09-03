@@ -14,6 +14,16 @@ the source are documented on each rule: stems are always drawn, so an
 iteration count is a count of drawn generations; the length margin is
 relative (see libGenerator); and anomalies are drawn per sub-segment with
 configurable probabilities instead of being written into a grammar by hand.
+
+The recursive rules also accept `d_min`, a smallest drawn diameter in grammar
+units (micrometres by the convention of the README). A branch terminates as
+soon as its diameter falls below it, so no vessel thinner than a modality's
+smallest resolvable calibre is written into the grammar. Left at None the
+rules stop on the iteration count alone; with both set, whichever comes first
+wins. Diameters fall by 2^(-1/k) per generation, so the iteration count that
+reaches d_min from d0 is about log(d0/d_min) / log(2^(1/k)). It bounds the
+diameter a branch is drawn at, not the diameter after a local anomaly: a
+stenosis still narrows a drawn sub-segment by stenosis_factor.
 """
 import random
 
@@ -31,7 +41,7 @@ def _segment(length, diameter=None):
     return "f(" + _num(length) + "," + _num(diameter) + ")"
 
 
-def F(n, d0):
+def F(n, d0, d_min=None):
     """
     Bifurcating tree: a stem, then two daughters turned by the Zamir angles
     on opposite sides of the parent, each followed by a roll of the
@@ -39,14 +49,20 @@ def F(n, d0):
 
     Source: F(d0) -> {S(d0)} [+(th1) /(70) F(d1)] [-(th2) /(70) F(d2)].
     The roll angle is the roll_angle property (70 degrees by default).
+
+    Args:
+        n (int): remaining generations.
+        d0 (float): diameter of this branch, in grammar units.
+        d_min (float or None): smallest drawn diameter; a branch thinner than
+            this terminates without drawing its stem.
     """
-    if n <= 0:
+    if n <= 0 or (d_min is not None and d0 < d_min):
         return "F"
     p = calBifurcation(d0)
     roll = _num(lg.roll_angle)
     return ("{" + S(d0) + "}"
-            + "[+(" + _num(p["th1"]) + ")/(" + roll + ")" + F(n - 1, p["d1"]) + "]"
-            + "[-(" + _num(p["th2"]) + ")/(" + roll + ")" + F(n - 1, p["d2"]) + "]")
+            + "[+(" + _num(p["th1"]) + ")/(" + roll + ")" + F(n - 1, p["d1"], d_min) + "]"
+            + "[-(" + _num(p["th2"]) + ")/(" + roll + ")" + F(n - 1, p["d2"], d_min) + "]")
 
 
 def S(d0):
@@ -106,55 +122,55 @@ def C(d0, divisor=7.0, bend=18.0):
     return _segment(getLength(d0) / divisor, d0) + "-(" + _num(bend) + ")"
 
 
-def A(n, d0):
+def A(n, d0, d_min=None):
     """
     Bifurcating sub-tree without rolls, used by the side-branch grammar.
 
     Source: A(d0) -> S(d0) [+(th1) A(d1)] [-(th2) A(d2)].
     """
-    if n <= 0:
+    if n <= 0 or (d_min is not None and d0 < d_min):
         return "A"
     p = calBifurcation(d0)
     return ("{" + S(d0) + "}"
-            + "[+(" + _num(p["th1"]) + ")" + A(n - 1, p["d1"]) + "]"
-            + "[-(" + _num(p["th2"]) + ")" + A(n - 1, p["d2"]) + "]")
+            + "[+(" + _num(p["th1"]) + ")" + A(n - 1, p["d1"], d_min) + "]"
+            + "[-(" + _num(p["th2"]) + ")" + A(n - 1, p["d2"], d_min) + "]")
 
 
-def B(n, d0):
+def B(n, d0, d_min=None):
     """
     Three curving sub-segments, a roll of 90 degrees, then a sub-tree.
 
     Source: B(d0) -> D(d0) D(d0) D(d0) /(90) A(d0).
     """
-    if n <= 0:
+    if n <= 0 or (d_min is not None and d0 < d_min):
         return "B"
-    return C(d0) + C(d0) + C(d0) + "/(90.0)" + A(n - 1, d0)
+    return C(d0) + C(d0) + C(d0) + "/(90.0)" + A(n - 1, d0, d_min)
 
 
-def R(n, d0):
+def R(n, d0, d_min=None):
     """
     A segment with a side branch and a continuing trunk.
 
     Source: R(d0) -> f('co/3') D D D [B(d1)] f('co/2', d2) B(d2).
     """
-    if n <= 0:
+    if n <= 0 or (d_min is not None and d0 < d_min):
         return "R"
     p = calBifurcation(d0)
     return (_segment(p["co"] / 3.0) + C(d0) + C(d0) + C(d0)
-            + "[" + B(n - 1, p["d1"]) + "]"
-            + _segment(p["co"] / 2.0, p["d2"]) + B(n - 1, p["d2"]))
+            + "[" + B(n - 1, p["d1"], d_min) + "]"
+            + _segment(p["co"] / 2.0, p["d2"]) + B(n - 1, p["d2"], d_min))
 
 
-def I(n, d0):
+def I(n, d0, d_min=None):
     """
     Initial segment followed by one side branch.
 
     Source: I(d0) -> f('co/3', d0) +(25) [R(d0)].
     """
-    if n <= 0:
+    if n <= 0 or (d_min is not None and d0 < d_min):
         return "I"
     return (_segment(getLength(d0) / 3.0, d0) + "+(" + _num(lg.stem_angle) + ")"
-            + "[" + R(n - 1, d0) + "]")
+            + "[" + R(n - 1, d0, d_min) + "]")
 
 
 def example_grammar(n, d0):

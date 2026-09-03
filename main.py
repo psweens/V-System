@@ -1,6 +1,7 @@
 """
-Command-line entry point: generates synthetic vascular networks and writes
-each one as a binary TIFF volume with a JSON sidecar recording how it was made.
+Command-line entry point: generates synthetic vascular networks and writes each
+one as a binary TIFF volume, a compressed centreline archive and a JSON sidecar
+recording how it was made.
 
     python main.py --count 5 --out ./output --seed 1
 
@@ -8,6 +9,23 @@ Every network is reproducible from its seed and the recorded parameters.
 The pipeline is: grammar string (vSystem.F) -> turtle interpretation
 (analyseGrammar) -> B-spline interpolation of stems (utils) -> mapping and
 capsule rasterisation into the volume (computeVoxel).
+
+The centreline archive is the source of truth for the geometry and the TIFF one
+rasterisation of it. Because computeVoxel maps grammar units to voxels at
+rasterisation time, the same saved centreline can be rendered at any voxel size
+-- once per imaging modality, say -- without regenerating the network and so
+without depending on generation being reproducible across versions:
+
+    from computeVoxel import process_network
+    from main import load_network
+
+    network = load_network("output/Lnet_i8_s1.npz")
+    volume = process_network(network["nodes"], (512, 512, 140),
+                             fit="voxel_size", voxel_size=2.0)
+
+Lengths and diameters are in grammar units, which the pipeline takes to be
+micrometres; see the Units section of the README. Each JSON sidecar records the
+convention it was written under in its "units" field.
 """
 import argparse
 import json
@@ -20,37 +38,60 @@ import tifffile
 
 import libGenerator
 from analyseGrammar import branching_turtle_to_coords
-from computeVoxel import FITS, process_network
+from computeVoxel import AXES, FITS, process_network
 from utils import interpolate_segments
 from vSystem import F
 
-AXES = {"x": 0, "y": 1, "z": 2}
+# The unit one grammar unit is taken to stand for. Diameters, segment lengths
+# and --voxel-size are all in this unit, so that --voxel-size is a modality's
+# physical voxel size. Recorded in every sidecar so a rescaled dataset declares
+# itself rather than being mistaken for the default.
+DEFAULT_UNITS = "um"
 
 
 def generate_network(niter, d0, properties, tVol, fit="isotropic", clip_axes=(2,),
                      voxel_size=None, subdivisions=3,
-                     direction=(0.0, 1.0, 0.0), perpendicular=(0.0, 0.0, 1.0)):
+                     direction=(0.0, 1.0, 0.0), perpendicular=(0.0, 0.0, 1.0),
+                     d_min=None, connect=True):
     """
     Generates one network and renders it into a volume.
 
     Args:
         niter (int): number of drawn generations.
-        d0 (float): root diameter, in grammar units.
+        d0 (float): root diameter, in grammar units (micrometres by convention).
         properties (dict): libGenerator parameters; missing keys take defaults.
         tVol (sequence): volume shape (nx, ny, nz).
-        fit, clip_axes, voxel_size: see computeVoxel.fit_to_volume.
+        fit, clip_axes, voxel_size: see computeVoxel.fit_to_volume. `clip_axes`
+            defaults to the depth axis here because the default volume is an
+            imaging slab, where computeVoxel defaults to clipping nothing; only
+            the isotropic fit reads it.
         subdivisions (int): B-spline sampling depth for braced stems.
         direction, perpendicular: initial turtle frame.
+        d_min (float or None): smallest drawn vessel diameter, in the same units
+            as d0; a branch terminates once it falls below it, so the tree stops
+            on whichever of `niter` and `d_min` comes first. None stops on
+            `niter` alone. It bounds the diameter a branch is drawn at, not the
+            diameter after a local anomaly: a stenosis still narrows a drawn
+            sub-segment by stenosis_factor.
+        connect (bool): see computeVoxel.rasterise_segments. Left true, a vessel
+            too thin to contain a voxel centre still renders as an unbroken
+            one-voxel path instead of a dotted line.
 
     Returns:
         tuple: (volume, program, nodes) with volume a uint8 array of 0 and 1,
-        program the grammar string and nodes the (4, N) interpolated centreline.
+        program the grammar string and nodes the (4, N) interpolated centreline
+        of x, y, z and diameter with NaN column separators.
+
+    `nodes` is the geometry in grammar units and independent of `tVol`, `fit`
+    and `voxel_size`: passing it back to computeVoxel.process_network with
+    different settings re-renders the same network at another resolution.
     """
     libGenerator.setProperties(properties)
-    program = F(niter, d0)
+    program = F(niter, d0, d_min)
     rows = branching_turtle_to_coords(program, d0, direction=direction, perpendicular=perpendicular)
     nodes = interpolate_segments(rows, subdivisions=subdivisions)
-    volume = process_network(nodes, tVol, fit=fit, voxel_size=voxel_size, clip_axes=clip_axes)
+    volume = process_network(nodes, tVol, fit=fit, voxel_size=voxel_size, clip_axes=clip_axes,
+                             connect=connect)
     return volume, program, nodes
 
 
@@ -61,6 +102,53 @@ def write_volume(path, volume):
     """
     stack = np.transpose(volume.astype(np.uint8) * 255, (2, 1, 0))
     tifffile.imwrite(path, stack, photometric="minisblack")
+
+
+def save_network(path, nodes, program=None, metadata=None):
+    """
+    Writes a centreline to a compressed .npz archive.
+
+    The archive holds the geometry in grammar units, so a reader can rasterise
+    it at any voxel size with computeVoxel.process_network instead of
+    regenerating the network or resampling a finished volume. It is a few
+    hundred kilobytes against hundreds of megabytes for a rendered volume.
+
+    Args:
+        path (str): destination; numpy appends '.npz' if it is missing.
+        nodes (ndarray): (4, N) array of x, y, z and diameter with NaN column
+            separators, as returned by generate_network.
+        program (str or None): the grammar string the network was drawn from.
+        metadata (dict or None): a JSON-serialisable record of how it was made,
+            including the unit its coordinates are in.
+
+    The stored arrays are exact, but the archive is a zip and its entries carry
+    a modification time, so two runs of the same seed produce equal arrays in
+    files that differ byte for byte.
+    """
+    arrays = {"nodes": np.asarray(nodes, dtype=float)}
+    if program is not None:
+        arrays["program"] = np.array(str(program))
+    if metadata is not None:
+        arrays["metadata"] = np.array(json.dumps(metadata))
+    np.savez_compressed(path, **arrays)
+
+
+def load_network(path):
+    """
+    Reads a centreline written by save_network.
+
+    Args:
+        path (str): the .npz archive.
+
+    Returns:
+        dict: "nodes" the (4, N) float array of x, y, z and diameter, "program"
+        the grammar string or None, and "metadata" the decoded record or None.
+    """
+    with np.load(path, allow_pickle=False) as handle:
+        nodes = np.asarray(handle["nodes"], dtype=float)
+        program = handle["program"].item() if "program" in handle.files else None
+        record = json.loads(handle["metadata"].item()) if "metadata" in handle.files else None
+    return {"nodes": nodes, "program": program, "metadata": record}
 
 
 def sample_parameters(args):
@@ -113,6 +201,10 @@ def build_parser():
     parser.add_argument("--d0", type=float, nargs=2, default=(20.0, 5.0), metavar=("MEAN", "STD"),
                         help="root diameter distribution in grammar units (default 20 5)")
     parser.add_argument("--d0-min", type=float, default=1.0, help="smallest accepted root diameter (default 1)")
+    parser.add_argument("--d-min", type=float, default=None, dest="d_min",
+                        help="smallest drawn vessel diameter in grammar units; a branch stops "
+                             "bifurcating once it falls below it (default: none, stop on "
+                             "--iterations alone). A stenosis still narrows a drawn sub-segment below it")
     parser.add_argument("--epsilon", type=float, nargs=2, default=(4.0, 10.0), metavar=("MIN", "MAX"),
                         help="length-to-diameter ratio range (default 4 10)")
     parser.add_argument("--randmarg", type=float, nargs=2, default=(0.1, 0.3), metavar=("MIN", "MAX"),
@@ -135,7 +227,15 @@ def build_parser():
     parser.add_argument("--clip-axes", type=parse_axes, default=(2,),
                         help="axes left out of the isotropic fit and clipped, e.g. 'z' or 'none' (default z)")
     parser.add_argument("--voxel-size", type=float, default=None,
-                        help="grammar units per voxel, for --fit voxel_size")
+                        help="grammar units per voxel, for --fit voxel_size; under the default "
+                             "unit convention this is the modality's voxel size in micrometres")
+    parser.add_argument("--units", default=DEFAULT_UNITS,
+                        help="physical unit one grammar unit stands for, recorded in the sidecar "
+                             f"(default {DEFAULT_UNITS}); it labels --d0, --d-min and --voxel-size "
+                             "and does not rescale anything")
+    parser.add_argument("--no-connect", action="store_false", dest="connect",
+                        help="rasterise bare capsules, so that a vessel thinner than a voxel "
+                             "renders as a dotted line rather than a one-voxel path")
     parser.add_argument("--subdivisions", type=int, default=3,
                         help="B-spline sampling depth for stems, 2^i points per span (default 3)")
     return parser
@@ -145,6 +245,8 @@ def main(argv=None):
     args = build_parser().parse_args(argv)
     if args.fit == "voxel_size" and args.voxel_size is None:
         raise SystemExit("--fit voxel_size requires --voxel-size")
+    if args.d_min is not None and args.d_min <= 0:
+        raise SystemExit("--d-min must be a positive diameter")
     base_seed = args.seed if args.seed is not None else random.SystemRandom().randrange(2 ** 31)
     os.makedirs(args.out, exist_ok=True)
     tVol = tuple(args.volume)
@@ -154,26 +256,36 @@ def main(argv=None):
         random.seed(seed)
         np.random.seed(seed % (2 ** 32))
         properties, d0, niter = sample_parameters(args)
-        volume, _, _ = generate_network(niter, d0, properties, tVol, fit=args.fit,
-                                        clip_axes=args.clip_axes, voxel_size=args.voxel_size,
-                                        subdivisions=args.subdivisions)
+        volume, program, nodes = generate_network(niter, d0, properties, tVol, fit=args.fit,
+                                                  clip_axes=args.clip_axes, voxel_size=args.voxel_size,
+                                                  subdivisions=args.subdivisions, d_min=args.d_min,
+                                                  connect=args.connect)
         stem = f"Lnet_i{niter}_s{seed}"
         write_volume(os.path.join(args.out, stem + ".tiff"), volume)
         record = {
             "seed": seed,
             "iterations": niter,
             "d0": d0,
+            "d_min": args.d_min,
             "properties": properties,
             "volume": list(tVol),
             "axis_order": "zyx",
+            "units": args.units,
             "fit": args.fit,
             "clip_axes": list(args.clip_axes),
+            "connect": args.connect,
             "voxel_size": args.voxel_size,
             "subdivisions": args.subdivisions,
         }
+        save_network(os.path.join(args.out, stem + ".npz"), nodes, program=program, metadata=record)
         with open(os.path.join(args.out, stem + ".json"), "w") as handle:
             json.dump(record, handle, indent=2)
-        print(f"{stem}.tiff: {niter} generations, d0 {d0:.1f}, vessel fraction {volume.mean() * 100:.2f}%")
+        calibre = ""
+        if args.fit == "voxel_size":
+            # the calibre a mis-scaled voxel size shows up in first
+            calibre = f", root diameter {d0 / args.voxel_size:.1f} voxels"
+        print(f"{stem}.tiff: {niter} generations, d0 {d0:.1f} {args.units}, "
+              f"vessel fraction {volume.mean() * 100:.2f}%{calibre}")
     return 0
 
 
