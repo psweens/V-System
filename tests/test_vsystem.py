@@ -11,6 +11,7 @@ import math
 import os
 import random
 import sys
+import tempfile
 import unittest
 
 import numpy as np
@@ -24,7 +25,9 @@ from libGenerator import setProperties, calBifurcation, getLength  # noqa: E402
 from vSystem import F, I, A, example_grammar  # noqa: E402
 from analyseGrammar import branching_turtle_to_coords, tokenise  # noqa: E402
 from utils import interpolate_segments, bspline, rotate_about  # noqa: E402
-from computeVoxel import process_network, rasterise_segments, fit_to_volume  # noqa: E402
+from computeVoxel import (process_network, rasterise_segments, fit_to_volume,  # noqa: E402
+                          normalise_axes, rasterise_line)
+from main import generate_network, load_network, save_network  # noqa: E402
 
 PROPERTIES = {"k": 3, "epsilon": 7.0, "randmarg": 0.2, "sigma": 5, "stochparams": True}
 
@@ -47,6 +50,35 @@ def final_row(program, d0=5.0):
     for row in branching_turtle_to_coords(program, d0):
         pass
     return row
+
+
+def connected_count(volume):
+    """
+    Returns (voxels set, voxels reachable from one of them under 26-connectivity),
+    so that the two are equal exactly when the rendered network is one piece.
+    """
+    set_voxels = np.argwhere(volume)
+    if len(set_voxels) == 0:
+        return 0, 0
+    shape = volume.shape
+    neighbourhood = [(dx, dy, dz)
+                     for dx in (-1, 0, 1) for dy in (-1, 0, 1) for dz in (-1, 0, 1)
+                     if (dx, dy, dz) != (0, 0, 0)]
+    seen = np.zeros(shape, dtype=bool)
+    start = tuple(int(v) for v in set_voxels[0])
+    seen[start] = True
+    stack = [start]
+    reached = 1
+    while stack:
+        x, y, z = stack.pop()
+        for dx, dy, dz in neighbourhood:
+            a, b, c = x + dx, y + dy, z + dz
+            if (0 <= a < shape[0] and 0 <= b < shape[1] and 0 <= c < shape[2]
+                    and volume[a, b, c] and not seen[a, b, c]):
+                seen[a, b, c] = True
+                reached += 1
+                stack.append((a, b, c))
+    return len(set_voxels), reached
 
 
 def angle_between(a, b):
@@ -353,6 +385,421 @@ class CommandLineTests(unittest.TestCase):
             for name in tiffs:
                 with open(os.path.join(first, name), "rb") as a, open(os.path.join(second, name), "rb") as b:
                     self.assertEqual(a.read(), b.read())
+                self.assertTrue(os.path.exists(os.path.join(first, name[:-5] + ".npz")))
+
+    def test_the_sidecar_and_centreline_alone_reproduce_the_written_volume(self):
+        import json
+        import tifffile
+        from main import main
+
+        args = ["--count", "1", "--seed", "7", "--volume", "64", "64", "32",
+                "--iterations", "4", "4", "--fit", "voxel_size", "--voxel-size", "6"]
+        with tempfile.TemporaryDirectory() as out:
+            self.assertEqual(main(args + ["--out", out]), 0)
+            stem = next(n[:-5] for n in os.listdir(out) if n.endswith(".tiff"))
+            with open(os.path.join(out, stem + ".json")) as handle:
+                record = json.load(handle)
+            self.assertEqual(record["units"], "um")
+            self.assertEqual(record["voxel_size"], 6.0)
+            self.assertIsNone(record["d_min"])
+
+            network = load_network(os.path.join(out, stem + ".npz"))
+            self.assertEqual(network["metadata"], record)
+            self.assertEqual(network["nodes"].shape[0], 4)
+            self.assertIn("f(", network["program"])
+            volume = process_network(network["nodes"], tuple(record["volume"]), fit=record["fit"],
+                                     voxel_size=record["voxel_size"], clip_axes=record["clip_axes"])
+            self.assertGreater(int(volume.sum()), 0)
+            written = tifffile.imread(os.path.join(out, stem + ".tiff"))
+            np.testing.assert_array_equal(np.transpose(volume, (2, 1, 0)) * 255, written)
+
+    def test_declared_units_and_d_min_reach_the_sidecar(self):
+        import json
+        from main import main
+
+        args = ["--count", "1", "--seed", "3", "--volume", "48", "48", "24",
+                "--iterations", "8", "8", "--units", "mm", "--d-min", "6"]
+        with tempfile.TemporaryDirectory() as out:
+            self.assertEqual(main(args + ["--out", out]), 0)
+            stem = next(n[:-5] for n in os.listdir(out) if n.endswith(".tiff"))
+            with open(os.path.join(out, stem + ".json")) as handle:
+                record = json.load(handle)
+            self.assertEqual(record["units"], "mm")
+            self.assertEqual(record["d_min"], 6.0)
+            nodes = load_network(os.path.join(out, stem + ".npz"))["nodes"]
+            self.assertGreaterEqual(float(np.nanmin(nodes[3])), 6.0 * 0.5 - 1e-9)  # a stenosis halves it
+
+    def test_a_non_positive_d_min_is_refused(self):
+        from main import main
+        with tempfile.TemporaryDirectory() as out:
+            with self.assertRaises(SystemExit) as caught:
+                main(["--count", "1", "--seed", "1", "--d-min", "0", "--out", out])
+            self.assertIn("--d-min", str(caught.exception))
+
+    def test_a_d_min_above_the_root_diameter_is_refused_rather_than_left_blank(self):
+        from main import main
+        with tempfile.TemporaryDirectory() as out:
+            with self.assertRaises(SystemExit) as caught:
+                main(["--count", "1", "--seed", "5", "--volume", "64", "64", "32",
+                      "--d-min", "500", "--out", out])
+            self.assertIn("empty", str(caught.exception))
+            self.assertEqual([f for f in os.listdir(out) if f.endswith(".tiff")], [])
+
+    def test_the_isotropic_default_also_round_trips_through_its_sidecar(self):
+        # the voxel_size round trip ignores clip_axes; this one depends on it
+        import json
+        import tifffile
+        from main import main
+
+        args = ["--count", "1", "--seed", "9", "--volume", "64", "56", "24", "--iterations", "5", "5"]
+        with tempfile.TemporaryDirectory() as out:
+            self.assertEqual(main(args + ["--out", out]), 0)
+            stem = next(n[:-5] for n in os.listdir(out) if n.endswith(".tiff"))
+            with open(os.path.join(out, stem + ".json")) as handle:
+                record = json.load(handle)
+            self.assertEqual(record["fit"], "isotropic")
+            self.assertEqual(record["clip_axes"], [2])
+            self.assertTrue(record["connect"])
+            nodes = load_network(os.path.join(out, stem + ".npz"))["nodes"]
+            volume = process_network(nodes, tuple(record["volume"]), fit=record["fit"],
+                                     clip_axes=record["clip_axes"], connect=record["connect"])
+            written = tifffile.imread(os.path.join(out, stem + ".tiff"))
+            np.testing.assert_array_equal(np.transpose(volume, (2, 1, 0)) * 255, written)
+
+    def test_no_connect_reaches_the_rasteriser_and_the_sidecar(self):
+        import json
+        import tifffile
+        from main import main
+
+        args = ["--count", "1", "--seed", "9", "--volume", "64", "56", "24", "--iterations", "5", "5"]
+        with tempfile.TemporaryDirectory() as joined, tempfile.TemporaryDirectory() as bare:
+            self.assertEqual(main(args + ["--out", joined]), 0)
+            self.assertEqual(main(args + ["--no-connect", "--out", bare]), 0)
+            stem = next(n[:-5] for n in os.listdir(bare) if n.endswith(".tiff"))
+            with open(os.path.join(bare, stem + ".json")) as handle:
+                self.assertFalse(json.load(handle)["connect"])
+            a = tifffile.imread(os.path.join(joined, stem + ".tiff"))
+            b = tifffile.imread(os.path.join(bare, stem + ".tiff"))
+            self.assertGreater(int((a > 0).sum()), int((b > 0).sum()))
+
+
+class ConnectivityTests(unittest.TestCase):
+    """
+    A capsule sets only the voxels whose centres it contains, so a vessel
+    thinner than a voxel would rasterise as a dotted line and break the tree
+    into fragments. Each segment is therefore also drawn as a connected digital
+    line.
+    """
+
+    def setUp(self):
+        setProperties(PROPERTIES)
+
+    def test_a_sub_voxel_vessel_renders_as_one_unbroken_path(self):
+        points = np.array([[10.0, 60.0], [10.0, 55.0], [10.0, 52.0]])  # oblique, so it misses centres
+        radii = np.array([0.2, 0.2])
+        tVol = (72, 72, 72)
+        dotted = rasterise_segments(points, radii, tVol, connect=False)
+        joined = rasterise_segments(points, radii, tVol, connect=True)
+        self.assertGreater(int(joined.sum()), int(dotted.sum()))
+        total, reached = connected_count(joined)
+        self.assertEqual(total, reached)
+        self.assertGreater(total, 50)
+        dotted_total, dotted_reached = connected_count(dotted)
+        self.assertLess(dotted_reached, dotted_total)  # the bare capsules really are broken
+
+    def test_connecting_changes_nothing_once_a_vessel_fills_a_voxel(self):
+        # every voxel the line sets is within sqrt(3)/2 of the centreline, so at
+        # that radius and above the capsule already contains it
+        rng = np.random.default_rng(0)
+        tVol = (48, 48, 48)
+        for radius in (math.sqrt(3) / 2, 1.0, 5.0):
+            with self.subTest(radius=radius):
+                for _ in range(12):
+                    p0 = rng.uniform(15.0, 25.0, 3)
+                    points = np.stack([p0, p0 + rng.uniform(-12.0, 12.0, 3)], axis=1)
+                    radii = np.array([radius, radius])
+                    np.testing.assert_array_equal(
+                        rasterise_segments(points, radii, tVol, connect=False),
+                        rasterise_segments(points, radii, tVol, connect=True))
+
+    def test_a_rendered_network_is_one_piece_when_nothing_is_clipped(self):
+        for seed, tVol, niter in ((3, (96, 96, 96), 7), (11, (96, 96, 96), 7)):
+            with self.subTest(seed=seed):
+                seed_all(seed)
+                volume, _, _ = generate_network(niter, 20.0, PROPERTIES, tVol, clip_axes=())
+                total, reached = connected_count(volume)
+                self.assertGreater(total, 0)
+                self.assertEqual(total, reached)
+
+    def test_bare_capsules_break_the_same_network_apart(self):
+        seed_all(3)
+        tVol = (96, 96, 96)
+        volume, _, _ = generate_network(7, 20.0, PROPERTIES, tVol, clip_axes=(), connect=False)
+        total, reached = connected_count(volume)
+        self.assertGreater(total, 0)
+        self.assertLess(reached, total)
+
+    def test_the_line_stays_inside_the_volume(self):
+        volume = np.zeros((8, 8, 8), dtype=np.uint8)
+        rasterise_line(volume, (-40.0, -40.0, -40.0), (40.0, 40.0, 40.0))
+        self.assertGreater(int(volume.sum()), 0)
+        rasterise_line(volume, (-40.0, -40.0, -40.0), (-30.0, -30.0, -30.0))  # wholly outside
+        outside = np.zeros((8, 8, 8), dtype=np.uint8)
+        rasterise_line(outside, (100.0, 100.0, 100.0), (200.0, 200.0, 200.0))
+        self.assertEqual(int(outside.sum()), 0)
+
+    def test_a_clipped_slab_still_renders_several_pieces(self):
+        # a branch that leaves a slab and re-enters is two vessels in the image,
+        # as it would be in a real acquisition; connect does not change that
+        seed_all(3)
+        volume, _, _ = generate_network(8, 20.0, PROPERTIES, (128, 128, 24), clip_axes=(2,))
+        total, reached = connected_count(volume)
+        self.assertGreater(total, 0)
+        self.assertLess(reached, total)
+
+
+class CentrelinePersistenceTests(unittest.TestCase):
+    """
+    The saved centreline is the source of truth and the volume is derived from
+    it, so a reader can re-render a network at another resolution without
+    regenerating it.
+    """
+
+    def setUp(self):
+        setProperties(PROPERTIES)
+
+    def test_saved_nodes_re_render_the_generated_volume(self):
+        tVol = (64, 64, 32)
+        cases = (("isotropic", {"clip_axes": (2,)}),
+                 ("voxel_size", {"voxel_size": 6.0, "clip_axes": (2,)}))
+        for fit, settings in cases:
+            with self.subTest(fit=fit):
+                seed_all(17)
+                volume, program, nodes = generate_network(6, 20.0, PROPERTIES, tVol,
+                                                          fit=fit, **settings)
+                self.assertGreater(int(volume.sum()), 0)
+                with tempfile.TemporaryDirectory() as out:
+                    path = os.path.join(out, "net.npz")
+                    save_network(path, nodes, program=program, metadata={"units": "um"})
+                    network = load_network(path)
+                np.testing.assert_array_equal(network["nodes"], nodes)
+                self.assertEqual(network["program"], program)
+                self.assertEqual(network["metadata"], {"units": "um"})
+                again = process_network(network["nodes"], tVol, fit=fit, **settings)
+                self.assertTrue(np.array_equal(again, volume))
+
+    def test_a_path_without_the_suffix_saves_and_loads(self):
+        _, nodes, _ = generate(seed=8, niter=4)
+        with tempfile.TemporaryDirectory() as out:
+            path = os.path.join(out, "bare")
+            save_network(path, nodes)
+            self.assertEqual(os.listdir(out), ["bare.npz"])   # numpy appends it on write
+            np.testing.assert_array_equal(load_network(path)["nodes"], nodes)
+            np.testing.assert_array_equal(load_network(path + ".npz")["nodes"], nodes)
+
+    def test_a_centreline_of_the_wrong_shape_is_refused(self):
+        with tempfile.TemporaryDirectory() as out:
+            for bad in (np.zeros((7, 4)), np.zeros(4), np.zeros((3, 5))):
+                with self.subTest(shape=bad.shape):
+                    with self.assertRaises(ValueError):
+                        save_network(os.path.join(out, "bad.npz"), bad)
+
+    def test_a_centreline_saved_without_provenance_still_reads_back(self):
+        _, nodes, _ = generate(seed=8, niter=4)
+        with tempfile.TemporaryDirectory() as out:
+            path = os.path.join(out, "bare.npz")
+            save_network(path, nodes)
+            network = load_network(path)
+        np.testing.assert_array_equal(network["nodes"], nodes)
+        self.assertIsNone(network["program"])
+        self.assertIsNone(network["metadata"])
+
+    def test_nodes_do_not_depend_on_the_volume_they_were_rendered_into(self):
+        seed_all(9)
+        _, _, small = generate_network(5, 20.0, PROPERTIES, (64, 64, 32), fit="isotropic")
+        seed_all(9)
+        _, _, large = generate_network(5, 20.0, PROPERTIES, (256, 128, 64),
+                                       fit="voxel_size", voxel_size=3.0)
+        np.testing.assert_array_equal(small, large)
+
+    def test_a_centreline_is_smaller_than_the_volume_it_renders(self):
+        # the archive grows with the generation count, the volume does not, so
+        # check the deepest tree the command line will draw, not just a shallow one
+        tVol = (512, 512, 140)
+        for niter in (4, 12):
+            with self.subTest(niter=niter):
+                _, nodes, _ = generate(seed=6, niter=niter, tVol=(32, 32, 32))
+                with tempfile.TemporaryDirectory() as out:
+                    path = os.path.join(out, "net.npz")
+                    save_network(path, nodes)
+                    self.assertLess(os.path.getsize(path), int(np.prod(tVol)))
+
+
+class UnitConventionTests(unittest.TestCase):
+    """
+    Grammar units are physical: one unit is one micrometre, so voxel_size is a
+    modality's voxel size and calibre in voxels goes as 1 / voxel_size.
+    """
+
+    def setUp(self):
+        setProperties(PROPERTIES)
+
+    def test_radii_in_voxels_scale_inversely_with_voxel_size(self):
+        _, nodes, _ = generate(seed=4, niter=6)
+        tVol = (64, 64, 32)
+        _, coarse = fit_to_volume(nodes, tVol, fit="voxel_size", voxel_size=8.0)
+        _, fine = fit_to_volume(nodes, tVol, fit="voxel_size", voxel_size=2.0)
+        self.assertGreater(float(np.nanmax(coarse)), 0.0)
+        np.testing.assert_allclose(fine, 4.0 * coarse)
+
+    def test_rasterised_calibre_scales_inversely_with_voxel_size(self):
+        diameter = 8.0  # grammar units; a single straight vessel along x
+        nodes = np.array([[20.0, 80.0], [15.0, 15.0], [15.0, 15.0], [diameter, diameter]])
+        tVol = (128, 48, 48)
+        areas = {}
+        for voxel_size in (1.0, 0.5):
+            volume = process_network(nodes, tVol, fit="voxel_size", voxel_size=voxel_size)
+            areas[voxel_size] = int(volume[tVol[0] // 2].sum())  # a mid-length cross-section
+            ideal = math.pi * (diameter / 2.0 / voxel_size) ** 2
+            self.assertAlmostEqual(areas[voxel_size] / ideal, 1.0, delta=0.05)
+        self.assertAlmostEqual(math.sqrt(areas[0.5] / areas[1.0]), 2.0, delta=0.05)
+
+    def test_holding_the_field_of_view_fixed_changes_only_the_sampling(self):
+        # the README renders one centreline per modality by deriving the volume
+        # shape from voxel_size, so that shape * voxel_size stays put; only then
+        # is the rendered calibre distribution that modality's
+        _, nodes, _ = generate(seed=4, niter=7)
+        extent = np.nanmax(nodes[:3], axis=1) - np.nanmin(nodes[:3], axis=1)
+        fills = {}
+        for voxel_size in (2.0, 1.0):
+            shape = np.ceil(extent / voxel_size).astype(int) + 8
+            volume = process_network(nodes, shape, fit="voxel_size", voxel_size=voxel_size)
+            fills[voxel_size] = volume.mean()
+            self.assertGreater(int(volume.sum()), 0)
+        # halving the voxel size doubles every calibre in voxels but renders the
+        # same physical object, so the occupied fraction barely moves
+        self.assertAlmostEqual(fills[1.0] / fills[2.0], 1.0, delta=0.25)
+
+    def test_a_fixed_shape_across_voxel_sizes_changes_the_field_of_view(self):
+        # the mistake the README warns against: the coarse render is then a
+        # near-empty corner of a volume covering a far larger field of view
+        _, nodes, _ = generate(seed=4, niter=7)
+        shape = (256, 256, 70)
+        fine = process_network(nodes, shape, fit="voxel_size", voxel_size=2.0)
+        coarse = process_network(nodes, shape, fit="voxel_size", voxel_size=20.0)
+        self.assertGreater(fine.mean(), 20 * coarse.mean())
+
+    def test_the_calibre_law_stops_at_the_one_voxel_floor(self):
+        # 1/voxel_size holds for what the grid can resolve; below that the
+        # connectivity floor renders every vessel one voxel wide instead
+        diameter = 8.0
+        nodes = np.array([[20.0, 80.0], [15.0, 15.0], [15.0, 15.0], [diameter, diameter]])
+        tVol = (128, 48, 48)
+        coarse = process_network(nodes, tVol, fit="voxel_size", voxel_size=64.0)
+        self.assertGreater(int(coarse.sum()), 0)                      # not dropped
+        mid = coarse[tVol[0] // 2]
+        self.assertLessEqual(int(mid.sum()), 2)                       # but not scaled either
+        self.assertLess(diameter / 64.0, 1.0)                         # it is sub-voxel
+
+    def test_a_non_positive_voxel_size_is_rejected(self):
+        _, nodes, _ = generate(seed=4, niter=4)
+        for voxel_size in (None, 0.0, -1.0):
+            with self.subTest(voxel_size=voxel_size):
+                with self.assertRaises(ValueError):
+                    fit_to_volume(nodes, (64, 64, 32), fit="voxel_size", voxel_size=voxel_size)
+
+
+class AxisSelectionTests(unittest.TestCase):
+    def setUp(self):
+        setProperties(PROPERTIES)
+
+    def test_names_indices_and_bare_strings_all_name_axes(self):
+        self.assertEqual(normalise_axes(()), ())
+        self.assertEqual(normalise_axes("z"), (2,))
+        self.assertEqual(normalise_axes(("Z", 0, "x")), (0, 2))
+        self.assertEqual(normalise_axes([1, 1]), (1,))
+        self.assertEqual(normalise_axes(np.array([2, 0])), (0, 2))
+
+    def test_a_boolean_mask_is_refused_rather_than_read_as_indices(self):
+        # [False, False, True] means "clip z" to a reader, but bool is an int
+        # subclass, so read as indices it would silently mean "clip x and y"
+        for axes in ([False, False, True], (True,), np.array([False, False, True])):
+            with self.subTest(axes=axes):
+                with self.assertRaises(ValueError):
+                    normalise_axes(axes)
+
+    def test_a_bare_axis_that_is_not_a_sequence_is_refused(self):
+        for axes in (2, 2.0, None):
+            with self.subTest(axes=axes):
+                with self.assertRaises(ValueError):
+                    normalise_axes(axes)
+
+    def test_an_unknown_axis_raises_rather_than_being_ignored(self):
+        for axes in (("w",), ("",), (3,), (-1,), (1.5,), (None,),
+                     (float("inf"),), (float("nan"),)):
+            with self.subTest(axes=axes):
+                with self.assertRaises(ValueError):
+                    normalise_axes(axes)
+
+    def test_a_named_clip_axis_clips(self):
+        _, nodes, _ = generate(seed=2, niter=5)
+        tVol = (100, 80, 20)
+        named = fit_to_volume(nodes, tVol, fit="isotropic", clip_axes=("z",))
+        indexed = fit_to_volume(nodes, tVol, fit="isotropic", clip_axes=(2,))
+        unclipped = fit_to_volume(nodes, tVol, fit="isotropic", clip_axes=())
+        for a, b in zip(named, indexed):
+            np.testing.assert_array_equal(a, b)
+        self.assertFalse(np.allclose(named[1], unclipped[1]))
+        with self.assertRaises(ValueError):
+            fit_to_volume(nodes, tVol, fit="isotropic", clip_axes=("depth",))
+
+
+class StoppingCriterionTests(unittest.TestCase):
+    """`d_min` stops a branch once its diameter falls below a resolvable calibre."""
+
+    def test_no_d_min_leaves_the_grammar_unchanged(self):
+        setProperties(PROPERTIES)
+        seed_all(5)
+        without = F(6, 20.0)
+        seed_all(5)
+        explicit_none = F(6, 20.0, d_min=None)
+        self.assertEqual(without, explicit_none)
+
+    def test_no_vessel_is_drawn_below_d_min(self):
+        setProperties({**PROPERTIES, "aneurysm_prob": 0.0, "stenosis_prob": 0.0})
+        seed_all(5)
+        unlimited = F(12, 20.0)
+        seed_all(5)
+        limited = F(12, 20.0, d_min=10.0)
+        drawn = [p[1] for c, p in tokenise(limited) if c == "f" and len(p) > 1]
+        self.assertTrue(drawn)
+        self.assertGreaterEqual(min(drawn), 10.0)
+        self.assertLess(len(limited), len(unlimited))
+
+    def test_d_min_reaches_the_generation_count_it_implies(self):
+        # deterministic daughters shrink by 2^(-1/k) a generation, so the last
+        # drawn calibre lies in [d_min, d_min * 2^(1/k)) and the depth is about
+        # log(d0 / d_min) / log(2^(1/k)).
+        k = PROPERTIES["k"]
+        setProperties({**PROPERTIES, "stochparams": False,
+                       "aneurysm_prob": 0.0, "stenosis_prob": 0.0})
+        seed_all(0)
+        d0, d_min = 20.0, 3.0
+        diameters = [p[1] for c, p in tokenise(F(100, d0, d_min=d_min)) if c == "f" and len(p) > 1]
+        self.assertGreaterEqual(min(diameters), d_min)
+        self.assertLess(min(diameters), d_min * 2 ** (1.0 / k))
+        depth = math.log(d0 / min(diameters)) / math.log(2 ** (1.0 / k))
+        self.assertAlmostEqual(depth, math.floor(math.log(d0 / d_min) / math.log(2 ** (1.0 / k))),
+                               delta=1.0)
+
+    def test_generate_network_honours_d_min(self):
+        setProperties(PROPERTIES)
+        seed_all(13)
+        _, program, nodes = generate_network(12, 20.0, {**PROPERTIES, "aneurysm_prob": 0.0,
+                                                        "stenosis_prob": 0.0},
+                                             (64, 64, 32), d_min=8.0)
+        self.assertGreaterEqual(float(np.nanmin(nodes[3])), 8.0 - 1e-9)
+        self.assertIn("f(", program)
 
 
 class DeterminismTests(unittest.TestCase):
