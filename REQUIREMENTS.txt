@@ -29,7 +29,7 @@ diff-match-patch==20241021
 dill==0.4.0
 docopt==0.6.2
 docstring-to-markdown==0.17
-docutils==0.21.2
+docutils==0.23
 executing==2.2.0
 fastjsonschema==2.21.1
 flake8==7.3.0
