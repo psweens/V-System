@@ -169,6 +169,20 @@ class TurtleTests(unittest.TestCase):
         rows = list(branching_turtle_to_coords("{f(1,1)f(1,1)}f(1,1){f(1,1)}", 1.0))
         self.assertEqual([r[4] for r in rows], [-1, 0, 0, 0, -1, 1, 1])
 
+    def test_a_branch_inside_a_stem_pins_the_stem_at_the_branch_point(self):
+        # '[' closes the open segment and its ']' opens a fresh one, so the stem
+        # is two curves meeting exactly at the branch point rather than one curve
+        # that the interpolating spline would carry past it
+        rows = list(branching_turtle_to_coords("{f(1,1)[+(90)f(1,1)]f(1,1)}", 1.0))
+        segments = [r[4] for r in rows]
+        self.assertEqual(segments[:4], [-1, 0, 0, -1])       # start, '{', f, daughter f outside any segment
+        self.assertTrue(math.isnan(segments[4]))              # ']'
+        self.assertEqual(segments[5:], [1, 1])               # restored point and f in a fresh segment
+        self.assertEqual(rows[5][:3], rows[2][:3])            # ... starting exactly at the branch point
+        # a branch opened outside any segment leaves the indices as they were
+        rows = list(branching_turtle_to_coords("{f(1,1)}[+(90)f(1,1)]{f(1,1)}", 1.0))
+        self.assertEqual([r[4] for r in rows if not math.isnan(r[4])], [-1, 0, 0, -1, -1, 1, 1])
+
 
 class InterpolationTests(unittest.TestCase):
     def test_bspline_starts_and_ends_on_the_control_points(self):
@@ -561,6 +575,26 @@ class ConnectivityTests(unittest.TestCase):
                     total, reached = connected_count(volume, connectivity)
                     self.assertGreater(total, 0)
                     self.assertEqual(total, reached, f"{connectivity}-connectivity")
+
+    def test_a_branch_inside_a_stem_renders_connected(self):
+        # the interpolated continuation starts exactly where the first part of
+        # the stem ends, so the centreline -- and hence the volume -- is one piece
+        tVol = (64, 64, 64)
+        for program in ("{f(1,1)[+(90)f(1,1)]f(1,1)}",
+                        "{f(1,1)f(1,1)[+(90){f(1,1)f(1,1)}]f(1,1)f(1,1)}",
+                        "{f(1,1)[+(90)f(1,1)}]f(1,1)f(1,1)}"):
+            with self.subTest(program=program):
+                nodes = interpolate_segments(list(branching_turtle_to_coords(program, 1.0)))
+                separators = np.flatnonzero(np.isnan(nodes[0]))
+                for i in separators:  # each continuation restarts on a point the curve visited
+                    before = nodes[:3, :i]
+                    restart = nodes[:3, i + 1]
+                    self.assertTrue(np.any(np.all(np.isclose(before, restart[:, None]), axis=0)))
+                points, radii = fit_to_volume(nodes, tVol, clip_axes=())
+                volume = rasterise_segments(points, radii * 0.02, tVol)   # sub-voxel everywhere
+                total, reached = connected_count(volume, 6)
+                self.assertGreater(total, 0)
+                self.assertEqual(total, reached)
 
     def test_bare_capsules_break_the_same_network_apart(self):
         seed_all(3)

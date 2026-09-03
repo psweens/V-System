@@ -260,7 +260,10 @@ The alphabet is the dissertation's. `f(l, d)` moves by `l` along the direction
 vector and records diameter `d`; `+(θ)` and `-(θ)` rotate the direction about the
 perpendicular vector; `/(β)` and `*(β)` rotate the perpendicular about the
 direction; `[` and `]` push and pop the whole state; `{` and `}` delimit a stem
-that is interpolated as one smooth curve. An operand left out takes its default:
+that is interpolated as one smooth curve. A `[` inside a stem pins the stem at
+the branch point — the part before it and the part after it are interpolated as
+separate curves that meet exactly there — so a branch may leave a stem midway
+without disconnecting the centreline. An operand left out takes its default:
 the segment length for the current diameter, the Zamir angle θ1, or the roll angle.
 
 | Rule | Production | Source |
