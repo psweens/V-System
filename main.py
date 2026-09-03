@@ -8,7 +8,7 @@ from vSystem import F, I, R, B
 from analyseGrammar import branching_turtle_to_coords
 from visuals import plot_coords, print_coords
 from computeVoxel import process_network
-from utils import bezier_interpolation
+from utils import interpolate_segments
 
 # Default Parameters
 n = 5  # No. of networks to be created
@@ -31,7 +31,7 @@ for file in range(n):
     d0 = np.random.normal(d0_mean, d0_std)  # Randomly assign base diameter (no dimension)
     while d0 < d0_min:  # Truncated draw: a non-positive diameter has no bifurcation solution
         d0 = np.random.normal(d0_mean, d0_std)
-    niter = random.randint(6, 14)  # Randomly assign number of V-System recursive loops
+    niter = random.randint(4, 12)  # Number of drawn generations
     setProperties(properties)  # Setting V-Sytem properties
     print(f"Creating image ... {file} with {niter} iterations")
 
@@ -42,7 +42,7 @@ for file in range(n):
     coords = branching_turtle_to_coords(turtle_program, d0)
 
     # Analyse / sort coordinate data
-    update = bezier_interpolation(coords)
+    update = interpolate_segments(coords)
 
     # If you fancy, plot a 2D image of the network!
     # plot_coords(newdata, array=True, bare_plot=False) # bare_plot removes the axis labels

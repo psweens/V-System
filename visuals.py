@@ -1,70 +1,60 @@
+"""
+Plotting helpers for vessel networks. matplotlib is imported on use, so the
+core pipeline does not depend on it.
+"""
+import math
+
 import numpy as np
-import matplotlib.pyplot as plt
-from mpl_toolkits.mplot3d import Axes3D
-from math import isnan
-plt.style.use('bmh')  # Use some nicer default colors
 
-def plot_coords(coords, array=True, bare_plot=False):
-    '''
-    Plots a list of coordinates in 3D.
 
-    Parameters:
-        coords (list or ndarray): A list of coordinates. If `array` is `True`,
-                                  `coords` should be an ndarray with shape (3, N).
-                                  If `array` is `False`, `coords` should be a list of
-                                  tuples containing the X, Y, Z, alpha, beta, diam,
-                                  ect. values for each coordinate.
-        array (bool): Determines if `coords` is an ndarray or a list. Default is `True`.
-        bare_plot (bool): Determines if the plot should be bare or not. Default is `False`.
-                          If `True`, axis markers are turned off.
+def plot_coords(nodes, bare_plot=False, linewidth=0.5, show=True):
+    """
+    Plots a network in 3D.
+
+    Args:
+        nodes (ndarray): (4, N) array of x, y, z and diameter with NaN columns
+            separating branches, as returned by utils.interpolate_segments.
+        bare_plot (bool): hide the axes.
+        linewidth (float): line width per unit of diameter.
+        show (bool): call matplotlib's show() before returning.
 
     Returns:
-        None
-    '''
-    # Create the plot and configure it appropriately.
-    ax = plt.figure()
+        matplotlib.axes.Axes: the 3D axes.
+    """
+    import matplotlib.pyplot as plt
+
+    nodes = np.asarray(nodes, dtype=float)
+    fig = plt.figure()
+    ax = fig.add_subplot(projection="3d")
+    start = 0
+    for i in range(nodes.shape[1] + 1):
+        if i == nodes.shape[1] or np.isnan(nodes[0, i]):
+            run = nodes[:, start:i]
+            for j in range(run.shape[1] - 1):
+                ax.plot(run[0, j:j + 2], run[1, j:j + 2], run[2, j:j + 2],
+                        linewidth=linewidth * run[3, j], color="tab:blue")
+            start = i + 1
+    finite = nodes[:3, ~np.isnan(nodes[0])]
+    if finite.size:
+        extent = np.ptp(finite, axis=1)
+        ax.set_box_aspect(np.maximum(extent, 1e-9))
     if bare_plot:
-        # Turns off the axis markers.
-        ax = plt.axis('off')
-    else:
-        # Ensures equal aspect ratio.
-        ax = ax.gca(projection='3d')
+        ax.set_axis_off()
+    if show:
+        plt.show()
+    return ax
 
-    if array:
-        # Loop over each coordinate and plot it.
-        for i in range(coords.shape[1]-1):
-            ax.plot(coords[0,i:i+2], coords[1,i:i+2], coords[2,i:i+2], color='blue')
-    else:
-        # Unpack the coordinates into separate arrays.
-        X, Y, Z, alpha, beta, diam, _, _, _, _ = zip(*coords)
-        X = np.array(X)
-        Y = np.array(Y)
-        Z = np.array(Z)
-        diam = np.array(diam)
 
-        # Loop over each coordinate and plot it.
-        for i in range(len(X)-1):
-            ax.plot(X[i:i+2], Y[i:i+2], Z[i:i+2], linewidth=0.5*diam[i], color='blue')
-
-    # Show the plot.
-    plt.show()
-
-def print_coords(coords):
+def print_coords(rows):
     """
-    Prints the coordinates provided, with gaps for any `NaN` values.
+    Prints interpreter rows, with a gap marker for every branch end.
 
-    Parameters:
-        coords (list): A list of coordinates to be printed. Each coordinate should be a tuple of (x, y, z, alpha, beta, diam, label).
-
-    Returns:
-        None
+    Args:
+        rows (iterable): (x, y, z, diameter, segment) tuples from
+            analyseGrammar.branching_turtle_to_coords.
     """
-
-    # Iterate through each coordinate in the list.
-    for (x, y, z, _, _, _, _) in coords:
-        if isnan(x):
-            # If there is a `NaN` value for the x-coordinate, print a gap.
-            print('<gap>')
+    for x, y, z, diameter, _ in rows:
+        if math.isnan(x):
+            print("<gap>")
         else:
-            # Otherwise, print the x, y, and z-coordinates rounded to 2 decimal places.
-            print('({:.2f}, {:.2f}, {:.2f})'.format(x, y, z))
+            print(f"({x:.2f}, {y:.2f}, {z:.2f}) d={diameter:.2f}")
