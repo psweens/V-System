@@ -327,6 +327,34 @@ class VoxelTests(unittest.TestCase):
         self.assertTrue(np.allclose(span, np.array(tVol) - 2 * (1.0 + rmax)))
 
 
+class CommandLineTests(unittest.TestCase):
+    def test_main_writes_reproducible_uint8_volumes_with_sidecars(self):
+        import json
+        import tempfile
+        import tifffile
+        from main import main
+
+        args = ["--count", "2", "--seed", "42", "--volume", "48", "40", "16", "--iterations", "3", "4"]
+        with tempfile.TemporaryDirectory() as first, tempfile.TemporaryDirectory() as second:
+            self.assertEqual(main(args + ["--out", first]), 0)
+            self.assertEqual(main(args + ["--out", second]), 0)
+            tiffs = sorted(f for f in os.listdir(first) if f.endswith(".tiff"))
+            self.assertEqual(len(tiffs), 2)
+            first_seed = [f for f in tiffs if f.endswith("_s42.tiff")]
+            self.assertEqual(len(first_seed), 1)
+            volume = tifffile.imread(os.path.join(first, first_seed[0]))
+            self.assertEqual(volume.dtype, np.uint8)
+            self.assertEqual(volume.shape, (16, 40, 48))  # pages z, rows y, columns x
+            self.assertEqual(set(np.unique(volume).tolist()), {0, 255})
+            with open(os.path.join(first, first_seed[0][:-5] + ".json")) as handle:
+                record = json.load(handle)
+            self.assertEqual(record["seed"], 42)
+            self.assertEqual(record["axis_order"], "zyx")
+            for name in tiffs:
+                with open(os.path.join(first, name), "rb") as a, open(os.path.join(second, name), "rb") as b:
+                    self.assertEqual(a.read(), b.read())
+
+
 class DeterminismTests(unittest.TestCase):
     def test_same_seed_gives_identical_grammar_and_volume(self):
         program_a, _, volume_a = generate(seed=11, niter=6)

@@ -1,0 +1,30 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "vsystem"
+version = "3.0.0"
+description = "Synthetic 3D vascular networks from stochastic parametric L-systems"
+readme = "README.md"
+requires-python = ">=3.10"
+license = {file = "LICENSE"}
+authors = [{name = "Paul W. Sweeney"}]
+dependencies = [
+    "numpy>=1.24",
+    "tifffile>=2023.7",
+]
+
+[project.optional-dependencies]
+viz = ["matplotlib>=3.6"]
+preprocess = ["opencv-python-headless>=4.8"]
+dev = ["pyflakes>=3.0"]
+
+[project.scripts]
+vsystem = "main:main"
+
+[project.urls]
+Repository = "https://github.com/psweens/V-System"
+
+[tool.setuptools]
+py-modules = ["main", "vSystem", "libGenerator", "analyseGrammar", "utils", "computeVoxel", "preprocessing", "visuals"]
