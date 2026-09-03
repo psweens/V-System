@@ -171,26 +171,53 @@ and `voxel_size`, so it is the artefact worth keeping.
 ### Rendering one network for several modalities
 
 Because the mapping from grammar units to voxels happens at rasterisation time, a
-saved centreline can be rendered at each modality's own voxel size. The vessel
-calibre distribution of the result — which is exactly what an unpaired
-image-to-image model learns as its output prior — then matches that modality:
+saved centreline can be rendered at each modality's own voxel size. The field of
+view is `shape * voxel_size`, so `shape` has to follow the voxel size to keep it
+fixed; deriving it from the network's own extent does that:
 
 ```python
+import numpy as np
 from computeVoxel import process_network
 from main import load_network
 
+# written by: python main.py --count 1 --seed 1 --iterations 8 8 --out output
 network = load_network("output/Lnet_i8_s1.npz")
+nodes = network["nodes"]
+extent = np.nanmax(nodes[:3], axis=1) - np.nanmin(nodes[:3], axis=1)  # micrometres
 
-for modality, voxel_size, shape in [("light-sheet", 2.0, (512, 512, 140)),
-                                    ("mesoscopic-PAI", 20.0, (512, 512, 140))]:
-    volume = process_network(network["nodes"], shape,
-                             fit="voxel_size", voxel_size=voxel_size)
+for modality, voxel_size in [("two-photon", 1.0), ("light-sheet", 2.0)]:
+    shape = np.ceil(extent / voxel_size).astype(int) + 8   # same field of view, finer grid
+    volume = process_network(nodes, shape, fit="voxel_size", voxel_size=voxel_size)
 ```
 
-A 20 µm vessel is 10 voxels across at 2 µm and 1 voxel across at 20 µm. Choose
-`--d0`, `--epsilon` and `--iterations` (or `--d-min`) so that the network spans
-the field of view `shape * voxel_size`: under `voxel_size` the network is centred
-and clipped rather than scaled to fit.
+Only the sampling changes between the two, so the vessel calibre distribution of
+each result is that modality's — which is exactly what an unpaired
+image-to-image model learns as its output prior. A 20 µm vessel is 20 voxels
+across at 1 µm and 10 voxels across at 2 µm.
+
+Holding `shape` fixed instead would render the same network into two different
+fields of view. That is the mistake to avoid: at 20 µm/voxel a
+`512 × 512 × 140` volume covers 10 240 × 10 240 × 2800 µm, and the network above
+occupies 37 × 33 × 21 of its 36.7 million voxels.
+
+**One centreline serves a modality only while that modality can resolve it.**
+Every vessel thinner than a voxel is drawn at the one-voxel connectivity floor,
+so once most of the network is sub-voxel its calibre distribution collapses to a
+spike at 1 voxel instead of matching anything. Check before trusting a render:
+
+```python
+d = nodes[3][~np.isnan(nodes[3])] / voxel_size          # diameters in voxels
+print(np.percentile(d, [50, 90]), (d < 1.0).mean())     # ... and the sub-voxel fraction
+```
+
+For a modality whose voxel size approaches the network's finest vessels,
+generate a network for it — a larger `--d0`, or `--d-min` set to its smallest
+resolvable calibre — rather than rendering an existing one more coarsely.
+
+To target a fixed acquisition geometry instead, a `512 × 512 × 140` slab at
+2 µm say, choose `--d0`, `--epsilon` and `--iterations` (or `--d-min`) so that
+the network spans the field of view `shape * voxel_size`: under `voxel_size` the
+network is centred and clipped rather than scaled to fit.
 
 ---
 

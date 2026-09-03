@@ -597,6 +597,31 @@ class UnitConventionTests(unittest.TestCase):
             self.assertAlmostEqual(areas[voxel_size] / ideal, 1.0, delta=0.05)
         self.assertAlmostEqual(math.sqrt(areas[0.5] / areas[1.0]), 2.0, delta=0.05)
 
+    def test_holding_the_field_of_view_fixed_changes_only_the_sampling(self):
+        # the README renders one centreline per modality by deriving the volume
+        # shape from voxel_size, so that shape * voxel_size stays put; only then
+        # is the rendered calibre distribution that modality's
+        _, nodes, _ = generate(seed=4, niter=7)
+        extent = np.nanmax(nodes[:3], axis=1) - np.nanmin(nodes[:3], axis=1)
+        fills = {}
+        for voxel_size in (2.0, 1.0):
+            shape = np.ceil(extent / voxel_size).astype(int) + 8
+            volume = process_network(nodes, shape, fit="voxel_size", voxel_size=voxel_size)
+            fills[voxel_size] = volume.mean()
+            self.assertGreater(int(volume.sum()), 0)
+        # halving the voxel size doubles every calibre in voxels but renders the
+        # same physical object, so the occupied fraction barely moves
+        self.assertAlmostEqual(fills[1.0] / fills[2.0], 1.0, delta=0.25)
+
+    def test_a_fixed_shape_across_voxel_sizes_changes_the_field_of_view(self):
+        # the mistake the README warns against: the coarse render is then a
+        # near-empty corner of a volume covering a far larger field of view
+        _, nodes, _ = generate(seed=4, niter=7)
+        shape = (256, 256, 70)
+        fine = process_network(nodes, shape, fit="voxel_size", voxel_size=2.0)
+        coarse = process_network(nodes, shape, fit="voxel_size", voxel_size=20.0)
+        self.assertGreater(fine.mean(), 20 * coarse.mean())
+
     def test_a_non_positive_voxel_size_is_rejected(self):
         _, nodes, _ = generate(seed=4, niter=4)
         for voxel_size in (None, 0.0, -1.0):
