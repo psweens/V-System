@@ -52,6 +52,12 @@ centreline rendered at two voxel sizes gives two correctly scaled datasets.
 Rasterising once and resampling the binary volume afterwards does **not**: it
 destroys vessels a voxel wide. Render each modality from the centreline instead.
 
+The `1 / v` law holds down to the grid: a vessel below one voxel across is drawn
+at the one-voxel connectivity floor rather than scaled, so its rendered calibre
+is overstated. That is the honest rendering of an unresolvable vessel, but it
+means a network must be chosen against the voxel size it will be rendered at —
+see *Rendering one network for several modalities* below.
+
 To work in another unit, keep the convention self-consistent — interpret `--d0`
 and `--voxel-size` in the same unit — and declare it with `--units mm`. The flag
 labels the data; it rescales nothing.
@@ -90,8 +96,10 @@ Each network is written as three files sharing the stem
 | `.json` | the seed, the unit convention and every parameter used |
 
 Network *i* of a run uses `seed + i`, and the same seed and parameters reproduce
-the same volume. The centreline archive is a few hundred kilobytes against
-hundreds of megabytes for a volume, and its arrays are exact; being a zip, its
+the same volume. The centreline archive grows with the number of drawn
+generations rather than with the volume — tens of kilobytes at four generations
+and about seven megabytes at twelve, against 37 MB for a `512 × 512 × 140`
+volume whatever the network inside it. Its arrays are exact; being a zip, its
 entries carry a modification time, so compare the arrays rather than the bytes.
 
 Useful options (`python main.py --help` lists them all):
@@ -116,9 +124,12 @@ Useful options (`python main.py --help` lists them all):
 
 `--d-min` and `--iterations` are both stopping criteria and whichever comes first
 wins. `--d-min` is the one a modality states directly, as its smallest resolvable
-calibre; diameters fall by `2^(-1/k)` a generation, so it is reached after about
-`log(d0 / d_min) / log(2^(1/k))` generations — raise `--iterations` above that to
-let `--d-min` decide. It bounds the diameter a branch is *drawn* at, not the
+calibre; with `--deterministic` daughters, diameters fall by exactly `2^(-1/k)` a
+generation and it is reached after `log(d0 / d_min) / log(2^(1/k))` of them.
+Under the default stochastic daughter diameters that is only an estimate, and
+the two daughters of a bifurcation reach it at different depths, so the tree
+terminates unevenly. Either way, raise `--iterations` above the estimate to let
+`--d-min` decide. It bounds the diameter a branch is *drawn* at, not the
 diameter after a local anomaly: a stenosis still narrows a drawn sub-segment by
 `--stenosis-prob`'s factor of 0.5, so set `--stenosis-prob 0` for a hard floor.
 

@@ -50,12 +50,23 @@ def normalise_axes(axes):
 
     Accepts indices (0, 1, 2) and names ("x", "y", "z"), in any mixture, and
     so also a bare string: "z" and "xy" are iterated character by character.
+    Booleans are rejected rather than read as the indices 0 and 1, so that a
+    boolean mask -- the natural numpy way to write "clip z" -- cannot be
+    misread as "clip x and y".
 
     Raises:
-        ValueError: on an axis that is neither a name nor an index in range.
+        ValueError: on an axis that is neither a name nor an index in range,
+            and on a selection that is not iterable.
     """
+    if isinstance(axes, (int, float)) or axes is None:
+        raise ValueError(
+            f"clip_axes must be a sequence of axes, got {axes!r}; write (2,) or \"z\"")
     out = set()
     for item in axes:
+        if isinstance(item, (bool, np.bool_)):
+            raise ValueError(
+                f"unknown axis {item!r}; use x, y, z or the indices 0, 1, 2, "
+                "not a boolean mask")
         if isinstance(item, str):
             name = item.strip().lower()
             if name not in AXES:
@@ -65,7 +76,7 @@ def normalise_axes(axes):
             continue
         try:
             index = int(item)
-        except (TypeError, ValueError):
+        except (TypeError, ValueError, OverflowError):
             raise ValueError(
                 f"unknown axis {item!r}; use x, y, z or the indices 0, 1, 2") from None
         if index != item or index not in (0, 1, 2):

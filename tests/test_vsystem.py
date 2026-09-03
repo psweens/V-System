@@ -432,8 +432,55 @@ class CommandLineTests(unittest.TestCase):
     def test_a_non_positive_d_min_is_refused(self):
         from main import main
         with tempfile.TemporaryDirectory() as out:
-            with self.assertRaises(SystemExit):
+            with self.assertRaises(SystemExit) as caught:
                 main(["--count", "1", "--seed", "1", "--d-min", "0", "--out", out])
+            self.assertIn("--d-min", str(caught.exception))
+
+    def test_a_d_min_above_the_root_diameter_is_refused_rather_than_left_blank(self):
+        from main import main
+        with tempfile.TemporaryDirectory() as out:
+            with self.assertRaises(SystemExit) as caught:
+                main(["--count", "1", "--seed", "5", "--volume", "64", "64", "32",
+                      "--d-min", "500", "--out", out])
+            self.assertIn("empty", str(caught.exception))
+            self.assertEqual([f for f in os.listdir(out) if f.endswith(".tiff")], [])
+
+    def test_the_isotropic_default_also_round_trips_through_its_sidecar(self):
+        # the voxel_size round trip ignores clip_axes; this one depends on it
+        import json
+        import tifffile
+        from main import main
+
+        args = ["--count", "1", "--seed", "9", "--volume", "64", "56", "24", "--iterations", "5", "5"]
+        with tempfile.TemporaryDirectory() as out:
+            self.assertEqual(main(args + ["--out", out]), 0)
+            stem = next(n[:-5] for n in os.listdir(out) if n.endswith(".tiff"))
+            with open(os.path.join(out, stem + ".json")) as handle:
+                record = json.load(handle)
+            self.assertEqual(record["fit"], "isotropic")
+            self.assertEqual(record["clip_axes"], [2])
+            self.assertTrue(record["connect"])
+            nodes = load_network(os.path.join(out, stem + ".npz"))["nodes"]
+            volume = process_network(nodes, tuple(record["volume"]), fit=record["fit"],
+                                     clip_axes=record["clip_axes"], connect=record["connect"])
+            written = tifffile.imread(os.path.join(out, stem + ".tiff"))
+            np.testing.assert_array_equal(np.transpose(volume, (2, 1, 0)) * 255, written)
+
+    def test_no_connect_reaches_the_rasteriser_and_the_sidecar(self):
+        import json
+        import tifffile
+        from main import main
+
+        args = ["--count", "1", "--seed", "9", "--volume", "64", "56", "24", "--iterations", "5", "5"]
+        with tempfile.TemporaryDirectory() as joined, tempfile.TemporaryDirectory() as bare:
+            self.assertEqual(main(args + ["--out", joined]), 0)
+            self.assertEqual(main(args + ["--no-connect", "--out", bare]), 0)
+            stem = next(n[:-5] for n in os.listdir(bare) if n.endswith(".tiff"))
+            with open(os.path.join(bare, stem + ".json")) as handle:
+                self.assertFalse(json.load(handle)["connect"])
+            a = tifffile.imread(os.path.join(joined, stem + ".tiff"))
+            b = tifffile.imread(os.path.join(bare, stem + ".tiff"))
+            self.assertGreater(int((a > 0).sum()), int((b > 0).sum()))
 
 
 class ConnectivityTests(unittest.TestCase):
@@ -501,14 +548,14 @@ class ConnectivityTests(unittest.TestCase):
         rasterise_line(outside, (100.0, 100.0, 100.0), (200.0, 200.0, 200.0))
         self.assertEqual(int(outside.sum()), 0)
 
-    def test_a_clipped_slab_may_still_render_several_pieces(self):
+    def test_a_clipped_slab_still_renders_several_pieces(self):
         # a branch that leaves a slab and re-enters is two vessels in the image,
         # as it would be in a real acquisition; connect does not change that
         seed_all(3)
         volume, _, _ = generate_network(8, 20.0, PROPERTIES, (128, 128, 24), clip_axes=(2,))
         total, reached = connected_count(volume)
         self.assertGreater(total, 0)
-        self.assertLessEqual(reached, total)
+        self.assertLess(reached, total)
 
 
 class CentrelinePersistenceTests(unittest.TestCase):
@@ -541,6 +588,22 @@ class CentrelinePersistenceTests(unittest.TestCase):
                 again = process_network(network["nodes"], tVol, fit=fit, **settings)
                 self.assertTrue(np.array_equal(again, volume))
 
+    def test_a_path_without_the_suffix_saves_and_loads(self):
+        _, nodes, _ = generate(seed=8, niter=4)
+        with tempfile.TemporaryDirectory() as out:
+            path = os.path.join(out, "bare")
+            save_network(path, nodes)
+            self.assertEqual(os.listdir(out), ["bare.npz"])   # numpy appends it on write
+            np.testing.assert_array_equal(load_network(path)["nodes"], nodes)
+            np.testing.assert_array_equal(load_network(path + ".npz")["nodes"], nodes)
+
+    def test_a_centreline_of_the_wrong_shape_is_refused(self):
+        with tempfile.TemporaryDirectory() as out:
+            for bad in (np.zeros((7, 4)), np.zeros(4), np.zeros((3, 5))):
+                with self.subTest(shape=bad.shape):
+                    with self.assertRaises(ValueError):
+                        save_network(os.path.join(out, "bad.npz"), bad)
+
     def test_a_centreline_saved_without_provenance_still_reads_back(self):
         _, nodes, _ = generate(seed=8, niter=4)
         with tempfile.TemporaryDirectory() as out:
@@ -559,13 +622,17 @@ class CentrelinePersistenceTests(unittest.TestCase):
                                        fit="voxel_size", voxel_size=3.0)
         np.testing.assert_array_equal(small, large)
 
-    def test_a_centreline_is_far_smaller_than_the_volume_it_renders(self):
-        _, nodes, _ = generate(seed=6, niter=8)
-        tVol = (256, 256, 128)
-        with tempfile.TemporaryDirectory() as out:
-            path = os.path.join(out, "net.npz")
-            save_network(path, nodes)
-            self.assertLess(os.path.getsize(path), int(np.prod(tVol)) / 10)
+    def test_a_centreline_is_smaller_than_the_volume_it_renders(self):
+        # the archive grows with the generation count, the volume does not, so
+        # check the deepest tree the command line will draw, not just a shallow one
+        tVol = (512, 512, 140)
+        for niter in (4, 12):
+            with self.subTest(niter=niter):
+                _, nodes, _ = generate(seed=6, niter=niter, tVol=(32, 32, 32))
+                with tempfile.TemporaryDirectory() as out:
+                    path = os.path.join(out, "net.npz")
+                    save_network(path, nodes)
+                    self.assertLess(os.path.getsize(path), int(np.prod(tVol)))
 
 
 class UnitConventionTests(unittest.TestCase):
@@ -622,6 +689,18 @@ class UnitConventionTests(unittest.TestCase):
         coarse = process_network(nodes, shape, fit="voxel_size", voxel_size=20.0)
         self.assertGreater(fine.mean(), 20 * coarse.mean())
 
+    def test_the_calibre_law_stops_at_the_one_voxel_floor(self):
+        # 1/voxel_size holds for what the grid can resolve; below that the
+        # connectivity floor renders every vessel one voxel wide instead
+        diameter = 8.0
+        nodes = np.array([[20.0, 80.0], [15.0, 15.0], [15.0, 15.0], [diameter, diameter]])
+        tVol = (128, 48, 48)
+        coarse = process_network(nodes, tVol, fit="voxel_size", voxel_size=64.0)
+        self.assertGreater(int(coarse.sum()), 0)                      # not dropped
+        mid = coarse[tVol[0] // 2]
+        self.assertLessEqual(int(mid.sum()), 2)                       # but not scaled either
+        self.assertLess(diameter / 64.0, 1.0)                         # it is sub-voxel
+
     def test_a_non_positive_voxel_size_is_rejected(self):
         _, nodes, _ = generate(seed=4, niter=4)
         for voxel_size in (None, 0.0, -1.0):
@@ -641,8 +720,23 @@ class AxisSelectionTests(unittest.TestCase):
         self.assertEqual(normalise_axes([1, 1]), (1,))
         self.assertEqual(normalise_axes(np.array([2, 0])), (0, 2))
 
+    def test_a_boolean_mask_is_refused_rather_than_read_as_indices(self):
+        # [False, False, True] means "clip z" to a reader, but bool is an int
+        # subclass, so read as indices it would silently mean "clip x and y"
+        for axes in ([False, False, True], (True,), np.array([False, False, True])):
+            with self.subTest(axes=axes):
+                with self.assertRaises(ValueError):
+                    normalise_axes(axes)
+
+    def test_a_bare_axis_that_is_not_a_sequence_is_refused(self):
+        for axes in (2, 2.0, None):
+            with self.subTest(axes=axes):
+                with self.assertRaises(ValueError):
+                    normalise_axes(axes)
+
     def test_an_unknown_axis_raises_rather_than_being_ignored(self):
-        for axes in (("w",), ("",), (3,), (-1,), (1.5,), (None,)):
+        for axes in (("w",), ("",), (3,), (-1,), (1.5,), (None,),
+                     (float("inf"),), (float("nan"),)):
             with self.subTest(axes=axes):
                 with self.assertRaises(ValueError):
                     normalise_axes(axes)

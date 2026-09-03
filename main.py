@@ -110,11 +110,14 @@ def save_network(path, nodes, program=None, metadata=None):
 
     The archive holds the geometry in grammar units, so a reader can rasterise
     it at any voxel size with computeVoxel.process_network instead of
-    regenerating the network or resampling a finished volume. It is a few
-    hundred kilobytes against hundreds of megabytes for a rendered volume.
+    regenerating the network or resampling a finished volume. It grows with the
+    number of drawn generations rather than with the volume: tens of kilobytes
+    at four generations and about seven megabytes at twelve, against 37 MB for
+    a 512 x 512 x 140 volume whatever the network inside it.
 
     Args:
-        path (str): destination; numpy appends '.npz' if it is missing.
+        path (str): destination; numpy appends '.npz' if it is missing, and
+            load_network accepts the path either way.
         nodes (ndarray): (4, N) array of x, y, z and diameter with NaN column
             separators, as returned by generate_network.
         program (str or None): the grammar string the network was drawn from.
@@ -125,7 +128,11 @@ def save_network(path, nodes, program=None, metadata=None):
     a modification time, so two runs of the same seed produce equal arrays in
     files that differ byte for byte.
     """
-    arrays = {"nodes": np.asarray(nodes, dtype=float)}
+    nodes = np.asarray(nodes, dtype=float)
+    if nodes.ndim != 2 or nodes.shape[0] != 4:
+        raise ValueError(
+            f"nodes must be a (4, N) array of x, y, z, diameter, got {nodes.shape}")
+    arrays = {"nodes": nodes}
     if program is not None:
         arrays["program"] = np.array(str(program))
     if metadata is not None:
@@ -138,12 +145,15 @@ def load_network(path):
     Reads a centreline written by save_network.
 
     Args:
-        path (str): the .npz archive.
+        path (str): the .npz archive, with or without its '.npz' suffix, since
+            save_network appends one to a path that lacks it.
 
     Returns:
         dict: "nodes" the (4, N) float array of x, y, z and diameter, "program"
         the grammar string or None, and "metadata" the decoded record or None.
     """
+    if not os.path.exists(path) and not path.endswith(".npz"):
+        path += ".npz"
     with np.load(path, allow_pickle=False) as handle:
         nodes = np.asarray(handle["nodes"], dtype=float)
         program = handle["program"].item() if "program" in handle.files else None
@@ -256,6 +266,10 @@ def main(argv=None):
         random.seed(seed)
         np.random.seed(seed % (2 ** 32))
         properties, d0, niter = sample_parameters(args)
+        if args.d_min is not None and d0 < args.d_min:
+            raise SystemExit(
+                f"--d-min {args.d_min:g} exceeds the root diameter {d0:.3g} sampled for seed "
+                f"{seed}, so the network would be empty; lower --d-min or raise --d0")
         volume, program, nodes = generate_network(niter, d0, properties, tVol, fit=args.fit,
                                                   clip_axes=args.clip_axes, voxel_size=args.voxel_size,
                                                   subdivisions=args.subdivisions, d_min=args.d_min,
@@ -277,9 +291,12 @@ def main(argv=None):
             "voxel_size": args.voxel_size,
             "subdivisions": args.subdivisions,
         }
-        save_network(os.path.join(args.out, stem + ".npz"), nodes, program=program, metadata=record)
         with open(os.path.join(args.out, stem + ".json"), "w") as handle:
             json.dump(record, handle, indent=2)
+        save_network(os.path.join(args.out, stem + ".npz"), nodes, program=program, metadata=record)
+        if not volume.any():
+            print(f"{stem}.tiff: warning: no vessel voxels; the network is outside the volume or "
+                  f"below its resolution", file=sys.stderr)
         calibre = ""
         if args.fit == "voxel_size":
             # the calibre a mis-scaled voxel size shows up in first

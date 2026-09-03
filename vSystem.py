@@ -156,9 +156,12 @@ def R(n, d0, d_min=None):
     if n <= 0 or (d_min is not None and d0 < d_min):
         return "R"
     p = calBifurcation(d0)
+    # the trunk carries on at d2, so it is subject to d_min like any other branch
+    trunk = ""
+    if d_min is None or p["d2"] >= d_min:
+        trunk = _segment(p["co"] / 2.0, p["d2"]) + B(n - 1, p["d2"], d_min)
     return (_segment(p["co"] / 3.0) + C(d0) + C(d0) + C(d0)
-            + "[" + B(n - 1, p["d1"], d_min) + "]"
-            + _segment(p["co"] / 2.0, p["d2"]) + B(n - 1, p["d2"], d_min))
+            + "[" + B(n - 1, p["d1"], d_min) + "]" + trunk)
 
 
 def I(n, d0, d_min=None):
