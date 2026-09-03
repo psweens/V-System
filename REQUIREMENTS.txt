@@ -10,8 +10,8 @@ backcall==0.2.0
 beautifulsoup4==4.13.4
 bezier==2024.6.20
 binaryornot==0.4.4
-black==25.1.0
-bleach==6.2.0
+black==26.3.1
+bleach==6.4.0
 cffi==1.17.1
 chardet==5.2.0
 charset-normalizer==3.4.2
@@ -20,7 +20,7 @@ cloudpickle==3.1.1
 comm==0.2.2
 contourpy==1.3.1
 cookiecutter==2.6.0
-cryptography==45.0.4
+cryptography==50.0.0
 cycler==0.12.1
 debugpy==1.8.14
 decorator==5.2.1
@@ -33,8 +33,8 @@ docutils==0.21.2
 executing==2.2.0
 fastjsonschema==2.21.1
 flake8==7.3.0
-fonttools==4.58.4
-idna==3.10
+fonttools==4.60.2
+idna==3.15
 imageio==2.37.0
 imagesize==1.4.1
 importlib-metadata==8.7.0
@@ -70,11 +70,11 @@ MarkupSafe==3.0.2
 matplotlib==3.10.1
 matplotlib-inline==0.1.7
 mccabe==0.7.0
-mistune==3.1.3
+mistune==3.3.3
 more-itertools==10.7.0
 mypy-extensions==1.1.0
 nbclient==0.10.2
-nbconvert==7.16.6
+nbconvert==7.17.1
 nbformat==5.10.4
 nest-asyncio==1.6.0
 networkx==3.4.2
@@ -88,7 +88,7 @@ parso==0.8.4
 pathspec==0.12.1
 pexpect==4.9.0
 pickleshare==0.7.5
-Pillow==12.0.0
+Pillow==12.3.0
 pipreqs==0.5.0
 platformdirs==4.3.8
 pluggy==1.6.0
@@ -127,7 +127,7 @@ qstylizer==0.2.4
 QtAwesome==1.4.0
 qtconsole==5.6.1
 QtPy==2.4.3
-requests==2.32.4
+requests==2.33.0
 rope==1.13.0
 Rtree==1.4.0
 scikit-image==0.25.2
@@ -136,7 +136,7 @@ SecretStorage==3.3.3
 six==1.17.0
 snowballstemmer==3.0.1
 sortedcontainers==2.4.0
-soupsieve==2.7
+soupsieve==2.8.4
 Sphinx==8.2.3
 sphinxcontrib-applehelp==2.0.0
 sphinxcontrib-devhelp==2.0.0
@@ -155,12 +155,12 @@ tinycss2==1.4.0
 toml==0.10.2
 tomli==2.2.1
 tomlkit==0.13.3
-tornado==6.5.1
+tornado==6.5.8
 traitlets==5.14.3
 typing_extensions==4.14.0
 tzdata==2025.2
-ujson==5.10.0
-urllib3==2.5.0
+ujson==5.13.0
+urllib3==2.7.0
 watchdog==6.0.0
 wcwidth==0.2.13
 webencodings==0.5.1
