@@ -717,6 +717,28 @@ class ConnectivityReportTests(unittest.TestCase):
         self.assertEqual(failed, 1)
         self.assertIn("touch NO face", captured.getvalue())
 
+    def test_an_unreadable_path_is_not_counted_as_a_break(self):
+        from check_connectivity import main as connectivity_main
+        with contextlib.redirect_stdout(io.StringIO()) as out, \
+                contextlib.redirect_stderr(io.StringIO()) as err:
+            status = connectivity_main(["no_such_file.tiff", "#", "a comment"])
+        self.assertEqual(status, 1)
+        self.assertIn("no such file", err.getvalue())
+        self.assertIn("3 path(s) could not be read", out.getvalue())
+        self.assertNotIn("break(s)", out.getvalue())
+
+    def test_a_clean_run_says_so(self):
+        from check_connectivity import main as connectivity_main
+        body = np.zeros((12, 12, 12), dtype=np.uint8)
+        body[3:9, 3:9, 3:9] = 1
+        with tempfile.TemporaryDirectory() as directory:
+            path = os.path.join(directory, "v.tiff")
+            write_volume(path, body)
+            with contextlib.redirect_stdout(io.StringIO()) as out:
+                status = connectivity_main([path])
+        self.assertEqual(status, 0)
+        self.assertIn("no break beyond what the volume cut", out.getvalue())
+
     def test_a_saved_centreline_reports_as_connected_geometry(self):
         _, nodes, _ = generate(seed=4, niter=6)
         with tempfile.TemporaryDirectory() as out:

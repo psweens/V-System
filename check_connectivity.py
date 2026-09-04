@@ -267,19 +267,24 @@ def main(argv=None):
     args = parser.parse_args(argv)
 
     problems = 0
+    missing = 0
     for path in args.paths:
         if not os.path.exists(path):
             print(f"{path}: no such file", file=sys.stderr)
-            problems += 1
+            missing += 1                      # an unreadable path is not a connectivity result
             continue
         if path.endswith(".npz"):
             problems += check_centreline(path)
         else:
             problems += check_volume(path)
         print()
+    if missing:
+        print(f"{missing} path(s) could not be read")
     if problems:
         print(f"{problems} break(s) not explained by the volume boundary")
-    return 1 if problems else 0
+    if not missing and not problems:
+        print("no break beyond what the volume cut")
+    return 1 if (problems or missing) else 0
 
 
 if __name__ == "__main__":
