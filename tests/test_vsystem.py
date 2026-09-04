@@ -6,7 +6,9 @@ Run from the repository root with either
 or
     python -m pytest
 """
+import contextlib
 import importlib
+import io
 import math
 import os
 import random
@@ -27,7 +29,9 @@ from analyseGrammar import branching_turtle_to_coords, tokenise  # noqa: E402
 from utils import interpolate_segments, bspline, rotate_about  # noqa: E402
 from computeVoxel import (process_network, rasterise_segments, fit_to_volume,  # noqa: E402
                           normalise_axes, rasterise_line)
-from main import generate_network, load_network, save_network  # noqa: E402
+from main import generate_network, load_network, save_network, write_volume  # noqa: E402
+from check_connectivity import (label, check_volume, check_centreline,  # noqa: E402
+                                generate_and_check)
 
 PROPERTIES = {"k": 3, "epsilon": 7.0, "randmarg": 0.2, "sigma": 5, "stochparams": True}
 
@@ -91,7 +95,7 @@ def angle_between(a, b):
 class ImportTests(unittest.TestCase):
     def test_every_module_imports_on_the_installed_stack(self):
         for name in ("libGenerator", "vSystem", "analyseGrammar", "utils",
-                     "computeVoxel", "preprocessing", "visuals"):
+                     "computeVoxel", "preprocessing", "visuals", "check_connectivity"):
             with self.subTest(module=name):
                 importlib.import_module(name)
 
@@ -621,6 +625,107 @@ class ConnectivityTests(unittest.TestCase):
         total, reached = connected_count(volume)
         self.assertGreater(total, 0)
         self.assertLess(reached, total)
+
+
+class ConnectivityReportTests(unittest.TestCase):
+    """
+    check_connectivity separates a network the volume merely cut from one that
+    is genuinely broken, so a clipped slab does not read as a defect.
+    """
+
+    def setUp(self):
+        setProperties(PROPERTIES)
+
+    def _report(self, volume):
+        with tempfile.TemporaryDirectory() as out:
+            path = os.path.join(out, "v.tiff")
+            write_volume(path, volume)
+            with contextlib.redirect_stdout(io.StringIO()) as captured:
+                unexplained = check_volume(path)
+        return unexplained, captured.getvalue()
+
+    def test_components_are_counted_and_ordered_by_size(self):
+        volume = np.zeros((10, 10, 10), dtype=np.uint8)
+        volume[1:3, 1:3, 1:3] = 1                      # 8 voxels
+        volume[6:9, 6:9, 6:9] = 1                      # 27 voxels
+        sizes, labels = label(volume, 6)
+        self.assertEqual(list(sizes), [27, 8])         # largest first
+        self.assertEqual(labels[7, 7, 7], 1)
+        self.assertEqual(labels[1, 1, 1], 2)
+        self.assertEqual(int((labels > 0).sum()), 35)
+
+    def test_a_corner_touching_chain_splits_under_six_connectivity(self):
+        volume = np.zeros((8, 8, 8), dtype=np.uint8)
+        for i in range(5):
+            volume[i, i, i] = 1                        # touches only at corners
+        self.assertEqual(label(volume, 26)[0].size, 1)
+        self.assertEqual(label(volume, 6)[0].size, 5)
+
+    def test_an_empty_volume_has_no_components(self):
+        sizes, labels = label(np.zeros((4, 4, 4), dtype=np.uint8), 6)
+        self.assertEqual(sizes.size, 0)
+        self.assertEqual(int(labels.sum()), 0)
+
+    def test_a_piece_on_a_face_is_the_volume_cutting_and_one_inside_is_not(self):
+        body = np.zeros((20, 20, 20), dtype=np.uint8)
+        body[5:15, 5:15, 5:15] = 1
+
+        unexplained, text = self._report(body)
+        self.assertEqual(unexplained, 0)
+        self.assertIn("one piece: connected", text)
+
+        cut = body.copy()
+        cut[2, 2, 0] = 1                               # isolated, but on the z face
+        unexplained, text = self._report(cut)
+        self.assertEqual(unexplained, 0)
+        self.assertIn("not a defect", text)
+
+        broken = body.copy()
+        broken[2, 2, 2] = 1                            # isolated and touching no face
+        unexplained, text = self._report(broken)
+        self.assertEqual(unexplained, 1)
+        self.assertIn("touch NO face", text)
+
+    def test_bare_capsules_are_reported_as_breaks_the_volume_cannot_explain(self):
+        seed_all(3)
+        volume, _, _ = generate_network(7, 20.0, PROPERTIES, (96, 96, 96),
+                                        clip_axes=(), connect=False)
+        unexplained, _ = self._report(volume)
+        self.assertGreater(unexplained, 0)
+        seed_all(3)
+        volume, _, _ = generate_network(7, 20.0, PROPERTIES, (96, 96, 96),
+                                        clip_axes=(), connect=True)
+        unexplained, text = self._report(volume)
+        self.assertEqual(unexplained, 0)
+        self.assertIn("one piece: connected", text)
+
+    def test_generating_fresh_networks_reports_each_one(self):
+        with contextlib.redirect_stdout(io.StringIO()) as captured:
+            failed = generate_and_check(2, ["--seed", "1", "--volume", "64", "64", "64",
+                                            "--iterations", "5", "5", "--clip-axes", "none"])
+        text = captured.getvalue()
+        self.assertEqual(failed, 0)
+        self.assertIn("Lnet_i5_s1", text)
+        self.assertIn("Lnet_i5_s2", text)
+        self.assertIn("2/2", text)
+
+    def test_generating_with_bare_capsules_is_reported_as_broken(self):
+        with contextlib.redirect_stdout(io.StringIO()) as captured:
+            failed = generate_and_check(1, ["--seed", "1", "--volume", "64", "64", "64",
+                                            "--iterations", "7", "7", "--clip-axes", "none",
+                                            "--no-connect"])
+        self.assertEqual(failed, 1)
+        self.assertIn("touch NO face", captured.getvalue())
+
+    def test_a_saved_centreline_reports_as_connected_geometry(self):
+        _, nodes, _ = generate(seed=4, niter=6)
+        with tempfile.TemporaryDirectory() as out:
+            path = os.path.join(out, "net.npz")
+            save_network(path, nodes)
+            with contextlib.redirect_stdout(io.StringIO()) as captured:
+                extra = check_centreline(path)
+        self.assertEqual(extra, 0)
+        self.assertIn("(connected)", captured.getvalue())
 
 
 class CentrelinePersistenceTests(unittest.TestCase):

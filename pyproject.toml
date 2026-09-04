@@ -27,4 +27,4 @@ vsystem = "main:main"
 Repository = "https://github.com/psweens/V-System"
 
 [tool.setuptools]
-py-modules = ["main", "vSystem", "libGenerator", "analyseGrammar", "utils", "computeVoxel", "preprocessing", "visuals"]
+py-modules = ["main", "vSystem", "libGenerator", "analyseGrammar", "utils", "computeVoxel", "preprocessing", "visuals", "check_connectivity"]

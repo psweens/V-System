@@ -159,6 +159,21 @@ to — `scipy.ndimage.label` among them — and looks like a string of beads in 
 viewer. Face connectivity is the weakest assumption any of them makes, so it is
 the one the rasteriser guarantees.
 
+`check_connectivity.py` answers the question for a given network. It reports the
+components of a volume under both 6- and 26-connectivity and, for every piece
+but the largest, whether that piece touches a face of the volume — a piece that
+does is a branch the volume cut, a piece that does not is a real break. It also
+checks a saved `.npz` centreline as pure geometry, independently of any volume,
+where anything but one component is a defect. `--generate N` makes fresh
+networks to check instead of reading files, passing every other option through
+to the generator, and the exit status is 1 only for a break the volume boundary
+does not explain:
+
+```bash
+python check_connectivity.py --generate 10 --seed 1
+python check_connectivity.py output/*.npz output/*.tiff
+```
+
 Two ways of looking can still suggest breaks that are not there. A thin vessel
 running obliquely through a stack shows up in any single slice as isolated
 voxels even though it is unbroken in three dimensions, so judge connectivity
