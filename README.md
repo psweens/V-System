@@ -23,8 +23,9 @@ obey Murray's law and bifurcation angles follow Zamir's minimum-volume rule.
 3. **Interpolation** (`utils.py`): each stem is smoothed with a cubic B-spline.
 4. **Voxelisation** (`computeVoxel.py`): the network is mapped into the volume
    with a single isotropic scale factor and every segment is drawn as a tapered
-   capsule, so calibre and bifurcation angles survive into the image, plus a
-   connected digital line, so a vessel thinner than a voxel stays unbroken.
+   capsule, so calibre and bifurcation angles survive into the image, plus the
+   face-connected chain of voxels it passes through, so a vessel thinner than a
+   voxel stays unbroken.
 
 Steps 1–3 produce the **centreline**, which is saved alongside the volume. The
 centreline is the source of truth for the geometry and the TIFF is one
@@ -96,7 +97,10 @@ Each network is written as three files sharing the stem
 | `.json` | the seed, the unit convention and every parameter used |
 
 Network *i* of a run uses `seed + i`, and the same seed and parameters reproduce
-the same volume. The centreline archive grows with the number of drawn
+the same volume. The default volume is an imaging slab, fitted in x and y and
+clipped in z, so vessels leave and re-enter it and a deep network renders as
+several pieces; see *Connectivity* below for what that means and how to change
+it. The centreline archive grows with the number of drawn
 generations rather than with the volume — tens of kilobytes at four generations
 and about seven megabytes at twelve, against 37 MB for a `512 × 512 × 140`
 volume whatever the network inside it. Its arrays are exact; being a zip, its
@@ -140,19 +144,37 @@ a voxel contains no centre along much of its length, so on its own it rasterises
 as a dotted line and a connected tree falls apart into fragments — with the
 default parameters, more than a third of the centreline is that thin and a
 single tree renders as dozens of pieces. Every segment is therefore also drawn
-as a 26-connected digital line, which renders a sub-voxel vessel one voxel wide
-instead of dotted. It is not a dilation: every voxel the line sets lies within
+as the chain of voxels it passes through, walked one face at a time
+(Amanatides & Woo, 1987), which renders a sub-voxel vessel one voxel wide
+instead of dotted. It is not a dilation: every voxel the chain sets lies within
 `sqrt(3)/2` of the centreline, so for a radius of 0.866 voxels or more it is
 already inside the capsule and calibre is untouched. `--no-connect` restores the
 bare capsule rasterisation.
 
-Two things still legitimately split a rendered network into pieces, and neither
-is a defect:
+The chain is **face-connected** (6-connected), not merely 26-connected. The
+distinction matters downstream: a chain of voxels touching only at edges or
+corners is one piece to a 26-connected label but shatters under the
+six-connected flood fill, label or morphological operation most tools default
+to — `scipy.ndimage.label` among them — and looks like a string of beads in a
+viewer. Face connectivity is the weakest assumption any of them makes, so it is
+the one the rasteriser guarantees.
+
+Two ways of looking can still suggest breaks that are not there. A thin vessel
+running obliquely through a stack shows up in any single slice as isolated
+voxels even though it is unbroken in three dimensions, so judge connectivity
+with a 3-D component count rather than slice by slice. And a rendered network
+does still fall into several genuine pieces under two conditions, neither of
+them a defect:
 
 - **Clipping.** A branch that leaves a slab and re-enters it is two vessels in
-  the image, exactly as it would be in a real acquisition. `--clip-axes` and the
-  volume shape control this; with `--clip-axes none` a fitted network renders as
-  a single connected component.
+  the image, exactly as it would be in a real acquisition. The default volume
+  is such a slab — fitted in x and y, clipped in z — so this is what the
+  quickstart command produces: its deepest network, at twelve generations,
+  renders as 48 pieces, every one of them touching the top or bottom face of
+  the slab, with 95% of the vessel voxels in the largest. `--clip-axes` and
+  the volume shape control this. With `--clip-axes none` each of the five
+  quickstart networks renders as a single connected component, at the cost of
+  scaling the whole tree into 140 slices and so shrinking every vessel.
 - **Resolution.** A vessel the modality cannot resolve is still drawn, one voxel
   wide. To stop generating them instead, set `--d-min` to the smallest
   resolvable calibre.
@@ -238,7 +260,10 @@ The alphabet is the dissertation's. `f(l, d)` moves by `l` along the direction
 vector and records diameter `d`; `+(θ)` and `-(θ)` rotate the direction about the
 perpendicular vector; `/(β)` and `*(β)` rotate the perpendicular about the
 direction; `[` and `]` push and pop the whole state; `{` and `}` delimit a stem
-that is interpolated as one smooth curve. An operand left out takes its default:
+that is interpolated as one smooth curve. A `[` inside a stem pins the stem at
+the branch point — the part before it and the part after it are interpolated as
+separate curves that meet exactly there — so a branch may leave a stem midway
+without disconnecting the centreline. An operand left out takes its default:
 the segment length for the current diameter, the Zamir angle θ1, or the roll angle.
 
 | Rule | Production | Source |
@@ -278,8 +303,10 @@ command-line entry point. It also pins the centreline contract: a saved
 centreline re-renders the volume it was generated with, calibre in voxels
 scales as `1 / voxel_size`, and a sidecar plus its `.npz` reproduce the written
 TIFF exactly. Connectivity is covered too: an unclipped network renders as one
-26-connected component, bare capsules do not, and connecting changes nothing
-once a vessel fills a voxel.
+component under both 6- and 26-connectivity, the chain drawn for a segment is
+face-connected at every orientation and never strays more than `sqrt(3)/2`
+from it, bare capsules do break, and connecting changes nothing once a vessel
+fills a voxel.
 
 ---
 
@@ -307,9 +334,10 @@ Please cite the following if you use V-System in your research:
 Version 3.0 changes the interpreter, the grammars and the voxeliser as described
 above; volumes generated with it are not identical to those of earlier versions.
 Version 3.1 adds the centreline archive, the declared unit convention and the
-`d_min` stopping criterion. It also renders sub-voxel vessels as connected
+`d_min` stopping criterion. It also renders sub-voxel vessels as face-connected
 one-voxel paths rather than dotted lines, so its volumes contain vessels that
-3.0 dropped; `--no-connect` reproduces the 3.0 rasterisation.
+3.0 dropped and hold together under a six-connected label; `--no-connect`
+reproduces the 3.0 rasterisation.
 
 ---
 

@@ -16,6 +16,15 @@ perpendicular vector and a diameter:
     [ ]      push and pop the whole state
     { }      delimit a segment whose points are interpolated as one curve
 
+A '[' met while a segment is open closes it, and the matching ']' opens a
+fresh one for the continuation. The stem is thereby pinned at the branch
+point: the part before it is one curve ending exactly there, the daughter
+starts exactly there, and the rest of the stem is a second curve starting
+exactly there. Had the daughter's points been folded into the parent's
+segment instead, the interpolating spline would have run past the branch
+point without touching it and the continuation would have restarted from a
+point the curve never visits, leaving the centreline disconnected.
+
 Upper-case letters are non-terminals left over from the recursion and draw
 nothing. Whitespace between tokens is ignored.
 """
@@ -100,7 +109,9 @@ def branching_turtle_to_coords(turtle_program, d0,
         tuple: (x, y, z, diameter, segment). `segment` is the index of the
         enclosing {...} segment, or -1 outside braces. The initial position
         is yielded first. A row of NaN marks the end of a branch (a ']'),
-        after which the restored point is yielded again.
+        after which the restored point is yielded again -- with a fresh
+        segment index if the branch was opened inside a segment, so that the
+        continuation is interpolated as its own curve from the branch point.
 
     Raises:
         ValueError: on a malformed program or unbalanced brackets.
@@ -138,10 +149,16 @@ def branching_turtle_to_coords(turtle_program, d0,
 
         elif command == "[":
             stack.append((pos, heading, perp, diam, segment))
+            segment = -1  # a branch leaving an open stem pins the stem here
         elif command == "]":
             if not stack:
                 raise ValueError("']' without a matching '['")
-            pos, heading, perp, diam, segment = stack.pop()
+            pos, heading, perp, diam, opened_in = stack.pop()
+            if opened_in >= 0:
+                segment = next_segment  # the rest of the stem is its own curve from here
+                next_segment += 1
+            else:
+                segment = -1
             yield _NAN_ROW
             yield (pos[0], pos[1], pos[2], diam, segment)
 

@@ -24,11 +24,14 @@ slab would clip it.
 A capsule sets only the voxels whose centres it contains, so a vessel thinner
 than a voxel contains no centre along much of its length and rasterises as a
 dotted line, breaking a connected tree into fragments. Every segment is
-therefore also drawn as a 26-connected digital line, which renders a sub-voxel
-vessel one voxel wide instead of dotted and leaves everything else untouched: a
-voxel on the line lies within sqrt(3)/2 of the centreline, so for a radius of
-0.866 voxels or more the line is already inside the capsule. Pass
-connect=False for the bare capsule rasterisation.
+therefore also drawn as the face-connected chain of voxels it passes through,
+which renders a sub-voxel vessel one voxel wide instead of dotted and leaves
+everything else untouched: a voxel on the chain lies within sqrt(3)/2 of the
+centreline, so for a radius of 0.866 voxels or more the chain is already
+inside the capsule. Face connectivity matters because it is the weakest
+connectivity a downstream tool assumes -- a six-connected label or flood fill
+splits a chain that touches only at edges or corners. Pass connect=False for
+the bare capsule rasterisation.
 
 Coordinates and diameters arrive in grammar units. The pipeline treats one
 grammar unit as one micrometre, so `voxel_size` is a physical voxel size in
@@ -187,23 +190,43 @@ def rasterise_capsule(volume, p0, p1, r0, r1):
 
 def rasterise_line(volume, p0, p1):
     """
-    Sets a 26-connected chain of voxels along the segment from p0 to p1, so
-    that a vessel too thin to contain a voxel centre still renders as an
-    unbroken one-voxel path. Coordinates are voxel indices; voxels outside the
-    volume are dropped.
+    Sets every voxel the segment from p0 to p1 passes through, so that a
+    vessel too thin to contain a voxel centre still renders as an unbroken
+    face-connected path. Coordinates are voxel indices, voxel i spanning
+    [i - 0.5, i + 0.5); voxels outside the volume are dropped.
 
-    The segment is sampled finely enough that consecutive samples round to
-    voxels differing by at most one along each axis, which is what makes the
-    chain 26-connected. Every voxel it sets lies within sqrt(3)/2 of the
-    centreline, so for a radius of 0.866 voxels or more the capsule already
-    contains them and this adds nothing.
+    This is the voxel traversal of Amanatides and Woo (1987): from the voxel
+    containing p0 the walk steps across whichever face the segment crosses
+    next, one axis at a time, until it reaches the voxel containing p1.
+    Consecutive voxels therefore share a face, which is what a six-connected
+    flood fill, label or morphological operation needs; a chain touching only
+    at edges or corners falls apart under them. Every voxel visited is one the
+    segment passes through, so its centre lies within sqrt(3)/2 of the
+    centreline and the capsule already contains it once the radius reaches
+    0.866 voxels.
     """
     p0 = np.asarray(p0, dtype=float)
     p1 = np.asarray(p1, dtype=float)
     shape = np.asarray(volume.shape)
-    steps = max(int(np.ceil(np.max(np.abs(p1 - p0)) * 2.0)) + 1, 2)
-    t = np.linspace(0.0, 1.0, steps)
-    line = np.rint(p0[:, None] + t * (p1 - p0)[:, None]).astype(int)
+    direction = p1 - p0
+    cur = np.floor(p0 + 0.5).astype(int)
+    end = np.floor(p1 + 0.5).astype(int)
+    step = np.sign(direction).astype(int)
+    with np.errstate(divide="ignore", invalid="ignore"):
+        # parameter at which the segment next crosses a face on each axis,
+        # and the parameter distance between successive crossings
+        t_next = np.where(direction != 0.0, (cur + 0.5 * step - p0) / direction, np.inf)
+        t_step = np.where(direction != 0.0, np.abs(1.0 / direction), np.inf)
+    visited = [cur.copy()]
+    # exactly one face crossing per unit of L1 distance between the end voxels;
+    # confining the choice to axes still short of the end makes the walk land
+    # on the end voxel whatever rounding does to a crossing at the boundary
+    for _ in range(int(np.abs(end - cur).sum())):
+        axis = int(np.argmin(np.where(cur != end, t_next, np.inf)))
+        cur[axis] += step[axis]
+        t_next[axis] += t_step[axis]
+        visited.append(cur.copy())
+    line = np.array(visited).T
     inside = np.all((line >= 0) & (line < shape[:, None]), axis=0)
     if not np.any(inside):
         return
@@ -220,11 +243,12 @@ def rasterise_segments(points, radii, tVol, connect=True):
         points (ndarray): (3, N) array of voxel coordinates, NaN separated.
         radii (ndarray): (N,) radii in voxels.
         tVol (sequence): volume shape (nx, ny, nz).
-        connect (bool): also draw each segment as a 26-connected digital line,
-            so that a vessel thinner than a voxel renders one voxel wide rather
-            than as a dotted line and the rendered tree stays as connected as
-            the geometry is. False gives the bare capsule rasterisation, which
-            drops sub-voxel vessels in and out along their length.
+        connect (bool): also draw each segment as the face-connected chain of
+            voxels it passes through, so that a vessel thinner than a voxel
+            renders one voxel wide rather than as a dotted line and the
+            rendered tree is as connected as the geometry, under six- as well
+            as 26-connectivity. False gives the bare capsule rasterisation,
+            which drops sub-voxel vessels in and out along their length.
 
     Returns:
         ndarray: uint8 volume of shape tVol with 1 inside vessels.

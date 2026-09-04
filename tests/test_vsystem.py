@@ -52,10 +52,12 @@ def final_row(program, d0=5.0):
     return row
 
 
-def connected_count(volume):
+def connected_count(volume, connectivity=26):
     """
-    Returns (voxels set, voxels reachable from one of them under 26-connectivity),
-    so that the two are equal exactly when the rendered network is one piece.
+    Returns (voxels set, voxels reachable from one of them), so that the two
+    are equal exactly when the rendered network is one piece. Connectivity 26
+    joins voxels sharing a face, edge or corner; 6 joins only those sharing a
+    face, which is the weaker guarantee a downstream label or flood fill needs.
     """
     set_voxels = np.argwhere(volume)
     if len(set_voxels) == 0:
@@ -63,7 +65,8 @@ def connected_count(volume):
     shape = volume.shape
     neighbourhood = [(dx, dy, dz)
                      for dx in (-1, 0, 1) for dy in (-1, 0, 1) for dz in (-1, 0, 1)
-                     if (dx, dy, dz) != (0, 0, 0)]
+                     if (dx, dy, dz) != (0, 0, 0)
+                     and (connectivity == 26 or abs(dx) + abs(dy) + abs(dz) == 1)]
     seen = np.zeros(shape, dtype=bool)
     start = tuple(int(v) for v in set_voxels[0])
     seen[start] = True
@@ -165,6 +168,20 @@ class TurtleTests(unittest.TestCase):
     def test_braces_number_segments(self):
         rows = list(branching_turtle_to_coords("{f(1,1)f(1,1)}f(1,1){f(1,1)}", 1.0))
         self.assertEqual([r[4] for r in rows], [-1, 0, 0, 0, -1, 1, 1])
+
+    def test_a_branch_inside_a_stem_pins_the_stem_at_the_branch_point(self):
+        # '[' closes the open segment and its ']' opens a fresh one, so the stem
+        # is two curves meeting exactly at the branch point rather than one curve
+        # that the interpolating spline would carry past it
+        rows = list(branching_turtle_to_coords("{f(1,1)[+(90)f(1,1)]f(1,1)}", 1.0))
+        segments = [r[4] for r in rows]
+        self.assertEqual(segments[:4], [-1, 0, 0, -1])       # start, '{', f, daughter f outside any segment
+        self.assertTrue(math.isnan(segments[4]))              # ']'
+        self.assertEqual(segments[5:], [1, 1])               # restored point and f in a fresh segment
+        self.assertEqual(rows[5][:3], rows[2][:3])            # ... starting exactly at the branch point
+        # a branch opened outside any segment leaves the indices as they were
+        rows = list(branching_turtle_to_coords("{f(1,1)}[+(90)f(1,1)]{f(1,1)}", 1.0))
+        self.assertEqual([r[4] for r in rows if not math.isnan(r[4])], [-1, 0, 0, -1, -1, 1, 1])
 
 
 class InterpolationTests(unittest.TestCase):
@@ -487,25 +504,52 @@ class ConnectivityTests(unittest.TestCase):
     """
     A capsule sets only the voxels whose centres it contains, so a vessel
     thinner than a voxel would rasterise as a dotted line and break the tree
-    into fragments. Each segment is therefore also drawn as a connected digital
-    line.
+    into fragments. Each segment is therefore also drawn as the face-connected
+    chain of voxels it passes through -- face-connected, because a chain that
+    touches only at edges or corners is one piece under 26-connectivity yet
+    falls apart under the six-connected label or flood fill a downstream tool
+    is likely to apply.
     """
 
     def setUp(self):
         setProperties(PROPERTIES)
 
-    def test_a_sub_voxel_vessel_renders_as_one_unbroken_path(self):
+    def test_a_sub_voxel_vessel_renders_as_one_face_connected_path(self):
         points = np.array([[10.0, 60.0], [10.0, 55.0], [10.0, 52.0]])  # oblique, so it misses centres
         radii = np.array([0.2, 0.2])
         tVol = (72, 72, 72)
         dotted = rasterise_segments(points, radii, tVol, connect=False)
         joined = rasterise_segments(points, radii, tVol, connect=True)
         self.assertGreater(int(joined.sum()), int(dotted.sum()))
-        total, reached = connected_count(joined)
-        self.assertEqual(total, reached)
-        self.assertGreater(total, 50)
+        for connectivity in (26, 6):
+            with self.subTest(connectivity=connectivity):
+                total, reached = connected_count(joined, connectivity)
+                self.assertEqual(total, reached)
+                self.assertGreater(total, 50)
         dotted_total, dotted_reached = connected_count(dotted)
         self.assertLess(dotted_reached, dotted_total)  # the bare capsules really are broken
+
+    def test_the_line_is_face_connected_and_hugs_the_segment_at_every_orientation(self):
+        # every voxel visited is one the segment passes through, so consecutive
+        # voxels share a face and each centre lies within sqrt(3)/2 of the
+        # segment -- the bound that makes connecting a no-op for wider vessels
+        rng = np.random.default_rng(1)
+        for _ in range(60):
+            p0 = rng.uniform(30.0, 60.0, 3)
+            p1 = p0 + rng.uniform(-25.0, 25.0, 3)   # both ends stay inside the volume
+            volume = np.zeros((96, 96, 96), dtype=np.uint8)
+            rasterise_line(volume, p0, p1)
+            total, reached = connected_count(volume, 6)
+            self.assertEqual(total, reached)
+            self.assertGreater(total, 0)
+            voxels = np.argwhere(volume).astype(float)
+            axis = p1 - p0
+            t = np.clip(((voxels - p0) @ axis) / (axis @ axis), 0.0, 1.0)
+            distance = np.linalg.norm(voxels - (p0 + t[:, None] * axis), axis=1)
+            self.assertLessEqual(float(distance.max()), math.sqrt(3) / 2 + 1e-9)
+            # and the walk lands on the voxels containing the two ends
+            for end in (p0, p1):
+                self.assertEqual(volume[tuple(np.floor(end + 0.5).astype(int))], 1)
 
     def test_connecting_changes_nothing_once_a_vessel_fills_a_voxel(self):
         # every voxel the line sets is within sqrt(3)/2 of the centreline, so at
@@ -527,7 +571,28 @@ class ConnectivityTests(unittest.TestCase):
             with self.subTest(seed=seed):
                 seed_all(seed)
                 volume, _, _ = generate_network(niter, 20.0, PROPERTIES, tVol, clip_axes=())
-                total, reached = connected_count(volume)
+                for connectivity in (26, 6):
+                    total, reached = connected_count(volume, connectivity)
+                    self.assertGreater(total, 0)
+                    self.assertEqual(total, reached, f"{connectivity}-connectivity")
+
+    def test_a_branch_inside_a_stem_renders_connected(self):
+        # the interpolated continuation starts exactly where the first part of
+        # the stem ends, so the centreline -- and hence the volume -- is one piece
+        tVol = (64, 64, 64)
+        for program in ("{f(1,1)[+(90)f(1,1)]f(1,1)}",
+                        "{f(1,1)f(1,1)[+(90){f(1,1)f(1,1)}]f(1,1)f(1,1)}",
+                        "{f(1,1)[+(90)f(1,1)}]f(1,1)f(1,1)}"):
+            with self.subTest(program=program):
+                nodes = interpolate_segments(list(branching_turtle_to_coords(program, 1.0)))
+                separators = np.flatnonzero(np.isnan(nodes[0]))
+                for i in separators:  # each continuation restarts on a point the curve visited
+                    before = nodes[:3, :i]
+                    restart = nodes[:3, i + 1]
+                    self.assertTrue(np.any(np.all(np.isclose(before, restart[:, None]), axis=0)))
+                points, radii = fit_to_volume(nodes, tVol, clip_axes=())
+                volume = rasterise_segments(points, radii * 0.02, tVol)   # sub-voxel everywhere
+                total, reached = connected_count(volume, 6)
                 self.assertGreater(total, 0)
                 self.assertEqual(total, reached)
 
