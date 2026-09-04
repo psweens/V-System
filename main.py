@@ -29,6 +29,7 @@ convention it was written under in its "units" field.
 """
 import argparse
 import json
+import math
 import os
 import random
 import sys
@@ -52,7 +53,7 @@ DEFAULT_UNITS = "um"
 def generate_network(niter, d0, properties, tVol, fit="isotropic", clip_axes=(2,),
                      voxel_size=None, subdivisions=3,
                      direction=(0.0, 1.0, 0.0), perpendicular=(0.0, 0.0, 1.0),
-                     d_min=None, connect=True):
+                     d_min=None, connect=True, grow_in_volume=False):
     """
     Generates one network and renders it into a volume.
 
@@ -76,6 +77,12 @@ def generate_network(niter, d0, properties, tVol, fit="isotropic", clip_axes=(2,
         connect (bool): see computeVoxel.rasterise_segments. Left true, a vessel
             too thin to contain a voxel centre still renders as an unbroken
             one-voxel path instead of a dotted line.
+        grow_in_volume (bool): confine growth to a box with the volume's
+            proportions, terminating any branch that would leave it, so the tree
+            takes the volume's shape and no vessel is cut part way along. The
+            box is `tVol` times `voxel_size` under the voxel_size fit, and
+            otherwise the largest box of those proportions the tree still
+            overflows. `clip_axes` is then ignored, since nothing is clipped.
 
     Returns:
         tuple: (volume, program, nodes) with volume a uint8 array of 0 and 1,
@@ -88,7 +95,31 @@ def generate_network(niter, d0, properties, tVol, fit="isotropic", clip_axes=(2,
     """
     libGenerator.setProperties(properties)
     program = F(niter, d0, d_min)
-    rows = branching_turtle_to_coords(program, d0, direction=direction, perpendicular=perpendicular)
+    bounds = None
+    position = (0.0, 0.0, 0.0)
+    if grow_in_volume:
+        shape = np.asarray(tVol, dtype=float)
+        if fit == "voxel_size":
+            if voxel_size is None or voxel_size <= 0:
+                raise ValueError("growing in the volume at a fixed voxel size needs a positive "
+                                 "voxel_size, since it sets the field of view in grammar units")
+            box = shape * float(voxel_size)
+        else:
+            # Interpreting the grammar consumes no randomness -- every token F emits
+            # carries its operands -- so measuring the free extent first is safe. The
+            # box takes the volume's proportions at the largest size the tree still
+            # overflows, so growth is confined rather than merely contained.
+            free = np.array([row[:3] for row in
+                             branching_turtle_to_coords(program, d0, direction=direction,
+                                                        perpendicular=perpendicular)
+                             if not math.isnan(row[0])])
+            extent = free.max(axis=0) - free.min(axis=0)
+            box = shape * float(np.min(extent / shape))
+        bounds = (np.zeros(3), box)
+        position = (box[0] / 2.0, 0.0, box[2] / 2.0)
+        clip_axes = ()          # the tree already fits, so clipping has nothing to do
+    rows = branching_turtle_to_coords(program, d0, position=position, direction=direction,
+                                      perpendicular=perpendicular, bounds=bounds)
     nodes = interpolate_segments(rows, subdivisions=subdivisions)
     volume = process_network(nodes, tVol, fit=fit, voxel_size=voxel_size, clip_axes=clip_axes,
                              connect=connect)
@@ -243,6 +274,9 @@ def build_parser():
                         help="physical unit one grammar unit stands for, recorded in the sidecar "
                              f"(default {DEFAULT_UNITS}); it labels --d0, --d-min and --voxel-size "
                              "and does not rescale anything")
+    parser.add_argument("--grow-in-volume", action="store_true",
+                        help="confine growth to the volume's proportions so the tree takes its "
+                             "shape and no vessel is cut part way along; --clip-axes is then unused")
     parser.add_argument("--no-connect", action="store_false", dest="connect",
                         help="rasterise bare capsules, so that a vessel thinner than a voxel "
                              "renders as a dotted line rather than a one-voxel path")
@@ -273,7 +307,8 @@ def main(argv=None):
         volume, program, nodes = generate_network(niter, d0, properties, tVol, fit=args.fit,
                                                   clip_axes=args.clip_axes, voxel_size=args.voxel_size,
                                                   subdivisions=args.subdivisions, d_min=args.d_min,
-                                                  connect=args.connect)
+                                                  connect=args.connect,
+                                                  grow_in_volume=args.grow_in_volume)
         stem = f"Lnet_i{niter}_s{seed}"
         write_volume(os.path.join(args.out, stem + ".tiff"), volume)
         record = {
@@ -286,8 +321,9 @@ def main(argv=None):
             "axis_order": "zyx",
             "units": args.units,
             "fit": args.fit,
-            "clip_axes": list(args.clip_axes),
+            "clip_axes": [] if args.grow_in_volume else list(args.clip_axes),
             "connect": args.connect,
+            "grow_in_volume": args.grow_in_volume,
             "voxel_size": args.voxel_size,
             "subdivisions": args.subdivisions,
         }

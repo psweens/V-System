@@ -31,7 +31,7 @@ from computeVoxel import (process_network, rasterise_segments, fit_to_volume,  #
                           normalise_axes, rasterise_line)
 from main import generate_network, load_network, save_network, write_volume  # noqa: E402
 from check_connectivity import (label, check_volume, check_centreline,  # noqa: E402
-                                generate_and_check)
+                                generate_and_check, report_centreline)
 
 PROPERTIES = {"k": 3, "epsilon": 7.0, "randmarg": 0.2, "sigma": 5, "stochparams": True}
 
@@ -748,6 +748,93 @@ class ConnectivityReportTests(unittest.TestCase):
                 extra = check_centreline(path)
         self.assertEqual(extra, 0)
         self.assertIn("(connected)", captured.getvalue())
+
+
+class BoundedGrowthTests(unittest.TestCase):
+    """
+    Growth confined to a box: a branch that would leave it is terminated along
+    with its subtree, so the tree takes the box's shape and no vessel is cut
+    part way along.
+    """
+
+    def setUp(self):
+        setProperties(PROPERTIES)
+
+    def test_a_box_larger_than_the_tree_changes_nothing(self):
+        seed_all(2)
+        program = F(6, 20.0)
+        free = np.array(list(branching_turtle_to_coords(program, 20.0)), dtype=float)
+        roomy = np.array(list(branching_turtle_to_coords(
+            program, 20.0, bounds=((-1e6,) * 3, (1e6,) * 3))), dtype=float)
+        np.testing.assert_array_equal(free, roomy)
+
+    def test_no_point_leaves_the_box_and_the_box_really_bites(self):
+        seed_all(2)
+        program = F(8, 20.0)
+        low = np.array([-200.0, 0.0, -200.0])
+        high = np.array([200.0, 400.0, 200.0])
+        rows = np.array(list(branching_turtle_to_coords(program, 20.0, bounds=(low, high))))
+        points = rows[~np.isnan(rows[:, 0])][:, :3]
+        self.assertGreater(len(points), 10)
+        self.assertTrue(np.all(points >= low - 1e-9))
+        self.assertTrue(np.all(points <= high + 1e-9))
+        free = np.array([r for r in branching_turtle_to_coords(program, 20.0)
+                         if not math.isnan(r[0])])[:, :3]
+        self.assertTrue(np.any(free > high) or np.any(free < low))   # it was not a no-op
+        self.assertLess(len(points), len(free))
+
+    def test_a_terminated_branch_leaves_the_centreline_connected(self):
+        seed_all(2)
+        rows = list(branching_turtle_to_coords(
+            F(8, 20.0), 20.0, bounds=((-150.0, 0.0, -150.0), (150.0, 300.0, 150.0))))
+        with contextlib.redirect_stdout(io.StringIO()):
+            self.assertEqual(report_centreline(interpolate_segments(rows), "bounded"), 0)
+
+    def test_bad_bounds_and_a_start_outside_them_are_refused(self):
+        for bounds in (((0, 0, 0), (0, 1, 1)), ((0, 0), (1, 1)), ((5, 5, 5), (1, 1, 1))):
+            with self.subTest(bounds=bounds):
+                with self.assertRaises(ValueError):
+                    list(branching_turtle_to_coords("f(1,1)", 1.0, bounds=bounds))
+        with self.assertRaises(ValueError):
+            list(branching_turtle_to_coords("f(1,1)", 1.0, position=(9.0, 0.0, 0.0),
+                                            bounds=((0, 0, 0), (1, 1, 1))))
+
+    def test_growing_in_a_slab_fills_it_without_cutting(self):
+        tVol = (96, 96, 32)
+        seed_all(5)
+        volume, _, nodes = generate_network(9, 20.0, PROPERTIES, tVol, grow_in_volume=True)
+        points, _ = fit_to_volume(nodes, tVol, fit="isotropic", clip_axes=())
+        finite = ~np.isnan(points[0])
+        self.assertTrue(np.all(points[:, finite] >= 0))
+        self.assertTrue(np.all(points[:, finite] < np.array(tVol)[:, None]))
+        total, reached = connected_count(volume, 6)
+        self.assertGreater(total, 0)
+        self.assertEqual(total, reached)          # one piece, unlike the clipped default
+
+    def test_growing_in_the_volume_needs_a_voxel_size_under_that_fit(self):
+        with self.assertRaises(ValueError):
+            generate_network(4, 20.0, PROPERTIES, (32, 32, 32), fit="voxel_size",
+                             voxel_size=None, grow_in_volume=True)
+
+    def test_grow_in_volume_reaches_the_sidecar_and_renders_one_piece(self):
+        import json
+        import tifffile
+        from main import main
+
+        args = ["--count", "1", "--seed", "5", "--volume", "64", "64", "24",
+                "--iterations", "7", "7", "--grow-in-volume"]
+        with tempfile.TemporaryDirectory() as out:
+            self.assertEqual(main(args + ["--out", out]), 0)
+            stem = next(n[:-5] for n in os.listdir(out) if n.endswith(".tiff"))
+            with open(os.path.join(out, stem + ".json")) as handle:
+                record = json.load(handle)
+            self.assertTrue(record["grow_in_volume"])
+            self.assertEqual(record["clip_axes"], [])
+            written = tifffile.imread(os.path.join(out, stem + ".tiff"))
+            volume = (np.transpose(written, (2, 1, 0)) > 0).astype(np.uint8)
+            total, reached = connected_count(volume, 6)
+            self.assertGreater(total, 0)
+            self.assertEqual(total, reached)
 
 
 class CentrelinePersistenceTests(unittest.TestCase):

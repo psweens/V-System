@@ -95,7 +95,8 @@ def _angle(params, default):
 def branching_turtle_to_coords(turtle_program, d0,
                                position=(0.0, 0.0, 0.0),
                                direction=(0.0, 1.0, 0.0),
-                               perpendicular=(0.0, 0.0, 1.0)):
+                               perpendicular=(0.0, 0.0, 1.0),
+                               bounds=None):
     """
     Interprets a turtle program and yields its points.
 
@@ -104,6 +105,12 @@ def branching_turtle_to_coords(turtle_program, d0,
         d0 (float): initial diameter.
         position, direction, perpendicular: initial state; direction and
             perpendicular must be orthogonal. The defaults are the source's.
+        bounds (sequence or None): ((x0, y0, z0), (x1, y1, z1)) in grammar
+            units. A move that would leave the box terminates its branch: the
+            move and everything descending from it are skipped, up to the ']'
+            that closes the branch. The tree therefore grows within the box and
+            no vessel is ever cut part way along, unlike a network rendered
+            larger than its volume and cropped. None grows without limit.
 
     Yields:
         tuple: (x, y, z, diameter, segment). `segment` is the index of the
@@ -114,7 +121,8 @@ def branching_turtle_to_coords(turtle_program, d0,
         continuation is interpolated as its own curve from the branch point.
 
     Raises:
-        ValueError: on a malformed program or unbalanced brackets.
+        ValueError: on a malformed program, unbalanced brackets, an empty box,
+            or a starting position outside it.
     """
     pos = np.asarray(position, dtype=float)
     heading = unit(direction)
@@ -125,17 +133,36 @@ def branching_turtle_to_coords(turtle_program, d0,
     if not diam > 0:
         raise ValueError(f"the initial diameter must be positive, got {d0!r}")
 
+    low = high = None
+    if bounds is not None:
+        low, high = (np.asarray(b, dtype=float) for b in bounds)
+        if low.shape != (3,) or high.shape != (3,) or np.any(high <= low):
+            raise ValueError("bounds must be ((x0, y0, z0), (x1, y1, z1)) with x1 > x0 and so on")
+        if np.any(pos < low) or np.any(pos > high):
+            raise ValueError(f"the starting position {tuple(pos)} is outside the bounds")
+
     stack = []
     segment = -1
     next_segment = 0
+    depth = 0
+    pruned_at = None      # the bracket depth of the branch a bound terminated, if any
     yield (pos[0], pos[1], pos[2], diam, segment)
 
     for command, params in tokenise(turtle_program):
+        # a terminated branch draws nothing until the ']' that closes it, but its
+        # brackets are still counted so that the matching one is recognised
+        if pruned_at is not None and command not in ("[", "]"):
+            continue
+
         if command in MOVE_COMMANDS:
             length = params[0] if params else getLength(diam)
             if len(params) > 1 and params[1] > 0.0:
                 diam = params[1]
-            pos = pos + length * heading
+            step = pos + length * heading
+            if low is not None and (np.any(step < low) or np.any(step > high)):
+                pruned_at = depth       # this branch leaves the box: drop it and its subtree
+                continue
+            pos = step
             yield (pos[0], pos[1], pos[2], diam, segment)
 
         elif command == "+":
@@ -148,9 +175,17 @@ def branching_turtle_to_coords(turtle_program, d0,
             perp = rotate_about(perp, heading, -_angle(params, lambda: lg.roll_angle))
 
         elif command == "[":
+            depth += 1
+            if pruned_at is not None:
+                continue
             stack.append((pos, heading, perp, diam, segment))
             segment = -1  # a branch leaving an open stem pins the stem here
         elif command == "]":
+            depth -= 1
+            if pruned_at is not None:
+                if depth >= pruned_at:
+                    continue            # still inside the terminated branch
+                pruned_at = None        # the branch ends here, so drawing resumes
             if not stack:
                 raise ValueError("']' without a matching '['")
             pos, heading, perp, diam, opened_in = stack.pop()

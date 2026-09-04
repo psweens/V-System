@@ -217,8 +217,10 @@ def generate_and_check(count, passthrough):
         raise SystemExit("--fit voxel_size requires --voxel-size")
     base = args.seed if args.seed is not None else random.SystemRandom().randrange(2 ** 31)
     tVol = tuple(args.volume)
+    shaping = ("grown in the volume" if args.grow_in_volume
+               else f"clip axes {[AXES[a] for a in args.clip_axes] or 'none'}")
     print(f"generating {count} network(s) at {tVol[0]}x{tVol[1]}x{tVol[2]}, "
-          f"fit {args.fit}, clip axes {[AXES[a] for a in args.clip_axes] or 'none'}, "
+          f"fit {args.fit}, {shaping}, "
           f"connect {args.connect}, seeds {base}..{base + count - 1}\n")
 
     failed = 0
@@ -233,7 +235,8 @@ def generate_and_check(count, passthrough):
         volume, _, nodes = generate_network(niter, d0, properties, tVol, fit=args.fit,
                                             clip_axes=args.clip_axes, voxel_size=args.voxel_size,
                                             subdivisions=args.subdivisions, d_min=args.d_min,
-                                            connect=args.connect)
+                                            connect=args.connect,
+                                            grow_in_volume=args.grow_in_volume)
         stem = f"Lnet_i{niter}_s{seed}"
         broken = report_centreline(nodes, stem + " (centreline)")
         broken += report_volume(volume, stem + " (volume)")
