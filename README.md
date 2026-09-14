@@ -123,6 +123,7 @@ Useful options (`python main.py --help` lists them all):
 | `--fit` | `isotropic` | `isotropic`, `voxel_size` (fixed `--voxel-size`) or `stretch` (legacy per-axis fill) |
 | `--voxel-size` | none | grammar units per voxel for `--fit voxel_size`: the modality's voxel size |
 | `--clip-axes` | `z` | axes left out of the isotropic fit and clipped, as an imaging slab would |
+| `--grow-in-volume` | off | confine growth to the volume's proportions so no vessel is cut |
 | `--no-connect` | off | rasterise bare capsules, leaving sub-voxel vessels dotted |
 | `--units` | `um` | the unit one grammar unit stands for, recorded in the sidecar |
 
@@ -159,6 +160,21 @@ to — `scipy.ndimage.label` among them — and looks like a string of beads in 
 viewer. Face connectivity is the weakest assumption any of them makes, so it is
 the one the rasteriser guarantees.
 
+`check_connectivity.py` answers the question for a given network. It reports the
+components of a volume under both 6- and 26-connectivity and, for every piece
+but the largest, whether that piece touches a face of the volume — a piece that
+does is a branch the volume cut, a piece that does not is a real break. It also
+checks a saved `.npz` centreline as pure geometry, independently of any volume,
+where anything but one component is a defect. `--generate N` makes fresh
+networks to check instead of reading files, passing every other option through
+to the generator, and the exit status is 1 only for a break the volume boundary
+does not explain:
+
+```bash
+python check_connectivity.py --generate 10 --seed 1
+python check_connectivity.py output/*.npz output/*.tiff
+```
+
 Two ways of looking can still suggest breaks that are not there. A thin vessel
 running obliquely through a stack shows up in any single slice as isolated
 voxels even though it is unbroken in three dimensions, so judge connectivity
@@ -167,7 +183,17 @@ does still fall into several genuine pieces under two conditions, neither of
 them a defect:
 
 - **Clipping.** A branch that leaves a slab and re-enters it is two vessels in
-  the image, exactly as it would be in a real acquisition. The default volume
+  the image, exactly as it would be in a real acquisition. `--grow-in-volume`
+  removes this at the source: growth is confined to a box with the volume's
+  proportions and a branch that would leave it is terminated along with its
+  subtree, so the tree takes the volume's shape and no vessel is ever cut part
+  way along. On a `512 × 512 × 140` slab at twelve generations that turns 43
+  pieces into one while raising the vessel count, because branches that used to
+  grow out of the slab and be discarded now stay inside it. `--clip-axes` is
+  unused when it is set, and it is off by default so existing output is
+  unchanged. A volume with equal axes needs none of this: the grammar grows a
+  roughly cubical tree, so `--volume 512 512 512 --clip-axes none` is one
+  connected piece at the same calibre. The default volume
   is such a slab — fitted in x and y, clipped in z — so this is what the
   quickstart command produces: its deepest network, at twelve generations,
   renders as 48 pieces, every one of them touching the top or bottom face of

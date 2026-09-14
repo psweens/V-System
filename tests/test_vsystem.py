@@ -6,7 +6,9 @@ Run from the repository root with either
 or
     python -m pytest
 """
+import contextlib
 import importlib
+import io
 import math
 import os
 import random
@@ -27,7 +29,9 @@ from analyseGrammar import branching_turtle_to_coords, tokenise  # noqa: E402
 from utils import interpolate_segments, bspline, rotate_about  # noqa: E402
 from computeVoxel import (process_network, rasterise_segments, fit_to_volume,  # noqa: E402
                           normalise_axes, rasterise_line)
-from main import generate_network, load_network, save_network  # noqa: E402
+from main import generate_network, load_network, save_network, write_volume  # noqa: E402
+from check_connectivity import (label, check_volume, check_centreline,  # noqa: E402
+                                generate_and_check, report_centreline)
 
 PROPERTIES = {"k": 3, "epsilon": 7.0, "randmarg": 0.2, "sigma": 5, "stochparams": True}
 
@@ -91,7 +95,7 @@ def angle_between(a, b):
 class ImportTests(unittest.TestCase):
     def test_every_module_imports_on_the_installed_stack(self):
         for name in ("libGenerator", "vSystem", "analyseGrammar", "utils",
-                     "computeVoxel", "preprocessing", "visuals"):
+                     "computeVoxel", "preprocessing", "visuals", "check_connectivity"):
             with self.subTest(module=name):
                 importlib.import_module(name)
 
@@ -621,6 +625,216 @@ class ConnectivityTests(unittest.TestCase):
         total, reached = connected_count(volume)
         self.assertGreater(total, 0)
         self.assertLess(reached, total)
+
+
+class ConnectivityReportTests(unittest.TestCase):
+    """
+    check_connectivity separates a network the volume merely cut from one that
+    is genuinely broken, so a clipped slab does not read as a defect.
+    """
+
+    def setUp(self):
+        setProperties(PROPERTIES)
+
+    def _report(self, volume):
+        with tempfile.TemporaryDirectory() as out:
+            path = os.path.join(out, "v.tiff")
+            write_volume(path, volume)
+            with contextlib.redirect_stdout(io.StringIO()) as captured:
+                unexplained = check_volume(path)
+        return unexplained, captured.getvalue()
+
+    def test_components_are_counted_and_ordered_by_size(self):
+        volume = np.zeros((10, 10, 10), dtype=np.uint8)
+        volume[1:3, 1:3, 1:3] = 1                      # 8 voxels
+        volume[6:9, 6:9, 6:9] = 1                      # 27 voxels
+        sizes, labels = label(volume, 6)
+        self.assertEqual(list(sizes), [27, 8])         # largest first
+        self.assertEqual(labels[7, 7, 7], 1)
+        self.assertEqual(labels[1, 1, 1], 2)
+        self.assertEqual(int((labels > 0).sum()), 35)
+
+    def test_a_corner_touching_chain_splits_under_six_connectivity(self):
+        volume = np.zeros((8, 8, 8), dtype=np.uint8)
+        for i in range(5):
+            volume[i, i, i] = 1                        # touches only at corners
+        self.assertEqual(label(volume, 26)[0].size, 1)
+        self.assertEqual(label(volume, 6)[0].size, 5)
+
+    def test_an_empty_volume_has_no_components(self):
+        sizes, labels = label(np.zeros((4, 4, 4), dtype=np.uint8), 6)
+        self.assertEqual(sizes.size, 0)
+        self.assertEqual(int(labels.sum()), 0)
+
+    def test_a_piece_on_a_face_is_the_volume_cutting_and_one_inside_is_not(self):
+        body = np.zeros((20, 20, 20), dtype=np.uint8)
+        body[5:15, 5:15, 5:15] = 1
+
+        unexplained, text = self._report(body)
+        self.assertEqual(unexplained, 0)
+        self.assertIn("one piece: connected", text)
+
+        cut = body.copy()
+        cut[2, 2, 0] = 1                               # isolated, but on the z face
+        unexplained, text = self._report(cut)
+        self.assertEqual(unexplained, 0)
+        self.assertIn("not a defect", text)
+
+        broken = body.copy()
+        broken[2, 2, 2] = 1                            # isolated and touching no face
+        unexplained, text = self._report(broken)
+        self.assertEqual(unexplained, 1)
+        self.assertIn("touch NO face", text)
+
+    def test_bare_capsules_are_reported_as_breaks_the_volume_cannot_explain(self):
+        seed_all(3)
+        volume, _, _ = generate_network(7, 20.0, PROPERTIES, (96, 96, 96),
+                                        clip_axes=(), connect=False)
+        unexplained, _ = self._report(volume)
+        self.assertGreater(unexplained, 0)
+        seed_all(3)
+        volume, _, _ = generate_network(7, 20.0, PROPERTIES, (96, 96, 96),
+                                        clip_axes=(), connect=True)
+        unexplained, text = self._report(volume)
+        self.assertEqual(unexplained, 0)
+        self.assertIn("one piece: connected", text)
+
+    def test_generating_fresh_networks_reports_each_one(self):
+        with contextlib.redirect_stdout(io.StringIO()) as captured:
+            failed = generate_and_check(2, ["--seed", "1", "--volume", "64", "64", "64",
+                                            "--iterations", "5", "5", "--clip-axes", "none"])
+        text = captured.getvalue()
+        self.assertEqual(failed, 0)
+        self.assertIn("Lnet_i5_s1", text)
+        self.assertIn("Lnet_i5_s2", text)
+        self.assertIn("2/2", text)
+
+    def test_generating_with_bare_capsules_is_reported_as_broken(self):
+        with contextlib.redirect_stdout(io.StringIO()) as captured:
+            failed = generate_and_check(1, ["--seed", "1", "--volume", "64", "64", "64",
+                                            "--iterations", "7", "7", "--clip-axes", "none",
+                                            "--no-connect"])
+        self.assertEqual(failed, 1)
+        self.assertIn("touch NO face", captured.getvalue())
+
+    def test_an_unreadable_path_is_not_counted_as_a_break(self):
+        from check_connectivity import main as connectivity_main
+        with contextlib.redirect_stdout(io.StringIO()) as out, \
+                contextlib.redirect_stderr(io.StringIO()) as err:
+            status = connectivity_main(["no_such_file.tiff", "#", "a comment"])
+        self.assertEqual(status, 1)
+        self.assertIn("no such file", err.getvalue())
+        self.assertIn("3 path(s) could not be read", out.getvalue())
+        self.assertNotIn("break(s)", out.getvalue())
+
+    def test_a_clean_run_says_so(self):
+        from check_connectivity import main as connectivity_main
+        body = np.zeros((12, 12, 12), dtype=np.uint8)
+        body[3:9, 3:9, 3:9] = 1
+        with tempfile.TemporaryDirectory() as directory:
+            path = os.path.join(directory, "v.tiff")
+            write_volume(path, body)
+            with contextlib.redirect_stdout(io.StringIO()) as out:
+                status = connectivity_main([path])
+        self.assertEqual(status, 0)
+        self.assertIn("no break beyond what the volume cut", out.getvalue())
+
+    def test_a_saved_centreline_reports_as_connected_geometry(self):
+        _, nodes, _ = generate(seed=4, niter=6)
+        with tempfile.TemporaryDirectory() as out:
+            path = os.path.join(out, "net.npz")
+            save_network(path, nodes)
+            with contextlib.redirect_stdout(io.StringIO()) as captured:
+                extra = check_centreline(path)
+        self.assertEqual(extra, 0)
+        self.assertIn("(connected)", captured.getvalue())
+
+
+class BoundedGrowthTests(unittest.TestCase):
+    """
+    Growth confined to a box: a branch that would leave it is terminated along
+    with its subtree, so the tree takes the box's shape and no vessel is cut
+    part way along.
+    """
+
+    def setUp(self):
+        setProperties(PROPERTIES)
+
+    def test_a_box_larger_than_the_tree_changes_nothing(self):
+        seed_all(2)
+        program = F(6, 20.0)
+        free = np.array(list(branching_turtle_to_coords(program, 20.0)), dtype=float)
+        roomy = np.array(list(branching_turtle_to_coords(
+            program, 20.0, bounds=((-1e6,) * 3, (1e6,) * 3))), dtype=float)
+        np.testing.assert_array_equal(free, roomy)
+
+    def test_no_point_leaves_the_box_and_the_box_really_bites(self):
+        seed_all(2)
+        program = F(8, 20.0)
+        low = np.array([-200.0, 0.0, -200.0])
+        high = np.array([200.0, 400.0, 200.0])
+        rows = np.array(list(branching_turtle_to_coords(program, 20.0, bounds=(low, high))))
+        points = rows[~np.isnan(rows[:, 0])][:, :3]
+        self.assertGreater(len(points), 10)
+        self.assertTrue(np.all(points >= low - 1e-9))
+        self.assertTrue(np.all(points <= high + 1e-9))
+        free = np.array([r for r in branching_turtle_to_coords(program, 20.0)
+                         if not math.isnan(r[0])])[:, :3]
+        self.assertTrue(np.any(free > high) or np.any(free < low))   # it was not a no-op
+        self.assertLess(len(points), len(free))
+
+    def test_a_terminated_branch_leaves_the_centreline_connected(self):
+        seed_all(2)
+        rows = list(branching_turtle_to_coords(
+            F(8, 20.0), 20.0, bounds=((-150.0, 0.0, -150.0), (150.0, 300.0, 150.0))))
+        with contextlib.redirect_stdout(io.StringIO()):
+            self.assertEqual(report_centreline(interpolate_segments(rows), "bounded"), 0)
+
+    def test_bad_bounds_and_a_start_outside_them_are_refused(self):
+        for bounds in (((0, 0, 0), (0, 1, 1)), ((0, 0), (1, 1)), ((5, 5, 5), (1, 1, 1))):
+            with self.subTest(bounds=bounds):
+                with self.assertRaises(ValueError):
+                    list(branching_turtle_to_coords("f(1,1)", 1.0, bounds=bounds))
+        with self.assertRaises(ValueError):
+            list(branching_turtle_to_coords("f(1,1)", 1.0, position=(9.0, 0.0, 0.0),
+                                            bounds=((0, 0, 0), (1, 1, 1))))
+
+    def test_growing_in_a_slab_fills_it_without_cutting(self):
+        tVol = (96, 96, 32)
+        seed_all(5)
+        volume, _, nodes = generate_network(9, 20.0, PROPERTIES, tVol, grow_in_volume=True)
+        points, _ = fit_to_volume(nodes, tVol, fit="isotropic", clip_axes=())
+        finite = ~np.isnan(points[0])
+        self.assertTrue(np.all(points[:, finite] >= 0))
+        self.assertTrue(np.all(points[:, finite] < np.array(tVol)[:, None]))
+        total, reached = connected_count(volume, 6)
+        self.assertGreater(total, 0)
+        self.assertEqual(total, reached)          # one piece, unlike the clipped default
+
+    def test_growing_in_the_volume_needs_a_voxel_size_under_that_fit(self):
+        with self.assertRaises(ValueError):
+            generate_network(4, 20.0, PROPERTIES, (32, 32, 32), fit="voxel_size",
+                             voxel_size=None, grow_in_volume=True)
+
+    def test_grow_in_volume_reaches_the_sidecar_and_renders_one_piece(self):
+        import json
+        import tifffile
+        from main import main
+
+        args = ["--count", "1", "--seed", "5", "--volume", "64", "64", "24",
+                "--iterations", "7", "7", "--grow-in-volume"]
+        with tempfile.TemporaryDirectory() as out:
+            self.assertEqual(main(args + ["--out", out]), 0)
+            stem = next(n[:-5] for n in os.listdir(out) if n.endswith(".tiff"))
+            with open(os.path.join(out, stem + ".json")) as handle:
+                record = json.load(handle)
+            self.assertTrue(record["grow_in_volume"])
+            self.assertEqual(record["clip_axes"], [])
+            written = tifffile.imread(os.path.join(out, stem + ".tiff"))
+            volume = (np.transpose(written, (2, 1, 0)) > 0).astype(np.uint8)
+            total, reached = connected_count(volume, 6)
+            self.assertGreater(total, 0)
+            self.assertEqual(total, reached)
 
 
 class CentrelinePersistenceTests(unittest.TestCase):
