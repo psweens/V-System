@@ -2,9 +2,9 @@
  "seed": 3,
  "voxel_size_um": 2.0,
  "shape_xyz": [
-  380,
-  346,
-  289
+  387,
+  357,
+  298
  ],
  "axis_order": "zyx",
  "units": "um",
@@ -17,7 +17,7 @@
     "8",
     "8"
    ],
-   "vessel_fraction": 0.002707136112377269,
+   "vessel_fraction": 0.00250518673383371,
    "tips": 129,
    "cycles": 0,
    "arc_chord_mean": 1.0220188783454767,
@@ -49,7 +49,7 @@
     "--persistence",
     "10"
    ],
-   "vessel_fraction": 0.002746401626202835,
+   "vessel_fraction": 0.0025368592193480413,
    "tips": 129,
    "cycles": 0,
    "arc_chord_mean": 1.0467371956702731,
@@ -81,7 +81,7 @@
     "--persistence",
     "3"
    ],
-   "vessel_fraction": 0.002704951770790458,
+   "vessel_fraction": 0.002498215872374651,
    "tips": 129,
    "cycles": 0,
    "arc_chord_mean": 1.168170217103825,
@@ -112,31 +112,33 @@
     "--anastomosis-fraction",
     "0.5"
    ],
-   "vessel_fraction": 0.0028213271743673042,
-   "tips": 32,
-   "cycles": 50,
-   "arc_chord_mean": 1.092445962703412,
-   "total_length_mm": 10.774333460510274,
+   "vessel_fraction": 0.0028669914456599973,
+   "tips": 33,
+   "cycles": 54,
+   "arc_chord_mean": 1.2826863930152497,
+   "total_length_mm": 14.745861137504521,
    "clearance_um": {
-    "min": -2.8744581304906203,
+    "min": -4.034879365895595,
     "min_columns": [
-     9263,
-     18313
+     18318,
+     19717
     ],
     "min_is_lower_bound": false,
     "search_reach_um": 0.0,
-    "violations": 1104,
-    "pairs_checked": 1104,
+    "violations": 311,
+    "pairs_checked": 311,
     "margin": 0.0
    },
    "events": {
     "anastomosis_tips": 128,
     "anastomosis_tips_inside_junction": 1,
+    "anastomosis_kin_skipped": 4749,
+    "anastomosis_behind_skipped": 34366,
     "anastomosis_selected": 68,
-    "anastomosis_bridges": 50,
-    "anastomosis_partner_tips": 47,
-    "anastomosis_partner_interior": 3,
-    "anastomosis_source_consumed": 17,
+    "anastomosis_bridges": 54,
+    "anastomosis_partner_tips": 42,
+    "anastomosis_partner_interior": 12,
+    "anastomosis_source_consumed": 13,
     "anastomosis_no_partner": 1
    },
    "tiff": "mip_stages_seed3_3_anastomosis_fraction_0_5.tiff"
@@ -151,11 +153,11 @@
     "--family",
     "mesh"
    ],
-   "vessel_fraction": 0.0032335098000616878,
-   "tips": 51,
-   "cycles": 33,
-   "arc_chord_mean": 1.257217796665479,
-   "total_length_mm": 9.911169249709216,
+   "vessel_fraction": 0.003050711292615827,
+   "tips": 57,
+   "cycles": 30,
+   "arc_chord_mean": 1.220233202094343,
+   "total_length_mm": 10.510380893009401,
    "clearance_um": {
     "min": 1.0012410868175923,
     "min_columns": [
@@ -165,7 +167,7 @@
     "min_is_lower_bound": false,
     "search_reach_um": 1.3930477927329719,
     "violations": 0,
-    "pairs_checked": 468,
+    "pairs_checked": 444,
     "margin": 1.0
    },
    "events": {
@@ -175,15 +177,18 @@
     "collision_terminations": 34,
     "anastomosis_tips": 111,
     "anastomosis_tips_inside_junction": 30,
+    "anastomosis_kin_skipped": 1961,
+    "anastomosis_behind_skipped": 22546,
     "anastomosis_selected": 47,
-    "anastomosis_bridges": 34,
+    "anastomosis_bridges": 31,
     "anastomosis_bridges_arteriovenous": 18,
-    "anastomosis_bridges_same_tree": 16,
-    "anastomosis_partner_tips": 28,
+    "anastomosis_bridges_same_tree": 13,
+    "anastomosis_partner_tips": 25,
     "anastomosis_partner_interior": 6,
     "anastomosis_source_consumed": 12,
-    "anastomosis_collision_failed": 1,
-    "anastomosis_bridge_redraws": 322
+    "anastomosis_no_partner": 1,
+    "anastomosis_collision_failed": 3,
+    "anastomosis_bridge_redraws": 227
    },
    "tiff": "mip_stages_seed3_4_family_mesh.tiff"
   },
@@ -197,21 +202,21 @@
     "--family",
     "tumour"
    ],
-   "vessel_fraction": 0.003845599157002052,
-   "tips": 22,
+   "vessel_fraction": 0.00357673201254211,
+   "tips": 18,
    "cycles": 16,
-   "arc_chord_mean": 1.375288665981555,
-   "total_length_mm": 5.1982339657284315,
+   "arc_chord_mean": 1.3566017709575988,
+   "total_length_mm": 6.144767749174824,
    "clearance_um": {
-    "min": 1.001890934191032,
+    "min": 1.0030616682600755,
     "min_columns": [
-     3265,
-     5321
+     2456,
+     5354
     ],
     "min_is_lower_bound": false,
     "search_reach_um": 1.5144956411702948,
     "violations": 0,
-    "pairs_checked": 171,
+    "pairs_checked": 145,
     "margin": 1.0
    },
    "events": {
@@ -219,14 +224,14 @@
     "collision_terminations": 13,
     "anastomosis_tips": 46,
     "anastomosis_tips_inside_junction": 14,
+    "anastomosis_kin_skipped": 937,
+    "anastomosis_behind_skipped": 7916,
     "anastomosis_selected": 26,
     "anastomosis_bridges": 16,
-    "anastomosis_partner_tips": 9,
-    "anastomosis_partner_interior": 7,
-    "anastomosis_source_consumed": 6,
-    "anastomosis_no_partner": 1,
-    "anastomosis_collision_failed": 3,
-    "anastomosis_bridge_redraws": 304
+    "anastomosis_partner_tips": 13,
+    "anastomosis_partner_interior": 3,
+    "anastomosis_source_consumed": 10,
+    "anastomosis_bridge_redraws": 61
    },
    "tiff": "mip_stages_seed3_5_family_tumour.tiff"
   }

@@ -45,9 +45,14 @@ and the reference fixtures under `tests/fixtures` pin that.
 - `--anastomose` closes the tree into a network. A seeded fraction of tips
   (`--anastomosis-fraction`) each search within `--anastomosis-radius` tip
   diameters for a partner, another tip first and otherwise an interior point
-  of a segment that is not their own, and are joined by a bridge of diameter
-  min(d_tip, d_partner) traced by the walk and pinned at both ends, and
-  checked against the network under the collision rules when avoidance is on.
+  of a segment that is not their own and not closer kin than
+  `--anastomosis-min-separation` segments along the tree (the parent and
+  sister stems by default), and lying ahead of the tip within a 120° cone, and are
+  joined by a bridge of diameter min(d_tip, d_partner) traced by the walk and
+  pinned at both ends, leaving along the tip's direction and arriving along a
+  partner tip's vessel, with the walk's curvature at the stems' persistence or
+  at 8 diameters when the stems are not walked, and checked against the
+  network under the collision rules when avoidance is on.
   Bridges are appended as polylines whose end columns copy the joined points,
   so the graph gains a cycle per bridge. Stub tips left inside a junction's
   overlap zone by a terminated branch are excluded and counted. `--anastomose-mode arteriovenous` grows a

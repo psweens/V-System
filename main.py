@@ -44,7 +44,7 @@ import tifffile
 import graph
 import libGenerator
 from analyseGrammar import WalkSettings, branching_turtle_to_coords
-from anastomosis import EVENT_KEYS as ANASTOMOSIS_EVENTS, anastomose as bridge_tips
+from anastomosis import BRIDGE_PERSISTENCE, EVENT_KEYS as ANASTOMOSIS_EVENTS, anastomose as bridge_tips
 from collisions import CollisionAvoider
 from computeVoxel import AXES, FITS, process_network
 from spatial import make_index
@@ -86,7 +86,7 @@ FAMILIES = {
     "tree": {},
     "mesh": {"tortuosity": "walk", "persistence": 10.0, "avoid_collisions": True,
              "anastomose": True, "anastomose_mode": "arteriovenous", "anastomosis_fraction": 0.5,
-             "anastomosis_radius": 20.0, "grow_in_volume": True},
+             "grow_in_volume": True},
     "tumour": {"tortuosity": "walk", "persistence": 3.0, "avoid_collisions": True,
                "anastomose": True, "anastomose_mode": "any", "anastomosis_fraction": 0.8,
                "d0": (20.0, 10.0), "aneurysm_prob": 0.1, "stenosis_prob": 0.1},
@@ -157,8 +157,9 @@ def grow_network(niter, d0, properties, tVol, fit="isotropic", clip_axes=(2,), v
                  subdivisions=3, direction=(0.0, 1.0, 0.0), perpendicular=(0.0, 0.0, 1.0),
                  d_min=None, grow_in_volume=False, tortuosity="stems", persistence=None,
                  avoid_collisions=False, collision_margin=1.0, collision_attempts=10,
-                 collision_index="auto", anastomose=False, anastomosis_radius=10.0,
-                 anastomosis_fraction=0.5, anastomose_mode="any", seed=None):
+                 collision_index="auto", anastomose=False, anastomosis_radius=25.0,
+                 anastomosis_fraction=0.5, anastomose_mode="any", anastomosis_min_separation=3,
+                 seed=None):
     """
     Grows one network and returns its geometry and graph, without rendering it.
 
@@ -184,6 +185,9 @@ def grow_network(niter, d0, properties, tVol, fit="isotropic", clip_axes=(2,), v
         anastomose_mode (str): "any" joins tips within one tree;
             "arteriovenous" grows a second tree from the opposite face of the
             volume and joins arterial tips to venous partners first.
+        anastomosis_min_separation (int): smallest number of tree segments
+            between a tip and its partner; 3 keeps bridges off the parent
+            and sister stems, 2 allows sister tips to join.
         seed (int or None): the run seed; required whenever the walk or
             anastomosis is on, since their random streams derive from it.
 
@@ -280,7 +284,8 @@ def grow_network(niter, d0, properties, tVol, fit="isotropic", clip_axes=(2,), v
                                            mode=anastomose_mode, tree=tree, persistence=persistence,
                                            collision_margin=collision_margin if avoid_collisions else None,
                                            events=events, attempts=collision_attempts,
-                                           index_kind=resolved_index)
+                                           index_kind=resolved_index,
+                                           min_separation=anastomosis_min_separation)
     built = graph.build(nodes)
     return {
         "nodes": nodes, "program": programs[0], "programs": programs,
@@ -489,6 +494,7 @@ def shaping_options(args):
         "collision_attempts": args.collision_attempts, "collision_index": args.collision_index,
         "anastomose": args.anastomose, "anastomosis_radius": args.anastomosis_radius,
         "anastomosis_fraction": args.anastomosis_fraction, "anastomose_mode": args.anastomose_mode,
+        "anastomosis_min_separation": args.anastomosis_min_separation,
     }
 
 
@@ -583,12 +589,17 @@ def build_parser(family="tree"):
     shape.add_argument("--anastomose", action="store_true",
                        help="after growth, bridge a random fraction of the tips to nearby "
                             "partners, closing the tree into a network with loops")
-    shape.add_argument("--anastomosis-radius", type=float, default=10.0,
-                       help="partner search radius in multiples of the tip diameter (default 10: "
-                            "at the default segment lengths the nearest eligible partner of a tip "
-                            "lies about 6.5 diameters away and the nearest other tip about 8)")
+    shape.add_argument("--anastomosis-radius", type=float, default=25.0,
+                       help="partner search radius in multiples of the tip diameter (default 25: "
+                            "the nearest partner that is not the parent or sister stem lies about "
+                            "twice --epsilon diameters away, 8 to 20 over the default range)")
     shape.add_argument("--anastomosis-fraction", type=float, default=0.5,
                        help="fraction of tips that seek a partner (default 0.5)")
+    shape.add_argument("--anastomosis-min-separation", type=int, default=3,
+                       help="smallest number of tree segments between a tip and its partner "
+                            "(default 3: never the parent stem or the sister stem, whose tip is "
+                            "usually the nearest and would close the two sisters into a small "
+                            "triangle; 2 allows sister tips, 1 excludes nothing)")
     shape.add_argument("--anastomose-mode", choices=ANASTOMOSE_MODES, default="any",
                        help="any: partners anywhere in the network (default); arteriovenous: grow "
                             "a second tree from the opposite face and join arterial tips to "
@@ -677,6 +688,7 @@ def main(argv=None):
             "collision_index": grown["collision_index"],
             "events": grown["events"],
             "bridges": len(grown["bridges"]),
+            "bridge_persistence": args.persistence if args.persistence is not None else BRIDGE_PERSISTENCE,
         }
         record.update(shaping)
         record["collision_index"] = grown["collision_index"]      # the kind used, not "auto"

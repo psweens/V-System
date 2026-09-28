@@ -20,11 +20,11 @@ new options only.
 The 1.05–1.2 band for normal vasculature is P ≈ 3.5–12. Proposal:
 
 - normal vasculature: **P = 8** (mean 1.07, P90 1.14; 1.08 with avoidance
-  on). The `mesh` preset carries P = 10, whose network-level ratio is 1.27
+  on). The `mesh` preset carries P = 10, whose network-level ratio is 1.25
   because the bridges are the most tortuous segments; if the whole-network
   figure is what should sit in the band, the preset's P belongs nearer 15.
 - tumour-like: **P = 3** (mean 1.21, P90 1.41; the `tumour` preset's
-  network-level ratio is 1.55 with its bridges).
+  network-level ratio is 1.46 with its bridges).
 
 Two things to weigh. First, the rotation rule as specified (one angle with
 standard deviation sqrt(h / l_p) about one random perpendicular axis) gives a
@@ -37,7 +37,20 @@ the 25° zig-zag; see the "default" rows), so the walk is not the only source
 of tortuosity in the bank, and the lowest useful P is the one whose arc/chord
 still exceeds the stems value.
 
-## 2. Bridge diameter rule
+## 2. Bridge shape and diameter
+
+Three rules shape a bridge, all chosen by eye against the projections rather
+than measured against tissue, and all worth a decision: partners are sought
+within 120° of the tip's direction (a tip does not double back into a
+hairpin); a bridge into a partner tip arrives along that vessel's direction so
+the two tips become one continuous vessel, and into the side of a vessel
+along the chord; and a bridge always carries the walk's curvature, at
+`--persistence` when the stems are walked and at 8 diameters otherwise. The
+last is a default set without a measurement of bridge tortuosity in real
+capillary beds; the network-level arc/chord of anastomosed trees (1.2–1.5 in
+the table) is dominated by it.
+
+### Diameter
 
 Bridges are min(d_tip, d_partner), which makes every bridge the finest vessel
 at its junction and gives capillary-like calibres for tip-to-tip joins. A
@@ -67,17 +80,22 @@ Deferred pending a decision.
 ## 4. Anastomosis radius and the arteriovenous design
 
 - The radius is in tip diameters, as specified, but partner distance scales
-  with segment length (ε × d), not diameter: at the default ε range a tip's
-  nearest eligible partner is ~6.5 diameters away and its nearest fellow tip
-  ~8, so the default is 10 and a radius of 5 finds no partner at all. If ε is
-  changed, or the LSM calibration uses a different ε, the radius should move
-  with it; a radius in multiples of the tip's own segment length would be
-  self-scaling.
+  with segment length (ε × d), not diameter. With the parent and sister stems
+  excluded (§5 below), the nearest eligible partner lies at about 2 ε tip
+  diameters: median 8.0 at ε = 4, 13.9 at ε = 7, 19.9 at ε = 10 (P90 9, 16,
+  23), so the default is 25 and a radius of 10 finds nothing at ε = 7. A radius
+  in multiples of the tip's own segment length (about 2.5 of them) would be
+  self-scaling and is the better unit if ε is to vary between families.
+- Bridges never join a tip to its parent stem or its sister's stem
+  (`--anastomosis-min-separation 3`): a sister's tip is usually the nearest
+  partner and joining it closes the two short sister stems into a small
+  triangle, which looks nothing like an anastomosis. Setting the separation
+  to 2 restores sister loops for a family where terminal arcades are wanted.
 - In `arteriovenous` mode the two trees grow from opposite faces and each
   fills the box, so an arterial tip's neighbourhood is mostly arterial: with
-  every tip seeking a partner, 6.8 of 44 bridges cross between the trees at
-  radius 10 and 12.8 of 42 at radius 20 (the `mesh` preset, at radius 20 and
-  half the tips, makes 15.6 of 38 cross). Same-tree bridges are allowed as a
+  every tip seeking a partner, 7.0 of 35.6 bridges cross between the trees
+  at radius 10 and 14.0 of 46.2 at radius 20 (the `mesh` preset, at the
+  default radius and half the tips, makes 17.0 of 39.4 cross). Same-tree bridges are allowed as a
   fallback and counted separately. If a stricter capillary-bed model is wanted, the
   fallback can be turned off, or the two trees interdigitated by offsetting
   the second root within the face rather than centring it.

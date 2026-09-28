@@ -25,7 +25,9 @@ against polymer-physics conventions is not misled.
 
 A bridge between two existing points is the same walk pinned at both ends: a
 cubic Hermite curve carries the bridge from the first point, leaving along that
-vessel's own direction, to the second point along the chord, and the walk's
+vessel's own direction, to the second point, arriving along the partner
+vessel's direction when the partner is a tip and along the chord when it is
+the side of a vessel, and the walk's
 deviation from a straight line is added to it after subtracting the linear
 trend that would move the end point (a Brownian bridge on the displacement).
 The result starts and ends exactly on the two given points, so a graph built
@@ -128,7 +130,8 @@ def _resample_by_arc_length(points, n_points):
     return out
 
 
-def bridge_path(start, end, step, start_tangent=None, rng=None, persistence=None, diameter=None):
+def bridge_path(start, end, step, start_tangent=None, rng=None, persistence=None, diameter=None,
+                end_tangent=None, tangent_scale=0.6):
     """
     Traces a bridge from `start` to `end` in steps of about `step`.
 
@@ -139,6 +142,12 @@ def bridge_path(start, end, step, start_tangent=None, rng=None, persistence=None
             spacing of the vessel the bridge leaves.
         start_tangent (sequence or None): unit direction the bridge leaves
             `start` along; None leaves along the chord.
+        end_tangent (sequence or None): unit direction the bridge arrives at
+            `end` along, for instance into a partner tip's vessel; None
+            arrives along the chord, as into the side of a vessel.
+        tangent_scale (float): magnitude of the two Hermite tangents as a
+            fraction of the chord; smaller values bend towards the chord
+            sooner and never overshoot into a hairpin.
         rng, persistence, diameter: when all three are given the bridge carries
             the deviation of a persistent random walk with persistence length
             persistence * diameter, pinned to zero at both ends. Without them
@@ -164,8 +173,14 @@ def bridge_path(start, end, step, start_tangent=None, rng=None, persistence=None
     else:
         tangent = np.asarray(start_tangent, dtype=float)
         tangent = tangent / np.linalg.norm(tangent)
+    if end_tangent is None:
+        arrival = direction
+    else:
+        arrival = np.asarray(end_tangent, dtype=float)
+        arrival = arrival / np.linalg.norm(arrival)
     n_steps = max(2, int(math.ceil(1.05 * length / step)))
-    dense = _hermite(p0, tangent * length, p1, direction * length, 8 * n_steps + 1)
+    dense = _hermite(p0, tangent * tangent_scale * length, p1, arrival * tangent_scale * length,
+                     8 * n_steps + 1)
     base = _resample_by_arc_length(dense, n_steps + 1)
     base[0] = p0
     base[-1] = p1

@@ -26,13 +26,28 @@ inside a junction's overlap zone; the roots; points inside the overlap zone of
 the junction the tip's polyline leaves, which are its parent and sibling near
 their common branch point; and points already overlapping the tip. The
 overlap zone of a junction J for a point P of radius r_P is
-|P - J| < KIN_REACH (r_P + r_J + margin), as in collisions.py. In `arteriovenous` mode, where two trees have been grown from opposite
+|P - J| < KIN_REACH (r_P + r_J + margin), as in collisions.py. Close kin are
+excluded too: a partner fewer than `min_separation` segments away from the
+tip along the tree (counting the segment an interior partner lies on) is
+skipped, so at the default of three the tip's own parent stem and its
+sister's stem, two segments away, never receive a bridge, and the smallest
+loop a bridge closes runs through a cousin or an uncle. Joining sister tips
+would otherwise be the commonest bridge, since a sister's tip is usually the
+nearest, and it closes the two sister stems into a small triangle. In `arteriovenous` mode, where two trees have been grown from opposite
 faces of the volume, partners in the other tree outrank partners in the same
 tree, so arterial tips join venous tips or venules first and only fall back to
 arterial neighbours when no venous partner is in reach. A tip consumed as a
 partner is no longer a tip and is skipped if its own turn comes later; an
 interior point that has received a bridge is a junction and receives no
 second one.
+
+Partners lie ahead of the tip, within FORWARD_CONE_DEG of its direction, so a
+bridge continues the vessel rather than doubling back into a hairpin. The
+bridge leaves the tip along the tip's direction and, when the partner is a
+tip, arrives along that vessel's direction, so the two tips become one
+continuous vessel; into the side of a vessel it arrives along the chord. It
+carries the walk's curvature at `persistence` diameters, or at
+BRIDGE_PERSISTENCE when no persistence is given.
 
 Bridge diameter is min(d_tip, d_partner): the bridge is the finest vessel of
 the three that meet, as a capillary is. A Murray-consistent alternative would
@@ -47,6 +62,8 @@ Draws come from the `numpy.random.Generator` passed in, in a fixed order:
 the selection of tips first, then the bridge walks in tip order, so a run is
 reproducible from its seed. Python 3.9 compatible.
 """
+import math
+
 import numpy as np
 
 import graph
@@ -55,7 +72,17 @@ from spatial import make_index
 from tortuosity import bridge_path
 
 BRIDGE = 2                     # value of the `tree` label on bridge columns
-EVENT_KEYS = ("anastomosis_tips", "anastomosis_tips_inside_junction", "anastomosis_selected",
+
+# Persistence of a bridge's walk, in bridge diameters, when the stems are not
+# walked and no persistence is given: a bridge is a vessel and a straight
+# strut between two tips looks like nothing in a tissue.
+BRIDGE_PERSISTENCE = 8.0
+
+# A tip looks for partners ahead of it: within this angle of its own direction,
+# as a sprouting tip fuses with what it grows towards rather than doubling back.
+FORWARD_CONE_DEG = 120.0
+EVENT_KEYS = ("anastomosis_tips", "anastomosis_tips_inside_junction", "anastomosis_kin_skipped",
+              "anastomosis_behind_skipped", "anastomosis_selected",
               "anastomosis_bridges", "anastomosis_bridges_arteriovenous", "anastomosis_bridges_same_tree",
               "anastomosis_partner_tips", "anastomosis_partner_interior",
               "anastomosis_source_consumed", "anastomosis_no_partner",
@@ -85,6 +112,50 @@ def _tip_tangent(nodes, columns, tip):
     return None
 
 
+class _TreeSeparation:
+    """
+    Distances along the tree, in segments, between a tip and any vertex.
+
+    Built once from the tree's segments (graph.segments): the vertices of
+    degree other than two are the nodes of a small graph whose edges are the
+    segments, and an interior vertex lies on exactly one of them.
+    """
+
+    def __init__(self, nodes, edges, canonical):
+        self.neighbours = {}
+        self.on_segment = {}
+        for k, path in enumerate(graph.segments(nodes, edges, canonical)):
+            a, b = int(path[0]), int(path[-1])
+            self.neighbours.setdefault(a, []).append(b)
+            self.neighbours.setdefault(b, []).append(a)
+            for c in path[1:-1]:
+                self.on_segment[int(c)] = (a, b)
+
+    def within(self, tip, limit):
+        """Hops from `tip` to every endpoint vertex reachable in fewer than `limit` segments."""
+        hops = {tip: 0}
+        frontier = [tip]
+        for depth in range(1, limit):
+            following = []
+            for v in frontier:
+                for w in self.neighbours.get(v, ()):
+                    if w not in hops:
+                        hops[w] = depth
+                        following.append(w)
+            frontier = following
+        return hops
+
+    def separation(self, hops, vertex):
+        """Segments between the tip the `hops` were computed from and `vertex`, or None beyond their reach."""
+        if vertex in hops:
+            return hops[vertex]
+        ends = self.on_segment.get(vertex)
+        if ends is None:
+            return None
+        near = [hops[e] for e in ends if e in hops]
+        return min(near) + 1 if near else None
+
+
 class _Network:
     """Per-column bookkeeping that grows as bridges are appended."""
 
@@ -93,6 +164,7 @@ class _Network:
         self.n = nodes.shape[1]
         built = graph.build(nodes, tol)
         self.canonical = built["canonical"]
+        self.tree_separation = _TreeSeparation(nodes, built["edges"], self.canonical)
         deg = built["degree"]
         # a vertex is represented by the column that is its own canonical column
         representatives = np.flatnonzero(self.canonical == np.arange(self.n))
@@ -216,7 +288,7 @@ def _bridge_collides(net, index, path, radius, tip, partner, margin):
 
 def anastomose(nodes, rng, fraction, radius, mode="any", tree=None, persistence=None,
                collision_margin=None, events=None, tol=graph.DEFAULT_TOL, attempts=10,
-               max_candidates=5, index_kind="auto"):
+               max_candidates=5, index_kind="auto", min_separation=3):
     """
     Bridges a seeded fraction of tips to nearby partners.
 
@@ -229,7 +301,7 @@ def anastomose(nodes, rng, fraction, radius, mode="any", tree=None, persistence=
         tree (ndarray or None): (N,) int8 tree label per column, -1 at separators;
             None labels every column 0.
         persistence (float or None): persistence of the bridge walk in diameters;
-            None traces a smooth bridge without random deviation.
+            None uses BRIDGE_PERSISTENCE.
         collision_margin (float or None): when given, every bridge is checked
             against the network and the bridges before it with the rules of
             collisions.py at this margin, and redrawn or abandoned on a
@@ -239,6 +311,10 @@ def anastomose(nodes, rng, fraction, radius, mode="any", tree=None, persistence=
         attempts (int): redraws of a colliding bridge per candidate partner.
         max_candidates (int): partners tried per tip before giving up.
         index_kind (str): spatial index used for the partner search.
+        min_separation (int): smallest number of tree segments between a tip
+            and its partner (the segment an interior partner lies on
+            included); 3 excludes the parent stem and the sister stem, 2
+            allows sister tips, 1 or less excludes nothing.
 
     Returns:
         tuple: (nodes, tree, bridges) with the bridges appended as polylines,
@@ -251,6 +327,7 @@ def anastomose(nodes, rng, fraction, radius, mode="any", tree=None, persistence=
         raise ValueError("the anastomosis radius must be positive")
     if mode not in ("any", "arteriovenous"):
         raise ValueError(f"mode must be 'any' or 'arteriovenous', got {mode!r}")
+    min_separation = int(min_separation)
     nodes = np.asarray(nodes, dtype=float)
     if tree is None:
         tree = np.where(np.isnan(nodes[0]), -1, 0).astype(np.int8)
@@ -263,9 +340,13 @@ def anastomose(nodes, rng, fraction, radius, mode="any", tree=None, persistence=
         events.setdefault(key, 0)
     if collision_margin is not None and collision_margin < 0.0:
         raise ValueError("the collision margin cannot be negative")
+    if persistence is None:
+        persistence = BRIDGE_PERSISTENCE
+    cone = math.cos(math.radians(FORWARD_CONE_DEG))
     margin = float(collision_margin) if collision_margin is not None else 0.0
 
     net = _Network(nodes, tree, tol)
+    n_original = nodes.shape[1]
     vertices = np.array(sorted(net.degree), dtype=np.int64)
     roots = set()
     for label in np.unique(tree[tree >= 0]):
@@ -299,6 +380,8 @@ def anastomose(nodes, rng, fraction, radius, mode="any", tree=None, persistence=
         j_xyz = nodes[:3, junction]
         tip_xyz = nodes[:3, tip]
         tip_tree = net.tree[tip]
+        kin_hops = net.tree_separation.within(tip, min_separation) if min_separation > 1 else {}
+        tangent = _tip_tangent(nodes, own, tip)
         candidates = []
         for stored in index.nearest_within(tip_xyz, radius * d_tip):
             v = int(index.tags[stored])
@@ -306,6 +389,11 @@ def anastomose(nodes, rng, fraction, radius, mode="any", tree=None, persistence=
                 continue
             if net.polyline[v] == pid:
                 continue
+            if v < n_original and min_separation > 1:
+                apart = net.tree_separation.separation(kin_hops, v)
+                if apart is not None and apart < min_separation:
+                    events["anastomosis_kin_skipped"] += 1
+                    continue                   # the parent stem, a sister, or closer kin than allowed
             v_xyz = index.points[stored]
             d_v = float(index.radii[stored]) * 2.0
             if np.linalg.norm(v_xyz - j_xyz) < KIN_REACH * ((d_v + net.diameter[junction]) / 2.0 + margin):
@@ -313,6 +401,9 @@ def anastomose(nodes, rng, fraction, radius, mode="any", tree=None, persistence=
             chord = float(np.linalg.norm(v_xyz - tip_xyz))
             if chord <= (d_tip + d_v) / 2.0 + margin:
                 continue                       # already touching
+            if tangent is not None and float((v_xyz - tip_xyz) @ tangent) < cone * chord:
+                events["anastomosis_behind_skipped"] += 1
+                continue                       # behind the tip
             if net.degree[v] == 2 and net.inside_junction(v, margin):
                 continue                       # an interior point at a junction
             rank = 0 if net.degree[v] == 1 else 1
@@ -326,14 +417,18 @@ def anastomose(nodes, rng, fraction, radius, mode="any", tree=None, persistence=
             continue
 
         step = _polyline_spacing(nodes, own) or 0.2 * d_tip
-        tangent = _tip_tangent(nodes, own, tip)
         joined = None
         for rank, chord, partner, d_partner in candidates[:max_candidates]:
             d_bridge = min(d_tip, d_partner)
             partner_xyz = net.xyz(partner)
+            arrival = None
+            if rank % 2 == 0 and partner < n_original:
+                # into a partner tip: along its vessel, so the two tips become one
+                outward = _tip_tangent(nodes, net.columns_of[net.polyline[partner]], partner)
+                arrival = None if outward is None else -outward
             for redraw in range(attempts + 1):
                 path = bridge_path(tip_xyz, partner_xyz, step, start_tangent=tangent, rng=rng,
-                                   persistence=persistence, diameter=d_bridge)
+                                   persistence=persistence, diameter=d_bridge, end_tangent=arrival)
                 if collision_margin is None or len(path) <= 2:
                     break
                 if not _bridge_collides(net, index, path, d_bridge / 2.0, tip, partner, margin):

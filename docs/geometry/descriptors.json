@@ -6,7 +6,7 @@
    "seed": 1,
    "generations": 5,
    "d0": 28.12172681831621,
-   "seconds": 0.44587182998657227,
+   "seconds": 0.4708428382873535,
    "values": {
     "points": 2086,
     "length mm": 1.8630404376700354,
@@ -41,7 +41,7 @@
    "seed": 2,
    "generations": 4,
    "d0": 17.916210762972646,
-   "seconds": 0.4733157157897949,
+   "seconds": 0.43927502632141113,
    "values": {
     "points": 918,
     "length mm": 1.517896784349268,
@@ -76,7 +76,7 @@
    "seed": 3,
    "generations": 9,
    "d0": 28.943142367151594,
-   "seconds": 1.3501219749450684,
+   "seconds": 1.520406723022461,
    "values": {
     "points": 31878,
     "length mm": 12.862058250485303,
@@ -111,7 +111,7 @@
    "seed": 4,
    "generations": 10,
    "d0": 20.2528085357147,
-   "seconds": 1.8357658386230469,
+   "seconds": 2.127924680709839,
    "values": {
     "points": 63382,
     "length mm": 15.048367865023465,
@@ -146,7 +146,7 @@
    "seed": 5,
    "generations": 12,
    "d0": 22.20613743442521,
-   "seconds": 6.820018768310547,
+   "seconds": 6.874874114990234,
    "values": {
     "points": 254470,
     "length mm": 61.33018090915351,
@@ -185,7 +185,7 @@
    "seed": 1,
    "generations": 8,
    "d0": 28.12172681831621,
-   "seconds": 0.6364626884460449,
+   "seconds": 0.5544888973236084,
    "values": {
     "points": 15942,
     "length mm": 7.32723459510781,
@@ -224,7 +224,7 @@
    "seed": 2,
    "generations": 8,
    "d0": 17.916210762972646,
-   "seconds": 0.43378114700317383,
+   "seconds": 0.4267580509185791,
    "values": {
     "points": 16006,
     "length mm": 10.300179807489677,
@@ -263,7 +263,7 @@
    "seed": 3,
    "generations": 8,
    "d0": 28.943142367151594,
-   "seconds": 0.5233190059661865,
+   "seconds": 0.52059006690979,
    "values": {
     "points": 15942,
     "length mm": 8.99377540070709,
@@ -302,7 +302,7 @@
    "seed": 4,
    "generations": 8,
    "d0": 20.2528085357147,
-   "seconds": 0.5284974575042725,
+   "seconds": 0.5354185104370117,
    "values": {
     "points": 15718,
     "length mm": 6.158512078974462,
@@ -341,7 +341,7 @@
    "seed": 5,
    "generations": 8,
    "d0": 22.20613743442521,
-   "seconds": 0.44423723220825195,
+   "seconds": 0.4811241626739502,
    "values": {
     "points": 16070,
     "length mm": 10.128476197783506,
@@ -382,7 +382,7 @@
    "seed": 1,
    "generations": 5,
    "d0": 33.121726818316205,
-   "seconds": 0.06793951988220215,
+   "seconds": 0.07285690307617188,
    "values": {
     "points": 2086,
     "length mm": 2.194286176899783,
@@ -423,7 +423,7 @@
    "seed": 2,
    "generations": 4,
    "d0": 22.916210762972646,
-   "seconds": 0.025917768478393555,
+   "seconds": 0.029003620147705078,
    "values": {
     "points": 918,
     "length mm": 1.941506666045429,
@@ -464,7 +464,7 @@
    "seed": 3,
    "generations": 9,
    "d0": 33.943142367151594,
-   "seconds": 0.7077949047088623,
+   "seconds": 0.6947336196899414,
    "values": {
     "points": 30001,
     "length mm": 16.585870564406946,
@@ -505,7 +505,7 @@
    "seed": 4,
    "generations": 10,
    "d0": 25.2528085357147,
-   "seconds": 2.1293435096740723,
+   "seconds": 2.101301908493042,
    "values": {
     "points": 59350,
     "length mm": 18.719379794577907,
@@ -546,7 +546,7 @@
    "seed": 5,
    "generations": 12,
    "d0": 27.20613743442521,
-   "seconds": 5.026135444641113,
+   "seconds": 4.558995485305786,
    "values": {
     "points": 198289,
     "length mm": 65.11062045616723,
@@ -590,7 +590,7 @@
    "seed": 1,
    "generations": 8,
    "d0": 33.121726818316205,
-   "seconds": 0.5339705944061279,
+   "seconds": 0.5332820415496826,
    "values": {
     "points": 15513,
     "length mm": 8.219561423143146,
@@ -634,7 +634,7 @@
    "seed": 2,
    "generations": 8,
    "d0": 22.916210762972646,
-   "seconds": 0.397707462310791,
+   "seconds": 0.4234354496002197,
    "values": {
     "points": 16006,
     "length mm": 13.174721735958448,
@@ -678,7 +678,7 @@
    "seed": 3,
    "generations": 8,
    "d0": 33.943142367151594,
-   "seconds": 0.5119025707244873,
+   "seconds": 0.5062472820281982,
    "values": {
     "points": 15883,
     "length mm": 10.821043158431603,
@@ -722,7 +722,7 @@
    "seed": 4,
    "generations": 8,
    "d0": 25.2528085357147,
-   "seconds": 0.5042939186096191,
+   "seconds": 0.47855567932128906,
    "values": {
     "points": 15407,
     "length mm": 7.963276046651719,
@@ -766,7 +766,7 @@
    "seed": 5,
    "generations": 8,
    "d0": 27.20613743442521,
-   "seconds": 0.4542574882507324,
+   "seconds": 0.4576914310455322,
    "values": {
     "points": 16011,
     "length mm": 12.378237444977206,
@@ -809,7 +809,7 @@
    "seed": 1,
    "generations": 8,
    "d0": 28.12172681831621,
-   "seconds": 1.168828010559082,
+   "seconds": 1.2117149829864502,
    "values": {
     "points": 11862,
     "length mm": 7.448842287482108,
@@ -852,7 +852,7 @@
    "seed": 2,
    "generations": 8,
    "d0": 17.916210762972646,
-   "seconds": 1.1231062412261963,
+   "seconds": 1.1838810443878174,
    "values": {
     "points": 11926,
     "length mm": 10.469147328134845,
@@ -895,7 +895,7 @@
    "seed": 3,
    "generations": 8,
    "d0": 28.943142367151594,
-   "seconds": 1.1513068675994873,
+   "seconds": 1.1682548522949219,
    "values": {
     "points": 11862,
     "length mm": 9.144072315804353,
@@ -938,7 +938,7 @@
    "seed": 4,
    "generations": 8,
    "d0": 20.2528085357147,
-   "seconds": 1.1468744277954102,
+   "seconds": 1.1252927780151367,
    "values": {
     "points": 11638,
     "length mm": 6.262106357247338,
@@ -981,7 +981,7 @@
    "seed": 5,
    "generations": 8,
    "d0": 22.20613743442521,
-   "seconds": 1.1453065872192383,
+   "seconds": 1.1663553714752197,
    "values": {
     "points": 11990,
     "length mm": 10.295570773994552,
@@ -1024,7 +1024,7 @@
    "seed": 1,
    "generations": 8,
    "d0": 28.12172681831621,
-   "seconds": 1.146747350692749,
+   "seconds": 1.2233147621154785,
    "values": {
     "points": 11862,
     "length mm": 7.448842287482108,
@@ -1067,7 +1067,7 @@
    "seed": 2,
    "generations": 8,
    "d0": 17.916210762972646,
-   "seconds": 1.0618844032287598,
+   "seconds": 1.242377758026123,
    "values": {
     "points": 11926,
     "length mm": 10.469147328134845,
@@ -1110,7 +1110,7 @@
    "seed": 3,
    "generations": 8,
    "d0": 28.943142367151594,
-   "seconds": 1.1015276908874512,
+   "seconds": 1.2581031322479248,
    "values": {
     "points": 11862,
     "length mm": 9.144072315804353,
@@ -1153,7 +1153,7 @@
    "seed": 4,
    "generations": 8,
    "d0": 20.2528085357147,
-   "seconds": 1.1500802040100098,
+   "seconds": 1.1709504127502441,
    "values": {
     "points": 11638,
     "length mm": 6.2621063572473386,
@@ -1196,7 +1196,7 @@
    "seed": 5,
    "generations": 8,
    "d0": 22.20613743442521,
-   "seconds": 1.2603883743286133,
+   "seconds": 1.190863847732544,
    "values": {
     "points": 11990,
     "length mm": 10.295570773994552,
@@ -1239,7 +1239,7 @@
    "seed": 1,
    "generations": 8,
    "d0": 28.12172681831621,
-   "seconds": 1.1858949661254883,
+   "seconds": 1.1977269649505615,
    "values": {
     "points": 11862,
     "length mm": 7.4488422874821065,
@@ -1282,7 +1282,7 @@
    "seed": 2,
    "generations": 8,
    "d0": 17.916210762972646,
-   "seconds": 1.1514363288879395,
+   "seconds": 1.1619858741760254,
    "values": {
     "points": 11926,
     "length mm": 10.469147328134847,
@@ -1325,7 +1325,7 @@
    "seed": 3,
    "generations": 8,
    "d0": 28.943142367151594,
-   "seconds": 1.1584126949310303,
+   "seconds": 1.1570227146148682,
    "values": {
     "points": 11862,
     "length mm": 9.144072315804351,
@@ -1368,7 +1368,7 @@
    "seed": 4,
    "generations": 8,
    "d0": 20.2528085357147,
-   "seconds": 1.1950469017028809,
+   "seconds": 1.1921632289886475,
    "values": {
     "points": 11638,
     "length mm": 6.262106357247339,
@@ -1411,7 +1411,7 @@
    "seed": 5,
    "generations": 8,
    "d0": 22.20613743442521,
-   "seconds": 1.135218858718872,
+   "seconds": 1.163400650024414,
    "values": {
     "points": 11990,
     "length mm": 10.295570773994552,
@@ -1454,7 +1454,7 @@
    "seed": 1,
    "generations": 8,
    "d0": 28.12172681831621,
-   "seconds": 1.1161727905273438,
+   "seconds": 1.1573765277862549,
    "values": {
     "points": 11862,
     "length mm": 7.4488422874821065,
@@ -1497,7 +1497,7 @@
    "seed": 2,
    "generations": 8,
    "d0": 17.916210762972646,
-   "seconds": 1.0974469184875488,
+   "seconds": 1.136199712753296,
    "values": {
     "points": 11926,
     "length mm": 10.469147328134845,
@@ -1540,7 +1540,7 @@
    "seed": 3,
    "generations": 8,
    "d0": 28.943142367151594,
-   "seconds": 1.138200283050537,
+   "seconds": 1.17586350440979,
    "values": {
     "points": 11862,
     "length mm": 9.144072315804353,
@@ -1583,7 +1583,7 @@
    "seed": 4,
    "generations": 8,
    "d0": 20.2528085357147,
-   "seconds": 1.0878522396087646,
+   "seconds": 1.136460781097412,
    "values": {
     "points": 11638,
     "length mm": 6.262106357247339,
@@ -1626,7 +1626,7 @@
    "seed": 5,
    "generations": 8,
    "d0": 22.20613743442521,
-   "seconds": 1.1320054531097412,
+   "seconds": 1.1628077030181885,
    "values": {
     "points": 11990,
     "length mm": 10.29557077399455,
@@ -1669,7 +1669,7 @@
    "seed": 1,
    "generations": 8,
    "d0": 28.12172681831621,
-   "seconds": 1.1612412929534912,
+   "seconds": 1.151876449584961,
    "values": {
     "points": 11862,
     "length mm": 7.448842287482108,
@@ -1712,7 +1712,7 @@
    "seed": 2,
    "generations": 8,
    "d0": 17.916210762972646,
-   "seconds": 1.1396281719207764,
+   "seconds": 1.0941574573516846,
    "values": {
     "points": 11926,
     "length mm": 10.469147328134847,
@@ -1755,7 +1755,7 @@
    "seed": 3,
    "generations": 8,
    "d0": 28.943142367151594,
-   "seconds": 1.3427612781524658,
+   "seconds": 1.1513524055480957,
    "values": {
     "points": 11862,
     "length mm": 9.144072315804355,
@@ -1798,7 +1798,7 @@
    "seed": 4,
    "generations": 8,
    "d0": 20.2528085357147,
-   "seconds": 1.2406184673309326,
+   "seconds": 1.1563410758972168,
    "values": {
     "points": 11638,
     "length mm": 6.262106357247338,
@@ -1841,7 +1841,7 @@
    "seed": 5,
    "generations": 8,
    "d0": 22.20613743442521,
-   "seconds": 1.1463053226470947,
+   "seconds": 1.1208078861236572,
    "values": {
     "points": 11990,
     "length mm": 10.295570773994553,
@@ -1884,7 +1884,7 @@
    "seed": 1,
    "generations": 8,
    "d0": 28.12172681831621,
-   "seconds": 1.177276611328125,
+   "seconds": 1.1549975872039795,
    "values": {
     "points": 11862,
     "length mm": 7.448842287482111,
@@ -1927,7 +1927,7 @@
    "seed": 2,
    "generations": 8,
    "d0": 17.916210762972646,
-   "seconds": 1.0760200023651123,
+   "seconds": 1.1801819801330566,
    "values": {
     "points": 11926,
     "length mm": 10.469147328134845,
@@ -1970,7 +1970,7 @@
    "seed": 3,
    "generations": 8,
    "d0": 28.943142367151594,
-   "seconds": 1.111203908920288,
+   "seconds": 1.1197404861450195,
    "values": {
     "points": 11862,
     "length mm": 9.144072315804355,
@@ -2013,7 +2013,7 @@
    "seed": 4,
    "generations": 8,
    "d0": 20.2528085357147,
-   "seconds": 1.0688254833221436,
+   "seconds": 1.1274843215942383,
    "values": {
     "points": 11638,
     "length mm": 6.262106357247338,
@@ -2056,7 +2056,7 @@
    "seed": 5,
    "generations": 8,
    "d0": 22.20613743442521,
-   "seconds": 1.0737130641937256,
+   "seconds": 1.143617868423462,
    "values": {
     "points": 11990,
     "length mm": 10.295570773994552,
@@ -2099,7 +2099,7 @@
    "seed": 1,
    "generations": 8,
    "d0": 28.12172681831621,
-   "seconds": 1.1336898803710938,
+   "seconds": 1.1099762916564941,
    "values": {
     "points": 11862,
     "length mm": 7.448842287482108,
@@ -2142,7 +2142,7 @@
    "seed": 2,
    "generations": 8,
    "d0": 17.916210762972646,
-   "seconds": 1.0571401119232178,
+   "seconds": 1.1010994911193848,
    "values": {
     "points": 11926,
     "length mm": 10.469147328134849,
@@ -2185,7 +2185,7 @@
    "seed": 3,
    "generations": 8,
    "d0": 28.943142367151594,
-   "seconds": 1.1223139762878418,
+   "seconds": 1.1925075054168701,
    "values": {
     "points": 11862,
     "length mm": 9.144072315804351,
@@ -2228,7 +2228,7 @@
    "seed": 4,
    "generations": 8,
    "d0": 20.2528085357147,
-   "seconds": 1.140120506286621,
+   "seconds": 1.1142430305480957,
    "values": {
     "points": 11638,
     "length mm": 6.2621063572473386,
@@ -2271,7 +2271,7 @@
    "seed": 5,
    "generations": 8,
    "d0": 22.20613743442521,
-   "seconds": 1.0982027053833008,
+   "seconds": 1.1151609420776367,
    "values": {
     "points": 11990,
     "length mm": 10.29557077399455,
@@ -2311,7 +2311,7 @@
    "seed": 1,
    "generations": 8,
    "d0": 28.12172681831621,
-   "seconds": 0.9676530361175537,
+   "seconds": 0.9545326232910156,
    "values": {
     "points": 15843,
     "length mm": 7.303510560296467,
@@ -2351,7 +2351,7 @@
    "seed": 2,
    "generations": 8,
    "d0": 17.916210762972646,
-   "seconds": 0.7014214992523193,
+   "seconds": 0.7098584175109863,
    "values": {
     "points": 16006,
     "length mm": 10.300179807489677,
@@ -2391,7 +2391,7 @@
    "seed": 3,
    "generations": 8,
    "d0": 28.943142367151594,
-   "seconds": 0.8379788398742676,
+   "seconds": 0.8510656356811523,
    "values": {
     "points": 15885,
     "length mm": 8.978760087989368,
@@ -2431,7 +2431,7 @@
    "seed": 4,
    "generations": 8,
    "d0": 20.2528085357147,
-   "seconds": 0.9473273754119873,
+   "seconds": 0.9723246097564697,
    "values": {
     "points": 15547,
     "length mm": 6.143383962679475,
@@ -2471,7 +2471,7 @@
    "seed": 5,
    "generations": 8,
    "d0": 22.20613743442521,
-   "seconds": 0.7059497833251953,
+   "seconds": 0.7283244132995605,
    "values": {
     "points": 16070,
     "length mm": 10.128476197783506,
@@ -2515,7 +2515,7 @@
    "seed": 1,
    "generations": 8,
    "d0": 28.12172681831621,
-   "seconds": 3.5054430961608887,
+   "seconds": 3.649806499481201,
    "values": {
     "points": 9035,
     "length mm": 6.337193772103526,
@@ -2559,7 +2559,7 @@
    "seed": 2,
    "generations": 8,
    "d0": 17.916210762972646,
-   "seconds": 3.2086246013641357,
+   "seconds": 3.453986406326294,
    "values": {
     "points": 8965,
     "length mm": 8.32897900309637,
@@ -2603,7 +2603,7 @@
    "seed": 3,
    "generations": 8,
    "d0": 28.943142367151594,
-   "seconds": 1.3039655685424805,
+   "seconds": 1.370514154434204,
    "values": {
     "points": 3288,
     "length mm": 3.203558767089522,
@@ -2647,7 +2647,7 @@
    "seed": 4,
    "generations": 8,
    "d0": 20.2528085357147,
-   "seconds": 3.0839366912841797,
+   "seconds": 3.4182164669036865,
    "values": {
     "points": 7978,
     "length mm": 4.623226454744165,
@@ -2691,7 +2691,7 @@
    "seed": 5,
    "generations": 8,
    "d0": 22.20613743442521,
-   "seconds": 4.34326434135437,
+   "seconds": 4.3907012939453125,
    "values": {
     "points": 10843,
     "length mm": 9.587503497428964,
@@ -2740,33 +2740,33 @@
    "seed": 1,
    "generations": 8,
    "d0": 28.12172681831621,
-   "seconds": 5.157345533370972,
+   "seconds": 4.371000289916992,
    "values": {
-    "points": 9968,
-    "length mm": 7.118664762142009,
-    "d P50": 7.827869738330247,
+    "points": 10831,
+    "length mm": 7.624730368575544,
+    "d P50": 7.461264062859293,
     "d P90": 17.74818876190767,
     "d P99": 28.12172681831621,
-    "arc/chord mean": 1.160228297295027,
-    "arc/chord P90": 1.1809906284832612,
-    "curvature 1/um": 0.13579628454913922,
-    "tips": 68,
-    "tips/mm": 9.552353183090304,
-    "junctions": 104,
+    "arc/chord mean": 1.2120396451210298,
+    "arc/chord P90": 1.4967794954027376,
+    "curvature 1/um": 0.13203918618691216,
+    "tips": 64,
+    "tips/mm": 8.393739438153602,
+    "junctions": 102,
     "b0": 1,
-    "b1": 19,
-    "FA": 0.07186755815911437,
+    "b1": 20,
+    "FA": 0.04156907099087477,
     "min clearance um": 1.0024437790031162,
     "violations": 0,
-    "length density mm/mm3": 44.99885107648288,
+    "length density mm/mm3": 48.17689384332195,
     "bound_terminations": 0,
     "walk_bound_terminations": 0,
     "collision_truncated_stems": 0,
     "collision_terminations": 12,
-    "anastomosis_bridges": 19,
+    "anastomosis_bridges": 20,
     "anastomosis_bridges_arteriovenous": 0,
     "anastomosis_no_partner": 1,
-    "anastomosis_collision_failed": 2
+    "anastomosis_collision_failed": 0
    }
   },
   {
@@ -2789,32 +2789,32 @@
    "seed": 2,
    "generations": 8,
    "d0": 17.916210762972646,
-   "seconds": 3.7599706649780273,
+   "seconds": 4.074779033660889,
    "values": {
-    "points": 9389,
-    "length mm": 8.804331506929515,
-    "d P50": 5.005883551185292,
-    "d P90": 10.597821200384905,
+    "points": 10121,
+    "length mm": 9.495266155974033,
+    "d P50": 4.648529314006398,
+    "d P90": 10.545061393335281,
     "d P99": 17.916210762972646,
-    "arc/chord mean": 1.382646813766928,
-    "arc/chord P90": 1.2860353581624875,
-    "curvature 1/um": 0.13604002712077648,
-    "tips": 85,
-    "tips/mm": 9.654338882299028,
-    "junctions": 107,
+    "arc/chord mean": 1.246855471248636,
+    "arc/chord P90": 1.4196463893429452,
+    "curvature 1/um": 0.13516797855112844,
+    "tips": 69,
+    "tips/mm": 7.266778926106039,
+    "junctions": 105,
     "b0": 1,
-    "b1": 12,
-    "FA": 0.09393184275269088,
+    "b1": 19,
+    "FA": 0.08432214290654277,
     "min clearance um": 1.0020387738509626,
     "violations": 0,
-    "length density mm/mm3": 72.56227425031261,
+    "length density mm/mm3": 78.17600984702543,
     "bound_terminations": 0,
     "walk_bound_terminations": 0,
     "collision_truncated_stems": 0,
     "collision_terminations": 11,
-    "anastomosis_bridges": 12,
+    "anastomosis_bridges": 19,
     "anastomosis_bridges_arteriovenous": 0,
-    "anastomosis_no_partner": 8,
+    "anastomosis_no_partner": 1,
     "anastomosis_collision_failed": 0
    }
   },
@@ -2838,33 +2838,33 @@
    "seed": 3,
    "generations": 8,
    "d0": 28.943142367151594,
-   "seconds": 2.624645233154297,
+   "seconds": 1.633650779724121,
    "values": {
-    "points": 3552,
-    "length mm": 3.503935896441457,
-    "d P50": 8.858517579488224,
+    "points": 3882,
+    "length mm": 3.849315808021615,
+    "d P50": 8.337930784160365,
     "d P90": 20.14237142453009,
     "d P99": 28.943142367151594,
-    "arc/chord mean": 1.1177991570789176,
-    "arc/chord P90": 1.1690918817515241,
-    "curvature 1/um": 0.09993219476609377,
-    "tips": 31,
-    "tips/mm": 8.84719381752478,
+    "arc/chord mean": 1.1745633768006556,
+    "arc/chord P90": 1.2234913179164988,
+    "curvature 1/um": 0.0959529650650325,
+    "tips": 27,
+    "tips/mm": 7.0142335278738415,
     "junctions": 39,
     "b0": 1,
-    "b1": 5,
-    "FA": 0.14751984809161534,
+    "b1": 7,
+    "FA": 0.10794584277723997,
     "min clearance um": 1.0014335613584242,
     "violations": 0,
-    "length density mm/mm3": 33.83499892117675,
+    "length density mm/mm3": 35.65788196027762,
     "bound_terminations": 0,
     "walk_bound_terminations": 0,
     "collision_truncated_stems": 0,
     "collision_terminations": 9,
-    "anastomosis_bridges": 5,
+    "anastomosis_bridges": 7,
     "anastomosis_bridges_arteriovenous": 0,
-    "anastomosis_no_partner": 0,
-    "anastomosis_collision_failed": 3
+    "anastomosis_no_partner": 1,
+    "anastomosis_collision_failed": 0
    }
   },
   {
@@ -2887,33 +2887,33 @@
    "seed": 4,
    "generations": 8,
    "d0": 20.2528085357147,
-   "seconds": 5.909780740737915,
+   "seconds": 5.445600271224976,
    "values": {
-    "points": 8702,
-    "length mm": 5.0225900185647365,
-    "d P50": 5.83433029913105,
-    "d P90": 12.860087875745194,
+    "points": 9654,
+    "length mm": 5.441889442561243,
+    "d P50": 5.575096222342527,
+    "d P90": 12.198002569991223,
     "d P99": 20.2528085357147,
-    "arc/chord mean": 1.195614865606535,
-    "arc/chord P90": 1.2000163020696166,
-    "curvature 1/um": 0.17582778507241653,
-    "tips": 68,
-    "tips/mm": 13.53883150897349,
-    "junctions": 98,
+    "arc/chord mean": 1.1647570598278036,
+    "arc/chord P90": 1.3546525849229691,
+    "curvature 1/um": 0.17422990928950163,
+    "tips": 63,
+    "tips/mm": 11.576861431118829,
+    "junctions": 95,
     "b0": 1,
-    "b1": 16,
-    "FA": 0.1509927109822262,
-    "min clearance um": 1.0012426302933906,
+    "b1": 17,
+    "FA": 0.17904347248198127,
+    "min clearance um": 1.0019222711431783,
     "violations": 0,
-    "length density mm/mm3": 60.178375501492205,
+    "length density mm/mm3": 65.68046458741217,
     "bound_terminations": 0,
     "walk_bound_terminations": 0,
     "collision_truncated_stems": 0,
     "collision_terminations": 17,
-    "anastomosis_bridges": 16,
+    "anastomosis_bridges": 17,
     "anastomosis_bridges_arteriovenous": 0,
-    "anastomosis_no_partner": 0,
-    "anastomosis_collision_failed": 4
+    "anastomosis_no_partner": 1,
+    "anastomosis_collision_failed": 0
    }
   },
   {
@@ -2936,33 +2936,33 @@
    "seed": 5,
    "generations": 8,
    "d0": 22.20613743442521,
-   "seconds": 5.56015944480896,
+   "seconds": 5.917454481124878,
    "values": {
-    "points": 11581,
-    "length mm": 10.381925325257159,
-    "d P50": 6.023915823569435,
-    "d P90": 12.849664911459968,
+    "points": 12281,
+    "length mm": 10.985908299631035,
+    "d P50": 5.874114520346096,
+    "d P90": 11.820000090527332,
     "d P99": 22.20613743442521,
-    "arc/chord mean": 1.2265589842750753,
-    "arc/chord P90": 1.2008548762000009,
-    "curvature 1/um": 0.12882165141531102,
-    "tips": 91,
-    "tips/mm": 8.765233533188214,
-    "junctions": 129,
+    "arc/chord mean": 1.1900619090298483,
+    "arc/chord P90": 1.2887580147583846,
+    "curvature 1/um": 0.12542052490004116,
+    "tips": 89,
+    "tips/mm": 8.1012873558201,
+    "junctions": 125,
     "b0": 1,
-    "b1": 20,
-    "FA": 0.09981169022969531,
+    "b1": 19,
+    "FA": 0.09954167555946855,
     "min clearance um": 1.0019628189524483,
     "violations": 0,
-    "length density mm/mm3": 35.94078100035911,
+    "length density mm/mm3": 37.626405402622225,
     "bound_terminations": 0,
     "walk_bound_terminations": 0,
     "collision_truncated_stems": 0,
     "collision_terminations": 15,
-    "anastomosis_bridges": 20,
+    "anastomosis_bridges": 19,
     "anastomosis_bridges_arteriovenous": 0,
     "anastomosis_no_partner": 1,
-    "anastomosis_collision_failed": 3
+    "anastomosis_collision_failed": 2
    }
   },
   {
@@ -2985,33 +2985,33 @@
    "seed": 1,
    "generations": 8,
    "d0": 28.12172681831621,
-   "seconds": 6.557452917098999,
+   "seconds": 6.0797247886657715,
    "values": {
-    "points": 10612,
-    "length mm": 7.5604584502857595,
-    "d P50": 7.684620253776351,
-    "d P90": 17.74818876190767,
+    "points": 12274,
+    "length mm": 8.693239561493359,
+    "d P50": 6.566992730382093,
+    "d P90": 16.21260513182716,
     "d P99": 28.12172681831621,
-    "arc/chord mean": 1.3133331951051483,
-    "arc/chord P90": 1.8834117031162032,
-    "curvature 1/um": 0.14012754158877735,
-    "tips": 47,
-    "tips/mm": 6.216554235308781,
-    "junctions": 113,
+    "arc/chord mean": 1.3156333115021677,
+    "arc/chord P90": 2.0285091497247363,
+    "curvature 1/um": 0.13395269144879238,
+    "tips": 39,
+    "tips/mm": 4.486244710516229,
+    "junctions": 103,
     "b0": 1,
-    "b1": 34,
-    "FA": 0.04886049277639992,
+    "b1": 33,
+    "FA": 0.03417424853084166,
     "min clearance um": 1.0024437790031162,
     "violations": 0,
-    "length density mm/mm3": 47.28390190067311,
+    "length density mm/mm3": 53.45752457425855,
     "bound_terminations": 0,
     "walk_bound_terminations": 0,
     "collision_truncated_stems": 0,
     "collision_terminations": 12,
-    "anastomosis_bridges": 34,
+    "anastomosis_bridges": 33,
     "anastomosis_bridges_arteriovenous": 0,
-    "anastomosis_no_partner": 1,
-    "anastomosis_collision_failed": 3
+    "anastomosis_no_partner": 2,
+    "anastomosis_collision_failed": 1
    }
   },
   {
@@ -3034,32 +3034,32 @@
    "seed": 2,
    "generations": 8,
    "d0": 17.916210762972646,
-   "seconds": 4.447382926940918,
+   "seconds": 4.70561146736145,
    "values": {
-    "points": 10131,
-    "length mm": 9.522088672852057,
-    "d P50": 4.650113565372431,
-    "d P90": 10.515944899077061,
+    "points": 11054,
+    "length mm": 10.287123812844213,
+    "d P50": 4.483377260771342,
+    "d P90": 9.651777999919556,
     "d P99": 17.916210762972646,
-    "arc/chord mean": 1.7541163666792643,
-    "arc/chord P90": 3.4383386425033398,
-    "curvature 1/um": 0.13932114250053282,
-    "tips": 57,
-    "tips/mm": 5.986081621200379,
-    "junctions": 125,
+    "arc/chord mean": 1.3304207503413348,
+    "arc/chord P90": 2.061542762273357,
+    "curvature 1/um": 0.13876001585745795,
+    "tips": 44,
+    "tips/mm": 4.277191642727469,
+    "junctions": 112,
     "b0": 1,
     "b1": 35,
-    "FA": 0.08943127328713135,
-    "min clearance um": 1.0008182585629466,
+    "FA": 0.08294893878419651,
+    "min clearance um": 1.0020387738509626,
     "violations": 0,
-    "length density mm/mm3": 77.34448116064883,
+    "length density mm/mm3": 83.95164558786664,
     "bound_terminations": 0,
     "walk_bound_terminations": 0,
     "collision_truncated_stems": 0,
     "collision_terminations": 11,
     "anastomosis_bridges": 35,
     "anastomosis_bridges_arteriovenous": 0,
-    "anastomosis_no_partner": 8,
+    "anastomosis_no_partner": 4,
     "anastomosis_collision_failed": 1
    }
   },
@@ -3083,33 +3083,33 @@
    "seed": 3,
    "generations": 8,
    "d0": 28.943142367151594,
-   "seconds": 3.554915189743042,
+   "seconds": 1.8933591842651367,
    "values": {
-    "points": 3775,
-    "length mm": 3.772602900637658,
-    "d P50": 8.81867726979975,
-    "d P90": 20.14237142453009,
+    "points": 4575,
+    "length mm": 4.6752574251778105,
+    "d P50": 7.276748628769968,
+    "d P90": 19.55513633654937,
     "d P99": 28.943142367151594,
-    "arc/chord mean": 1.2770692006292232,
-    "arc/chord P90": 1.2093225965938623,
-    "curvature 1/um": 0.10157202326550913,
-    "tips": 24,
-    "tips/mm": 6.361655502078801,
-    "junctions": 42,
+    "arc/chord mean": 1.3179747851872798,
+    "arc/chord P90": 2.313032620560427,
+    "curvature 1/um": 0.09574957023168847,
+    "tips": 16,
+    "tips/mm": 3.422271448377302,
+    "junctions": 40,
     "b0": 1,
-    "b1": 10,
-    "FA": 0.08838887886261092,
+    "b1": 13,
+    "FA": 0.12359541967604444,
     "min clearance um": 1.0014335613584242,
     "violations": 0,
-    "length density mm/mm3": 36.42906387734909,
+    "length density mm/mm3": 41.657339625282205,
     "bound_terminations": 0,
     "walk_bound_terminations": 0,
     "collision_truncated_stems": 0,
     "collision_terminations": 9,
-    "anastomosis_bridges": 10,
+    "anastomosis_bridges": 13,
     "anastomosis_bridges_arteriovenous": 0,
-    "anastomosis_no_partner": 0,
-    "anastomosis_collision_failed": 5
+    "anastomosis_no_partner": 1,
+    "anastomosis_collision_failed": 0
    }
   },
   {
@@ -3132,33 +3132,33 @@
    "seed": 4,
    "generations": 8,
    "d0": 20.2528085357147,
-   "seconds": 6.852341890335083,
+   "seconds": 5.576945066452026,
    "values": {
-    "points": 9060,
-    "length mm": 5.257448771112941,
-    "d P50": 5.659146584780204,
-    "d P90": 12.198002569991223,
+    "points": 10375,
+    "length mm": 5.9259283689049695,
+    "d P50": 4.969124577726406,
+    "d P90": 12.137047838855823,
     "d P99": 20.2528085357147,
-    "arc/chord mean": 1.298682073165137,
-    "arc/chord P90": 1.6177468498958596,
-    "curvature 1/um": 0.17876034418095296,
-    "tips": 54,
-    "tips/mm": 10.27114145109755,
-    "junctions": 102,
+    "arc/chord mean": 1.244390120506597,
+    "arc/chord P90": 1.8541053180032976,
+    "curvature 1/um": 0.17923199127396297,
+    "tips": 46,
+    "tips/mm": 7.76249679988963,
+    "junctions": 98,
     "b0": 1,
-    "b1": 25,
-    "FA": 0.14037974649984905,
+    "b1": 27,
+    "FA": 0.14115085403843036,
     "min clearance um": 1.0019222711431783,
     "violations": 0,
-    "length density mm/mm3": 63.6789201770586,
+    "length density mm/mm3": 70.1864780381071,
     "bound_terminations": 0,
     "walk_bound_terminations": 0,
     "collision_truncated_stems": 0,
     "collision_terminations": 17,
-    "anastomosis_bridges": 25,
+    "anastomosis_bridges": 27,
     "anastomosis_bridges_arteriovenous": 0,
-    "anastomosis_no_partner": 0,
-    "anastomosis_collision_failed": 7
+    "anastomosis_no_partner": 1,
+    "anastomosis_collision_failed": 0
    }
   },
   {
@@ -3181,33 +3181,33 @@
    "seed": 5,
    "generations": 8,
    "d0": 22.20613743442521,
-   "seconds": 6.716784954071045,
+   "seconds": 7.838927745819092,
    "values": {
-    "points": 12249,
-    "length mm": 10.890091635558123,
-    "d P50": 5.874114520346095,
-    "d P90": 11.820000090527332,
+    "points": 13929,
+    "length mm": 12.23351065084484,
+    "d P50": 5.313316111096058,
+    "d P90": 11.741743062271407,
     "d P99": 22.20613743442521,
-    "arc/chord mean": 1.3304497472318833,
-    "arc/chord P90": 1.3694889158453878,
-    "curvature 1/um": 0.1335313980449434,
-    "tips": 64,
-    "tips/mm": 5.876901879413796,
-    "junctions": 140,
+    "arc/chord mean": 1.238427837137876,
+    "arc/chord P90": 1.6989331652949984,
+    "curvature 1/um": 0.12840760449637645,
+    "tips": 58,
+    "tips/mm": 4.741075694080877,
+    "junctions": 138,
     "b0": 1,
-    "b1": 39,
-    "FA": 0.09039725968274251,
+    "b1": 41,
+    "FA": 0.07337585784202813,
     "min clearance um": 1.0019628189524483,
     "violations": 0,
-    "length density mm/mm3": 37.643823530979674,
+    "length density mm/mm3": 41.823480764505504,
     "bound_terminations": 0,
     "walk_bound_terminations": 0,
     "collision_truncated_stems": 0,
     "collision_terminations": 15,
-    "anastomosis_bridges": 39,
+    "anastomosis_bridges": 41,
     "anastomosis_bridges_arteriovenous": 0,
     "anastomosis_no_partner": 2,
-    "anastomosis_collision_failed": 7
+    "anastomosis_collision_failed": 4
    }
   },
   {
@@ -3230,33 +3230,33 @@
    "seed": 1,
    "generations": 8,
    "d0": 28.12172681831621,
-   "seconds": 8.751556158065796,
+   "seconds": 7.2874908447265625,
    "values": {
-    "points": 10889,
-    "length mm": 7.896834159219158,
-    "d P50": 7.2445037888703725,
-    "d P90": 17.6866105148731,
+    "points": 14468,
+    "length mm": 10.408983211577251,
+    "d P50": 5.679970721256589,
+    "d P90": 14.895799558952517,
     "d P99": 28.12172681831621,
-    "arc/chord mean": 1.3579140770894345,
-    "arc/chord P90": 2.304634724973695,
-    "curvature 1/um": 0.14164463330770163,
-    "tips": 34,
-    "tips/mm": 4.3055228607411875,
-    "junctions": 116,
+    "arc/chord mean": 1.3308025875972573,
+    "arc/chord P90": 1.9880481338995613,
+    "curvature 1/um": 0.1289074826093178,
+    "tips": 22,
+    "tips/mm": 2.1135589858124466,
+    "junctions": 110,
     "b0": 1,
-    "b1": 42,
-    "FA": 0.055448940289110425,
+    "b1": 45,
+    "FA": 0.03426392931708153,
     "min clearance um": 1.0024437790031162,
     "violations": 0,
-    "length density mm/mm3": 48.615175924992144,
+    "length density mm/mm3": 61.8544778342096,
     "bound_terminations": 0,
     "walk_bound_terminations": 0,
     "collision_truncated_stems": 0,
     "collision_terminations": 12,
-    "anastomosis_bridges": 42,
+    "anastomosis_bridges": 45,
     "anastomosis_bridges_arteriovenous": 0,
-    "anastomosis_no_partner": 1,
-    "anastomosis_collision_failed": 9
+    "anastomosis_no_partner": 3,
+    "anastomosis_collision_failed": 0
    }
   },
   {
@@ -3279,33 +3279,33 @@
    "seed": 2,
    "generations": 8,
    "d0": 17.916210762972646,
-   "seconds": 4.8363354206085205,
+   "seconds": 5.337520360946655,
    "values": {
-    "points": 10806,
-    "length mm": 10.11158488057026,
-    "d P50": 4.532922542400377,
-    "d P90": 9.651777999919556,
+    "points": 11770,
+    "length mm": 10.919772754812433,
+    "d P50": 4.254583214393176,
+    "d P90": 9.62487036452785,
     "d P99": 17.916210762972646,
-    "arc/chord mean": 1.9412381895016528,
-    "arc/chord P90": 4.459147809219343,
-    "curvature 1/um": 0.14335834858642593,
-    "tips": 33,
-    "tips/mm": 3.263583344230297,
-    "junctions": 139,
+    "arc/chord mean": 1.470966920390403,
+    "arc/chord P90": 2.631694882406907,
+    "curvature 1/um": 0.13897411708703408,
+    "tips": 26,
+    "tips/mm": 2.381001929599825,
+    "junctions": 114,
     "b0": 1,
-    "b1": 54,
-    "FA": 0.07218824137869638,
+    "b1": 45,
+    "FA": 0.0825325262436002,
     "min clearance um": 1.0020387738509626,
     "violations": 0,
-    "length density mm/mm3": 82.30820642899923,
+    "length density mm/mm3": 87.37655266955832,
     "bound_terminations": 0,
     "walk_bound_terminations": 0,
     "collision_truncated_stems": 0,
     "collision_terminations": 11,
-    "anastomosis_bridges": 54,
+    "anastomosis_bridges": 45,
     "anastomosis_bridges_arteriovenous": 0,
-    "anastomosis_no_partner": 9,
-    "anastomosis_collision_failed": 1
+    "anastomosis_no_partner": 5,
+    "anastomosis_collision_failed": 2
    }
   },
   {
@@ -3328,33 +3328,33 @@
    "seed": 3,
    "generations": 8,
    "d0": 28.943142367151594,
-   "seconds": 3.391895294189453,
+   "seconds": 2.1840274333953857,
    "values": {
-    "points": 3891,
-    "length mm": 3.8925067090184804,
-    "d P50": 8.81867726979975,
-    "d P90": 20.14237142453009,
+    "points": 4601,
+    "length mm": 4.594449306716578,
+    "d P50": 8.12275535745391,
+    "d P90": 19.55513633654937,
     "d P99": 28.943142367151594,
-    "arc/chord mean": 1.4678990374062049,
-    "arc/chord P90": 2.765367275144876,
-    "curvature 1/um": 0.10231004662475018,
-    "tips": 21,
-    "tips/mm": 5.394981067430268,
-    "junctions": 47,
+    "arc/chord mean": 1.3856327086681268,
+    "arc/chord P90": 2.638337729166311,
+    "curvature 1/um": 0.09820935116710496,
+    "tips": 14,
+    "tips/mm": 3.0471551790839313,
+    "junctions": 42,
     "b0": 1,
-    "b1": 14,
-    "FA": 0.08092391100084084,
+    "b1": 15,
+    "FA": 0.17674621297339155,
     "min clearance um": 1.0014335613584242,
     "violations": 0,
-    "length density mm/mm3": 37.459963683178714,
+    "length density mm/mm3": 41.42773901177172,
     "bound_terminations": 0,
     "walk_bound_terminations": 0,
     "collision_truncated_stems": 0,
     "collision_terminations": 9,
-    "anastomosis_bridges": 14,
+    "anastomosis_bridges": 15,
     "anastomosis_bridges_arteriovenous": 0,
-    "anastomosis_no_partner": 1,
-    "anastomosis_collision_failed": 6
+    "anastomosis_no_partner": 0,
+    "anastomosis_collision_failed": 1
    }
   },
   {
@@ -3377,33 +3377,33 @@
    "seed": 4,
    "generations": 8,
    "d0": 20.2528085357147,
-   "seconds": 6.666687488555908,
+   "seconds": 6.809767723083496,
    "values": {
-    "points": 9671,
-    "length mm": 5.56872078180177,
-    "d P50": 5.575096222342527,
-    "d P90": 12.198002569991223,
+    "points": 11886,
+    "length mm": 7.221861890544793,
+    "d P50": 4.91510800380873,
+    "d P90": 11.835053208057998,
     "d P99": 20.2528085357147,
-    "arc/chord mean": 1.3464723774301621,
-    "arc/chord P90": 1.7980961390946384,
-    "curvature 1/um": 0.1868566997290634,
-    "tips": 33,
-    "tips/mm": 5.9259570183231185,
-    "junctions": 103,
+    "arc/chord mean": 1.296785008659726,
+    "arc/chord P90": 2.041983521292654,
+    "curvature 1/um": 0.17407665503332917,
+    "tips": 26,
+    "tips/mm": 3.600179620443925,
+    "junctions": 98,
     "b0": 1,
-    "b1": 36,
-    "FA": 0.16034128875364295,
+    "b1": 37,
+    "FA": 0.11681437768910015,
     "min clearance um": 1.0019222711431783,
     "violations": 0,
-    "length density mm/mm3": 66.96396339939646,
+    "length density mm/mm3": 81.96117363724275,
     "bound_terminations": 0,
     "walk_bound_terminations": 0,
     "collision_truncated_stems": 0,
     "collision_terminations": 17,
-    "anastomosis_bridges": 36,
+    "anastomosis_bridges": 37,
     "anastomosis_bridges_arteriovenous": 0,
-    "anastomosis_no_partner": 0,
-    "anastomosis_collision_failed": 9
+    "anastomosis_no_partner": 1,
+    "anastomosis_collision_failed": 0
    }
   },
   {
@@ -3426,33 +3426,33 @@
    "seed": 5,
    "generations": 8,
    "d0": 22.20613743442521,
-   "seconds": 8.00261402130127,
+   "seconds": 7.424929141998291,
    "values": {
-    "points": 12673,
-    "length mm": 11.473650775015049,
-    "d P50": 5.636043944900664,
-    "d P90": 11.741743062271407,
+    "points": 14721,
+    "length mm": 13.270462315696232,
+    "d P50": 5.151580607265418,
+    "d P90": 11.2989601582345,
     "d P99": 22.20613743442521,
-    "arc/chord mean": 1.5629059882069438,
-    "arc/chord P90": 2.6845800372206017,
-    "curvature 1/um": 0.13188689157763586,
-    "tips": 49,
-    "tips/mm": 4.2706546469674755,
-    "junctions": 145,
+    "arc/chord mean": 1.2933905366847835,
+    "arc/chord P90": 1.8938386693217895,
+    "curvature 1/um": 0.12525868948511595,
+    "tips": 39,
+    "tips/mm": 2.9388576729441453,
+    "junctions": 143,
     "b0": 1,
-    "b1": 49,
-    "FA": 0.09862957468998344,
+    "b1": 53,
+    "FA": 0.09113219867284378,
     "min clearance um": 1.0019628189524483,
     "violations": 0,
-    "length density mm/mm3": 39.5512792974,
+    "length density mm/mm3": 45.89537684087496,
     "bound_terminations": 0,
     "walk_bound_terminations": 0,
     "collision_truncated_stems": 0,
     "collision_terminations": 15,
-    "anastomosis_bridges": 49,
+    "anastomosis_bridges": 53,
     "anastomosis_bridges_arteriovenous": 0,
-    "anastomosis_no_partner": 4,
-    "anastomosis_collision_failed": 14
+    "anastomosis_no_partner": 3,
+    "anastomosis_collision_failed": 5
    }
   },
   {
@@ -3476,82 +3476,32 @@
    "seed": 1,
    "generations": 8,
    "d0": 28.12172681831621,
-   "seconds": 6.321465730667114,
+   "seconds": 7.89021110534668,
    "values": {
-    "points": 8415,
-    "length mm": 6.034131490097021,
-    "d P50": 8.064791624761565,
+    "points": 9707,
+    "length mm": 6.904026413150692,
+    "d P50": 7.310865511488532,
     "d P90": 22.17722701001225,
     "d P99": 28.12172681831621,
-    "arc/chord mean": 1.2822024084412484,
-    "arc/chord P90": 1.5247989729848679,
-    "curvature 1/um": 0.1400470062534855,
-    "tips": 71,
-    "tips/mm": 11.766399210312603,
+    "arc/chord mean": 1.2451015604124704,
+    "arc/chord P90": 1.5517094468027628,
+    "curvature 1/um": 0.13814127576254004,
+    "tips": 65,
+    "tips/mm": 9.414795962568874,
     "junctions": 95,
     "b0": 1,
-    "b1": 13,
-    "FA": 0.14858430557944483,
+    "b1": 16,
+    "FA": 0.19639798269646838,
     "min clearance um": 1.0006894979662793,
     "violations": 0,
-    "length density mm/mm3": 107.15163452125591,
+    "length density mm/mm3": 122.59887212618989,
     "bound_terminations": 0,
     "walk_bound_terminations": 1,
     "collision_truncated_stems": 0,
     "collision_terminations": 28,
-    "anastomosis_bridges": 14,
-    "anastomosis_bridges_arteriovenous": 1,
-    "anastomosis_no_partner": 1,
-    "anastomosis_collision_failed": 3
-   }
-  },
-  {
-   "configuration": "anastomosis arteriovenous, fraction 0.25",
-   "options": [
-    "--iterations",
-    "8",
-    "8",
-    "--tortuosity",
-    "walk",
-    "--persistence",
-    "8",
-    "--avoid-collisions",
-    "--anastomose",
-    "--anastomose-mode",
-    "arteriovenous",
-    "--anastomosis-fraction",
-    "0.25",
-    "--grow-in-volume"
-   ],
-   "seed": 2,
-   "generations": 8,
-   "d0": 17.916210762972646,
-   "seconds": 4.31434965133667,
-   "values": {
-    "points": 8296,
-    "length mm": 7.463030717715994,
-    "d P50": 5.005883551185292,
-    "d P90": 12.802566983199776,
-    "d P99": 17.916210762972646,
-    "arc/chord mean": 1.321694137493548,
-    "arc/chord P90": 1.4622724673342635,
-    "curvature 1/um": 0.14874801496500267,
-    "tips": 69,
-    "tips/mm": 9.245573629518297,
-    "junctions": 95,
-    "b0": 1,
-    "b1": 14,
-    "FA": 0.12942018822233636,
-    "min clearance um": 1.004091816230519,
-    "violations": 0,
-    "length density mm/mm3": 149.67345788451726,
-    "bound_terminations": 0,
-    "walk_bound_terminations": 0,
-    "collision_truncated_stems": 0,
-    "collision_terminations": 17,
-    "anastomosis_bridges": 15,
-    "anastomosis_bridges_arteriovenous": 3,
-    "anastomosis_no_partner": 2,
+    "anastomosis_bridges": 17,
+    "anastomosis_bridges_arteriovenous": 6,
+    "anastomosis_no_partner": 0,
     "anastomosis_collision_failed": 1
    }
   },
@@ -3573,36 +3523,86 @@
     "0.25",
     "--grow-in-volume"
    ],
+   "seed": 2,
+   "generations": 8,
+   "d0": 17.916210762972646,
+   "seconds": 5.53555703163147,
+   "values": {
+    "points": 8689,
+    "length mm": 7.8170368709911475,
+    "d P50": 4.744172492832224,
+    "d P90": 12.802566983199776,
+    "d P99": 17.916210762972646,
+    "arc/chord mean": 1.2334128973751957,
+    "arc/chord P90": 1.5162069658294477,
+    "curvature 1/um": 0.14849665889419536,
+    "tips": 69,
+    "tips/mm": 8.826874062223947,
+    "junctions": 91,
+    "b0": 1,
+    "b1": 12,
+    "FA": 0.1445958427037833,
+    "min clearance um": 1.0042068684227932,
+    "violations": 0,
+    "length density mm/mm3": 156.77316403302746,
+    "bound_terminations": 0,
+    "walk_bound_terminations": 0,
+    "collision_truncated_stems": 0,
+    "collision_terminations": 17,
+    "anastomosis_bridges": 13,
+    "anastomosis_bridges_arteriovenous": 4,
+    "anastomosis_no_partner": 0,
+    "anastomosis_collision_failed": 2
+   }
+  },
+  {
+   "configuration": "anastomosis arteriovenous, fraction 0.25",
+   "options": [
+    "--iterations",
+    "8",
+    "8",
+    "--tortuosity",
+    "walk",
+    "--persistence",
+    "8",
+    "--avoid-collisions",
+    "--anastomose",
+    "--anastomose-mode",
+    "arteriovenous",
+    "--anastomosis-fraction",
+    "0.25",
+    "--grow-in-volume"
+   ],
    "seed": 3,
    "generations": 8,
    "d0": 28.943142367151594,
-   "seconds": 6.87551474571228,
+   "seconds": 8.157880544662476,
    "values": {
-    "points": 9490,
-    "length mm": 8.091075390555833,
-    "d P50": 8.573370605505225,
-    "d P90": 20.14237142453009,
+    "points": 10335,
+    "length mm": 8.78368936191464,
+    "d P50": 8.282714786834692,
+    "d P90": 19.55513633654937,
     "d P99": 28.943142367151594,
-    "arc/chord mean": 1.2400405873201996,
-    "arc/chord P90": 1.4374044696476822,
-    "curvature 1/um": 0.1262674879546258,
-    "tips": 78,
-    "tips/mm": 9.640251293547967,
-    "junctions": 106,
+    "arc/chord mean": 1.283359057320037,
+    "arc/chord P90": 1.745863154797712,
+    "curvature 1/um": 0.12356231374609183,
+    "tips": 70,
+    "tips/mm": 7.969316435928881,
+    "junctions": 102,
     "b0": 1,
-    "b1": 15,
-    "FA": 0.1616498362227798,
+    "b1": 17,
+    "FA": 0.18208805096144745,
     "min clearance um": 1.0012608644780512,
     "violations": 0,
-    "length density mm/mm3": 174.3565675247991,
+    "length density mm/mm3": 189.2818758227292,
     "bound_terminations": 0,
     "walk_bound_terminations": 0,
     "collision_truncated_stems": 0,
     "collision_terminations": 29,
-    "anastomosis_bridges": 16,
+    "anastomosis_bridges": 18,
     "anastomosis_bridges_arteriovenous": 5,
-    "anastomosis_no_partner": 1,
-    "anastomosis_collision_failed": 4
+    "anastomosis_no_partner": 0,
+    "anastomosis_collision_failed": 2
    }
   },
   {
@@ -3626,33 +3626,33 @@
    "seed": 4,
    "generations": 8,
    "d0": 20.2528085357147,
-   "seconds": 9.210232973098755,
+   "seconds": 10.586775064468384,
    "values": {
-    "points": 12942,
-    "length mm": 7.239393616597984,
-    "d P50": 5.667519733091787,
-    "d P90": 14.059124482969008,
+    "points": 13915,
+    "length mm": 7.781391118500323,
+    "d P50": 5.388566788186824,
+    "d P90": 13.861598103839846,
     "d P99": 20.2528085357147,
-    "arc/chord mean": 1.2037087042037768,
-    "arc/chord P90": 1.4003202437212103,
-    "curvature 1/um": 0.194345279478143,
-    "tips": 114,
-    "tips/mm": 15.747175252168724,
+    "arc/chord mean": 1.1974358655511492,
+    "arc/chord P90": 1.5231271207985653,
+    "curvature 1/um": 0.18874662586930205,
+    "tips": 116,
+    "tips/mm": 14.907360166514318,
     "junctions": 150,
     "b0": 1,
-    "b1": 19,
-    "FA": 0.18634480177559423,
+    "b1": 18,
+    "FA": 0.14865210944710153,
     "min clearance um": 1.000143021929925,
     "violations": 0,
-    "length density mm/mm3": 778.7955951135431,
+    "length density mm/mm3": 837.1023110346543,
     "bound_terminations": 0,
     "walk_bound_terminations": 0,
     "collision_truncated_stems": 0,
     "collision_terminations": 47,
-    "anastomosis_bridges": 20,
-    "anastomosis_bridges_arteriovenous": 4,
+    "anastomosis_bridges": 19,
+    "anastomosis_bridges_arteriovenous": 11,
     "anastomosis_no_partner": 0,
-    "anastomosis_collision_failed": 4
+    "anastomosis_collision_failed": 3
    }
   },
   {
@@ -3676,33 +3676,33 @@
    "seed": 5,
    "generations": 8,
    "d0": 22.20613743442521,
-   "seconds": 4.928210735321045,
+   "seconds": 4.8607378005981445,
    "values": {
-    "points": 7954,
-    "length mm": 7.591380615383519,
-    "d P50": 6.123157766615926,
-    "d P90": 16.27117050825195,
+    "points": 8654,
+    "length mm": 8.246345642547661,
+    "d P50": 6.025008283056864,
+    "d P90": 14.909728129644229,
     "d P99": 22.20613743442521,
-    "arc/chord mean": 1.2221368003955169,
-    "arc/chord P90": 1.6947996404946564,
-    "curvature 1/um": 0.12996754686762005,
-    "tips": 73,
-    "tips/mm": 9.616169139519823,
-    "junctions": 91,
-    "b0": 2,
-    "b1": 11,
-    "FA": 0.11555093688065592,
+    "arc/chord mean": 1.2521618043376028,
+    "arc/chord P90": 1.7911903767106945,
+    "curvature 1/um": 0.12670830055296253,
+    "tips": 65,
+    "tips/mm": 7.882279353490527,
+    "junctions": 89,
+    "b0": 1,
+    "b1": 13,
+    "FA": 0.13411643390213607,
     "min clearance um": 1.0003076078024784,
     "violations": 0,
-    "length density mm/mm3": 181.8450264459274,
+    "length density mm/mm3": 197.53415319639845,
     "bound_terminations": 0,
     "walk_bound_terminations": 0,
     "collision_truncated_stems": 0,
     "collision_terminations": 21,
-    "anastomosis_bridges": 11,
-    "anastomosis_bridges_arteriovenous": 0,
+    "anastomosis_bridges": 14,
+    "anastomosis_bridges_arteriovenous": 2,
     "anastomosis_no_partner": 0,
-    "anastomosis_collision_failed": 3
+    "anastomosis_collision_failed": 0
    }
   },
   {
@@ -3726,33 +3726,33 @@
    "seed": 1,
    "generations": 8,
    "d0": 28.12172681831621,
-   "seconds": 7.9212446212768555,
+   "seconds": 9.55136251449585,
    "values": {
-    "points": 8743,
-    "length mm": 6.324069789790197,
-    "d P50": 7.812807024564009,
-    "d P90": 22.17722701001225,
+    "points": 10703,
+    "length mm": 7.855639473509094,
+    "d P50": 6.705297313284593,
+    "d P90": 20.94653098921209,
     "d P99": 28.12172681831621,
-    "arc/chord mean": 1.3195056585703413,
-    "arc/chord P90": 1.5876962356818058,
-    "curvature 1/um": 0.14212379570324718,
-    "tips": 56,
-    "tips/mm": 8.855057243423909,
-    "junctions": 96,
+    "arc/chord mean": 1.2776488188425092,
+    "arc/chord P90": 1.6107910774672238,
+    "curvature 1/um": 0.13339674380155722,
+    "tips": 49,
+    "tips/mm": 6.2375571288930125,
+    "junctions": 99,
     "b0": 1,
-    "b1": 21,
-    "FA": 0.13770154220287092,
+    "b1": 26,
+    "FA": 0.18304569988023492,
     "min clearance um": 1.0006894979662793,
     "violations": 0,
-    "length density mm/mm3": 112.30024004525288,
+    "length density mm/mm3": 139.49722692944889,
     "bound_terminations": 0,
     "walk_bound_terminations": 1,
     "collision_truncated_stems": 0,
     "collision_terminations": 28,
-    "anastomosis_bridges": 22,
-    "anastomosis_bridges_arteriovenous": 1,
-    "anastomosis_no_partner": 2,
-    "anastomosis_collision_failed": 7
+    "anastomosis_bridges": 27,
+    "anastomosis_bridges_arteriovenous": 8,
+    "anastomosis_no_partner": 0,
+    "anastomosis_collision_failed": 3
    }
   },
   {
@@ -3776,33 +3776,33 @@
    "seed": 2,
    "generations": 8,
    "d0": 17.916210762972646,
-   "seconds": 5.606444835662842,
+   "seconds": 6.767269134521484,
    "values": {
-    "points": 8737,
-    "length mm": 7.905181091036243,
-    "d P50": 4.744172492832224,
-    "d P90": 12.802566983199776,
+    "points": 9660,
+    "length mm": 8.8735345613165,
+    "d P50": 4.300406342515788,
+    "d P90": 12.386422270584873,
     "d P99": 17.916210762972646,
-    "arc/chord mean": 1.4506071343760631,
-    "arc/chord P90": 1.7209776528172556,
-    "curvature 1/um": 0.1508748914862368,
-    "tips": 46,
-    "tips/mm": 5.818968530924588,
-    "junctions": 102,
+    "arc/chord mean": 1.3092692232075878,
+    "arc/chord P90": 1.8271780433992766,
+    "curvature 1/um": 0.15144872921877858,
+    "tips": 43,
+    "tips/mm": 4.845870571965227,
+    "junctions": 97,
     "b0": 1,
-    "b1": 29,
-    "FA": 0.1237798514882011,
+    "b1": 28,
+    "FA": 0.11534063858434776,
     "min clearance um": 1.0042068684227932,
     "violations": 0,
-    "length density mm/mm3": 158.54092443837666,
+    "length density mm/mm3": 177.96156168796782,
     "bound_terminations": 0,
     "walk_bound_terminations": 0,
     "collision_truncated_stems": 0,
     "collision_terminations": 17,
-    "anastomosis_bridges": 30,
-    "anastomosis_bridges_arteriovenous": 3,
-    "anastomosis_no_partner": 3,
-    "anastomosis_collision_failed": 3
+    "anastomosis_bridges": 29,
+    "anastomosis_bridges_arteriovenous": 10,
+    "anastomosis_no_partner": 0,
+    "anastomosis_collision_failed": 4
    }
   },
   {
@@ -3826,32 +3826,82 @@
    "seed": 3,
    "generations": 8,
    "d0": 28.943142367151594,
-   "seconds": 8.559188604354858,
+   "seconds": 8.359941482543945,
    "values": {
-    "points": 9987,
-    "length mm": 8.481612247028567,
-    "d P50": 8.28769013306037,
-    "d P90": 19.599795889403126,
+    "points": 11756,
+    "length mm": 10.00097385237132,
+    "d P50": 6.919569951863578,
+    "d P90": 19.496750274741313,
     "d P99": 28.943142367151594,
-    "arc/chord mean": 1.307188714705593,
-    "arc/chord P90": 1.7420233366726599,
-    "curvature 1/um": 0.12911050360591872,
-    "tips": 59,
-    "tips/mm": 6.956224628244466,
-    "junctions": 111,
+    "arc/chord mean": 1.37020162299374,
+    "arc/chord P90": 2.1542444538989884,
+    "curvature 1/um": 0.12307556516812931,
+    "tips": 46,
+    "tips/mm": 4.5995520715308125,
+    "junctions": 104,
     "b0": 1,
-    "b1": 27,
-    "FA": 0.16128976222835592,
+    "b1": 30,
+    "FA": 0.16076554430132972,
     "min clearance um": 1.0012608644780512,
     "violations": 0,
-    "length density mm/mm3": 182.772342004665,
+    "length density mm/mm3": 215.51343778604203,
     "bound_terminations": 0,
     "walk_bound_terminations": 0,
     "collision_truncated_stems": 0,
     "collision_terminations": 29,
-    "anastomosis_bridges": 28,
-    "anastomosis_bridges_arteriovenous": 8,
-    "anastomosis_no_partner": 2,
+    "anastomosis_bridges": 31,
+    "anastomosis_bridges_arteriovenous": 11,
+    "anastomosis_no_partner": 0,
+    "anastomosis_collision_failed": 2
+   }
+  },
+  {
+   "configuration": "anastomosis arteriovenous, fraction 0.5",
+   "options": [
+    "--iterations",
+    "8",
+    "8",
+    "--tortuosity",
+    "walk",
+    "--persistence",
+    "8",
+    "--avoid-collisions",
+    "--anastomose",
+    "--anastomose-mode",
+    "arteriovenous",
+    "--anastomosis-fraction",
+    "0.5",
+    "--grow-in-volume"
+   ],
+   "seed": 4,
+   "generations": 8,
+   "d0": 20.2528085357147,
+   "seconds": 16.684179544448853,
+   "values": {
+    "points": 14909,
+    "length mm": 8.26484755244888,
+    "d P50": 5.082351448863827,
+    "d P90": 13.686924856942701,
+    "d P99": 20.2528085357147,
+    "arc/chord mean": 1.2376341334571832,
+    "arc/chord P90": 1.733209720199552,
+    "curvature 1/um": 0.19223672643096176,
+    "tips": 98,
+    "tips/mm": 11.857447990188584,
+    "junctions": 152,
+    "b0": 1,
+    "b1": 28,
+    "FA": 0.16468003531714734,
+    "min clearance um": 1.000143021929925,
+    "violations": 0,
+    "length density mm/mm3": 889.1113274148651,
+    "bound_terminations": 0,
+    "walk_bound_terminations": 0,
+    "collision_truncated_stems": 0,
+    "collision_terminations": 47,
+    "anastomosis_bridges": 29,
+    "anastomosis_bridges_arteriovenous": 13,
+    "anastomosis_no_partner": 0,
     "anastomosis_collision_failed": 9
    }
   },
@@ -3873,40 +3923,40 @@
     "0.5",
     "--grow-in-volume"
    ],
-   "seed": 4,
+   "seed": 5,
    "generations": 8,
-   "d0": 20.2528085357147,
-   "seconds": 10.14942979812622,
+   "d0": 22.20613743442521,
+   "seconds": 6.7006731033325195,
    "values": {
-    "points": 13693,
-    "length mm": 7.617727044607348,
-    "d P50": 5.45071722531835,
-    "d P90": 13.861598103839846,
-    "d P99": 20.2528085357147,
-    "arc/chord mean": 1.2925447220356967,
-    "arc/chord P90": 1.8469145019700024,
-    "curvature 1/um": 0.19778248169245172,
-    "tips": 88,
-    "tips/mm": 11.55200225535725,
-    "junctions": 156,
+    "points": 9988,
+    "length mm": 9.181149921375239,
+    "d P50": 5.196708096830758,
+    "d P90": 14.793669246612835,
+    "d P99": 22.20613743442521,
+    "arc/chord mean": 1.3881457846874004,
+    "arc/chord P90": 2.159699147235658,
+    "curvature 1/um": 0.1317702762993143,
+    "tips": 36,
+    "tips/mm": 3.9210774585203136,
+    "junctions": 100,
     "b0": 1,
-    "b1": 35,
-    "FA": 0.17905673387855536,
-    "min clearance um": 1.000143021929925,
+    "b1": 33,
+    "FA": 0.11951998857120268,
+    "min clearance um": 1.0003076078024784,
     "violations": 0,
-    "length density mm/mm3": 819.4957452673293,
+    "length density mm/mm3": 219.9265897527598,
     "bound_terminations": 0,
     "walk_bound_terminations": 0,
     "collision_truncated_stems": 0,
-    "collision_terminations": 47,
-    "anastomosis_bridges": 36,
-    "anastomosis_bridges_arteriovenous": 8,
+    "collision_terminations": 21,
+    "anastomosis_bridges": 34,
+    "anastomosis_bridges_arteriovenous": 2,
     "anastomosis_no_partner": 0,
-    "anastomosis_collision_failed": 7
+    "anastomosis_collision_failed": 2
    }
   },
   {
-   "configuration": "anastomosis arteriovenous, fraction 0.5",
+   "configuration": "anastomosis arteriovenous, fraction 0.75",
    "options": [
     "--iterations",
     "8",
@@ -3920,38 +3970,38 @@
     "--anastomose-mode",
     "arteriovenous",
     "--anastomosis-fraction",
-    "0.5",
+    "0.75",
     "--grow-in-volume"
    ],
-   "seed": 5,
+   "seed": 1,
    "generations": 8,
-   "d0": 22.20613743442521,
-   "seconds": 6.179425954818726,
+   "d0": 28.12172681831621,
+   "seconds": 11.027256965637207,
    "values": {
-    "points": 8431,
-    "length mm": 8.089227278212253,
-    "d P50": 5.958083841377354,
-    "d P90": 14.909728129644229,
-    "d P99": 22.20613743442521,
-    "arc/chord mean": 1.4454800239346788,
-    "arc/chord P90": 1.9227383215920546,
-    "curvature 1/um": 0.13271946444912255,
-    "tips": 52,
-    "tips/mm": 6.428302507961203,
-    "junctions": 98,
-    "b0": 2,
-    "b1": 25,
-    "FA": 0.09160511106262785,
-    "min clearance um": 1.0003076078024784,
+    "points": 11027,
+    "length mm": 8.160555810986196,
+    "d P50": 6.705297313284593,
+    "d P90": 20.489217156626694,
+    "d P99": 28.12172681831621,
+    "arc/chord mean": 1.3181334322220521,
+    "arc/chord P90": 1.7782018175129626,
+    "curvature 1/um": 0.13087652218732812,
+    "tips": 41,
+    "tips/mm": 5.024167587311089,
+    "junctions": 101,
+    "b0": 1,
+    "b1": 31,
+    "FA": 0.1866855836761649,
+    "min clearance um": 1.0006894979662793,
     "violations": 0,
-    "length density mm/mm3": 193.770517230127,
+    "length density mm/mm3": 144.91180631117544,
     "bound_terminations": 0,
-    "walk_bound_terminations": 0,
+    "walk_bound_terminations": 1,
     "collision_truncated_stems": 0,
-    "collision_terminations": 21,
-    "anastomosis_bridges": 25,
-    "anastomosis_bridges_arteriovenous": 0,
-    "anastomosis_no_partner": 0,
+    "collision_terminations": 28,
+    "anastomosis_bridges": 32,
+    "anastomosis_bridges_arteriovenous": 12,
+    "anastomosis_no_partner": 1,
     "anastomosis_collision_failed": 6
    }
   },
@@ -3973,86 +4023,36 @@
     "0.75",
     "--grow-in-volume"
    ],
-   "seed": 1,
-   "generations": 8,
-   "d0": 28.12172681831621,
-   "seconds": 8.74233889579773,
-   "values": {
-    "points": 9182,
-    "length mm": 6.677305739973726,
-    "d P50": 7.634581879775522,
-    "d P90": 22.17722701001225,
-    "d P99": 28.12172681831621,
-    "arc/chord mean": 1.4700404131237763,
-    "arc/chord P90": 2.8905886602043127,
-    "curvature 1/um": 0.14258835392081015,
-    "tips": 46,
-    "tips/mm": 6.889006103857242,
-    "junctions": 102,
-    "b0": 1,
-    "b1": 29,
-    "FA": 0.1608959927955084,
-    "min clearance um": 1.0006894979662793,
-    "violations": 0,
-    "length density mm/mm3": 118.57285931050285,
-    "bound_terminations": 0,
-    "walk_bound_terminations": 1,
-    "collision_truncated_stems": 0,
-    "collision_terminations": 28,
-    "anastomosis_bridges": 30,
-    "anastomosis_bridges_arteriovenous": 3,
-    "anastomosis_no_partner": 4,
-    "anastomosis_collision_failed": 8
-   }
-  },
-  {
-   "configuration": "anastomosis arteriovenous, fraction 0.75",
-   "options": [
-    "--iterations",
-    "8",
-    "8",
-    "--tortuosity",
-    "walk",
-    "--persistence",
-    "8",
-    "--avoid-collisions",
-    "--anastomose",
-    "--anastomose-mode",
-    "arteriovenous",
-    "--anastomosis-fraction",
-    "0.75",
-    "--grow-in-volume"
-   ],
    "seed": 2,
    "generations": 8,
    "d0": 17.916210762972646,
-   "seconds": 5.1442670822143555,
+   "seconds": 8.08649730682373,
    "values": {
-    "points": 9061,
-    "length mm": 8.122116181706437,
-    "d P50": 4.648529314006398,
-    "d P90": 12.802566983199776,
+    "points": 10411,
+    "length mm": 9.46491755710176,
+    "d P50": 4.050513665749833,
+    "d P90": 12.386422270584873,
     "d P99": 17.916210762972646,
-    "arc/chord mean": 1.489410192974884,
-    "arc/chord P90": 2.122145704817546,
-    "curvature 1/um": 0.15424788212266805,
-    "tips": 34,
-    "tips/mm": 4.186101163706413,
-    "junctions": 114,
+    "arc/chord mean": 1.3850892334016667,
+    "arc/chord P90": 2.098125500277145,
+    "curvature 1/um": 0.15177918555165587,
+    "tips": 26,
+    "tips/mm": 2.746986420446057,
+    "junctions": 108,
     "b0": 1,
-    "b1": 41,
-    "FA": 0.11868656179617106,
+    "b1": 42,
+    "FA": 0.12534290866089973,
     "min clearance um": 1.0042068684227932,
     "violations": 0,
-    "length density mm/mm3": 162.89162677168235,
+    "length density mm/mm3": 189.82193601326256,
     "bound_terminations": 0,
     "walk_bound_terminations": 0,
     "collision_truncated_stems": 0,
     "collision_terminations": 17,
-    "anastomosis_bridges": 42,
-    "anastomosis_bridges_arteriovenous": 3,
-    "anastomosis_no_partner": 8,
-    "anastomosis_collision_failed": 4
+    "anastomosis_bridges": 43,
+    "anastomosis_bridges_arteriovenous": 14,
+    "anastomosis_no_partner": 2,
+    "anastomosis_collision_failed": 5
    }
   },
   {
@@ -4076,33 +4076,33 @@
    "seed": 3,
    "generations": 8,
    "d0": 28.943142367151594,
-   "seconds": 9.421325445175171,
+   "seconds": 10.64042067527771,
    "values": {
-    "points": 10128,
-    "length mm": 8.612532736523406,
-    "d P50": 8.28271478683469,
-    "d P90": 19.55513633654937,
+    "points": 12059,
+    "length mm": 10.173348315306963,
+    "d P50": 6.880934599750868,
+    "d P90": 19.496750274741313,
     "d P99": 28.943142367151594,
-    "arc/chord mean": 1.3804212022283213,
-    "arc/chord P90": 2.0286947465045673,
-    "curvature 1/um": 0.12983862206726726,
-    "tips": 50,
-    "tips/mm": 5.805493172520973,
-    "junctions": 112,
+    "arc/chord mean": 1.394517969625651,
+    "arc/chord P90": 2.188483641928975,
+    "curvature 1/um": 0.12487738423603571,
+    "tips": 36,
+    "tips/mm": 3.538657960411509,
+    "junctions": 110,
     "b0": 1,
-    "b1": 32,
-    "FA": 0.14346889464597687,
+    "b1": 38,
+    "FA": 0.13844961862504795,
     "min clearance um": 1.0012608644780512,
     "violations": 0,
-    "length density mm/mm3": 185.59357973452612,
+    "length density mm/mm3": 219.22797735410367,
     "bound_terminations": 0,
     "walk_bound_terminations": 0,
     "collision_truncated_stems": 0,
     "collision_terminations": 29,
-    "anastomosis_bridges": 33,
-    "anastomosis_bridges_arteriovenous": 7,
-    "anastomosis_no_partner": 2,
-    "anastomosis_collision_failed": 11
+    "anastomosis_bridges": 39,
+    "anastomosis_bridges_arteriovenous": 13,
+    "anastomosis_no_partner": 0,
+    "anastomosis_collision_failed": 3
    }
   },
   {
@@ -4126,33 +4126,33 @@
    "seed": 4,
    "generations": 8,
    "d0": 20.2528085357147,
-   "seconds": 13.527225494384766,
+   "seconds": 29.429308652877808,
    "values": {
-    "points": 13997,
-    "length mm": 7.916746069329907,
-    "d P50": 5.108313513953758,
-    "d P90": 13.861598103839846,
+    "points": 16107,
+    "length mm": 9.03805509666905,
+    "d P50": 4.747659855158156,
+    "d P90": 13.503291330070171,
     "d P99": 20.2528085357147,
-    "arc/chord mean": 1.343076548417558,
-    "arc/chord P90": 1.9734327449089462,
-    "curvature 1/um": 0.1994474513504904,
-    "tips": 74,
-    "tips/mm": 9.347274669662802,
-    "junctions": 164,
+    "arc/chord mean": 1.2571654453110042,
+    "arc/chord P90": 1.76953306332175,
+    "curvature 1/um": 0.19129108500247807,
+    "tips": 78,
+    "tips/mm": 8.630175316008716,
+    "junctions": 162,
     "b0": 1,
-    "b1": 46,
-    "FA": 0.1686565382212966,
+    "b1": 43,
+    "FA": 0.16640050338520176,
     "min clearance um": 1.000143021929925,
     "violations": 0,
-    "length density mm/mm3": 851.663453177997,
+    "length density mm/mm3": 972.2910329866983,
     "bound_terminations": 0,
     "walk_bound_terminations": 0,
     "collision_truncated_stems": 0,
     "collision_terminations": 47,
-    "anastomosis_bridges": 47,
-    "anastomosis_bridges_arteriovenous": 11,
-    "anastomosis_no_partner": 1,
-    "anastomosis_collision_failed": 12
+    "anastomosis_bridges": 44,
+    "anastomosis_bridges_arteriovenous": 26,
+    "anastomosis_no_partner": 0,
+    "anastomosis_collision_failed": 15
    }
   },
   {
@@ -4176,33 +4176,33 @@
    "seed": 5,
    "generations": 8,
    "d0": 22.20613743442521,
-   "seconds": 6.962810039520264,
+   "seconds": 7.286923170089722,
    "values": {
-    "points": 8733,
-    "length mm": 8.376952951260348,
-    "d P50": 5.900008909099168,
-    "d P90": 14.909728129644229,
+    "points": 10396,
+    "length mm": 9.637126711323566,
+    "d P50": 5.313316111096058,
+    "d P90": 14.793669246612835,
     "d P99": 22.20613743442521,
-    "arc/chord mean": 1.5821369777133687,
-    "arc/chord P90": 2.4795014534434006,
-    "curvature 1/um": 0.13417325657931195,
-    "tips": 41,
-    "tips/mm": 4.8943810760965745,
-    "junctions": 109,
+    "arc/chord mean": 1.3687295372136972,
+    "arc/chord P90": 2.168096434698293,
+    "curvature 1/um": 0.13015742666288047,
+    "tips": 27,
+    "tips/mm": 2.8016649369438262,
+    "junctions": 105,
     "b0": 1,
-    "b1": 35,
-    "FA": 0.09714264084670167,
+    "b1": 40,
+    "FA": 0.10253261166927699,
     "min clearance um": 1.0003076078024784,
     "violations": 0,
-    "length density mm/mm3": 200.66273951161511,
+    "length density mm/mm3": 230.84912356154496,
     "bound_terminations": 0,
     "walk_bound_terminations": 0,
     "collision_truncated_stems": 0,
     "collision_terminations": 21,
-    "anastomosis_bridges": 36,
-    "anastomosis_bridges_arteriovenous": 1,
+    "anastomosis_bridges": 41,
+    "anastomosis_bridges_arteriovenous": 4,
     "anastomosis_no_partner": 0,
-    "anastomosis_collision_failed": 8
+    "anastomosis_collision_failed": 1
    }
   },
   {
@@ -4228,33 +4228,33 @@
    "seed": 1,
    "generations": 8,
    "d0": 28.12172681831621,
-   "seconds": 10.165834665298462,
+   "seconds": 8.041265964508057,
    "values": {
-    "points": 9282,
-    "length mm": 6.753352600092068,
-    "d P50": 7.6071364932164505,
+    "points": 9276,
+    "length mm": 6.637953078745708,
+    "d P50": 7.6338244724612405,
     "d P90": 22.17722701001225,
     "d P99": 28.12172681831621,
-    "arc/chord mean": 1.4473306597014117,
-    "arc/chord P90": 2.6286135880598267,
-    "curvature 1/um": 0.14175889022719287,
-    "tips": 44,
-    "tips/mm": 6.515282498266143,
+    "arc/chord mean": 1.284319225064798,
+    "arc/chord P90": 1.661449882289255,
+    "curvature 1/um": 0.13857686152431756,
+    "tips": 56,
+    "tips/mm": 8.436335619681968,
     "junctions": 100,
     "b0": 1,
-    "b1": 29,
-    "FA": 0.1493600433654421,
+    "b1": 23,
+    "FA": 0.18401074951252228,
     "min clearance um": 1.0006894979662793,
     "violations": 0,
-    "length density mm/mm3": 119.92326829235263,
+    "length density mm/mm3": 117.87405087713283,
     "bound_terminations": 0,
     "walk_bound_terminations": 1,
     "collision_truncated_stems": 0,
     "collision_terminations": 28,
-    "anastomosis_bridges": 30,
+    "anastomosis_bridges": 24,
     "anastomosis_bridges_arteriovenous": 3,
-    "anastomosis_no_partner": 5,
-    "anastomosis_collision_failed": 12
+    "anastomosis_no_partner": 23,
+    "anastomosis_collision_failed": 6
    }
   },
   {
@@ -4280,293 +4280,293 @@
    "seed": 2,
    "generations": 8,
    "d0": 17.916210762972646,
-   "seconds": 6.372084856033325,
+   "seconds": 6.05210542678833,
    "values": {
-    "points": 9194,
-    "length mm": 8.220553892435142,
-    "d P50": 4.634182295498011,
+    "points": 8563,
+    "length mm": 7.675657037013559,
+    "d P50": 4.957765653120675,
     "d P90": 12.802566983199776,
     "d P99": 17.916210762972646,
-    "arc/chord mean": 1.5259049092256418,
-    "arc/chord P90": 2.1680775848361575,
-    "curvature 1/um": 0.15488568639081232,
-    "tips": 27,
-    "tips/mm": 3.2844502150696195,
-    "junctions": 121,
+    "arc/chord mean": 1.23009677728357,
+    "arc/chord P90": 1.574423981964227,
+    "curvature 1/um": 0.14653834916431757,
+    "tips": 55,
+    "tips/mm": 7.165510357586193,
+    "junctions": 105,
     "b0": 1,
-    "b1": 48,
-    "FA": 0.12189464443732889,
+    "b1": 26,
+    "FA": 0.1406843003640115,
     "min clearance um": 1.0042068684227932,
     "violations": 0,
-    "length density mm/mm3": 164.86582641098255,
+    "length density mm/mm3": 153.9377464356789,
+    "bound_terminations": 0,
+    "walk_bound_terminations": 0,
+    "collision_truncated_stems": 0,
+    "collision_terminations": 17,
+    "anastomosis_bridges": 27,
+    "anastomosis_bridges_arteriovenous": 3,
+    "anastomosis_no_partner": 36,
+    "anastomosis_collision_failed": 8
+   }
+  },
+  {
+   "configuration": "anastomosis arteriovenous, fraction 1.0, radius 10",
+   "options": [
+    "--iterations",
+    "8",
+    "8",
+    "--tortuosity",
+    "walk",
+    "--persistence",
+    "8",
+    "--avoid-collisions",
+    "--grow-in-volume",
+    "--anastomose",
+    "--anastomose-mode",
+    "arteriovenous",
+    "--anastomosis-fraction",
+    "1.0",
+    "--anastomosis-radius",
+    "10"
+   ],
+   "seed": 3,
+   "generations": 8,
+   "d0": 28.943142367151594,
+   "seconds": 8.870641469955444,
+   "values": {
+    "points": 10747,
+    "length mm": 8.952836007190198,
+    "d P50": 8.282714786834692,
+    "d P90": 19.55513633654937,
+    "d P99": 28.943142367151594,
+    "arc/chord mean": 1.2867554474979368,
+    "arc/chord P90": 1.823727444403945,
+    "curvature 1/um": 0.12832034392974853,
+    "tips": 47,
+    "tips/mm": 5.249733152964422,
+    "junctions": 127,
+    "b0": 1,
+    "b1": 41,
+    "FA": 0.11444977348829695,
+    "min clearance um": 1.0012608644780512,
+    "violations": 0,
+    "length density mm/mm3": 192.92685835657198,
+    "bound_terminations": 0,
+    "walk_bound_terminations": 0,
+    "collision_truncated_stems": 0,
+    "collision_terminations": 29,
+    "anastomosis_bridges": 42,
+    "anastomosis_bridges_arteriovenous": 13,
+    "anastomosis_no_partner": 13,
+    "anastomosis_collision_failed": 9
+   }
+  },
+  {
+   "configuration": "anastomosis arteriovenous, fraction 1.0, radius 10",
+   "options": [
+    "--iterations",
+    "8",
+    "8",
+    "--tortuosity",
+    "walk",
+    "--persistence",
+    "8",
+    "--avoid-collisions",
+    "--grow-in-volume",
+    "--anastomose",
+    "--anastomose-mode",
+    "arteriovenous",
+    "--anastomosis-fraction",
+    "1.0",
+    "--anastomosis-radius",
+    "10"
+   ],
+   "seed": 4,
+   "generations": 8,
+   "d0": 20.2528085357147,
+   "seconds": 13.045405626296997,
+   "values": {
+    "points": 14542,
+    "length mm": 8.217039133485438,
+    "d P50": 5.005049418701598,
+    "d P90": 13.686924856942701,
+    "d P99": 20.2528085357147,
+    "arc/chord mean": 1.2513910393073302,
+    "arc/chord P90": 1.852139772480793,
+    "curvature 1/um": 0.19203773445471675,
+    "tips": 67,
+    "tips/mm": 8.153788598494904,
+    "junctions": 167,
+    "b0": 1,
+    "b1": 51,
+    "FA": 0.14382008977951655,
+    "min clearance um": 1.000143021929925,
+    "violations": 0,
+    "length density mm/mm3": 883.9682190179537,
+    "bound_terminations": 0,
+    "walk_bound_terminations": 0,
+    "collision_truncated_stems": 0,
+    "collision_terminations": 47,
+    "anastomosis_bridges": 52,
+    "anastomosis_bridges_arteriovenous": 14,
+    "anastomosis_no_partner": 18,
+    "anastomosis_collision_failed": 14
+   }
+  },
+  {
+   "configuration": "anastomosis arteriovenous, fraction 1.0, radius 10",
+   "options": [
+    "--iterations",
+    "8",
+    "8",
+    "--tortuosity",
+    "walk",
+    "--persistence",
+    "8",
+    "--avoid-collisions",
+    "--grow-in-volume",
+    "--anastomose",
+    "--anastomose-mode",
+    "arteriovenous",
+    "--anastomosis-fraction",
+    "1.0",
+    "--anastomosis-radius",
+    "10"
+   ],
+   "seed": 5,
+   "generations": 8,
+   "d0": 22.20613743442521,
+   "seconds": 5.666669607162476,
+   "values": {
+    "points": 8684,
+    "length mm": 8.284118458467928,
+    "d P50": 6.023915823569435,
+    "d P90": 14.909728129644229,
+    "d P99": 22.20613743442521,
+    "arc/chord mean": 1.2767647308465093,
+    "arc/chord P90": 1.7934125154482232,
+    "curvature 1/um": 0.12869871669864852,
+    "tips": 50,
+    "tips/mm": 6.035645222925391,
+    "junctions": 112,
+    "b0": 1,
+    "b1": 32,
+    "FA": 0.12085060702018692,
+    "min clearance um": 1.0003076078024784,
+    "violations": 0,
+    "length density mm/mm3": 198.43896867831998,
+    "bound_terminations": 0,
+    "walk_bound_terminations": 0,
+    "collision_truncated_stems": 0,
+    "collision_terminations": 21,
+    "anastomosis_bridges": 33,
+    "anastomosis_bridges_arteriovenous": 2,
+    "anastomosis_no_partner": 27,
+    "anastomosis_collision_failed": 4
+   }
+  },
+  {
+   "configuration": "anastomosis arteriovenous, fraction 1.0, radius 20",
+   "options": [
+    "--iterations",
+    "8",
+    "8",
+    "--tortuosity",
+    "walk",
+    "--persistence",
+    "8",
+    "--avoid-collisions",
+    "--grow-in-volume",
+    "--anastomose",
+    "--anastomose-mode",
+    "arteriovenous",
+    "--anastomosis-fraction",
+    "1.0",
+    "--anastomosis-radius",
+    "20"
+   ],
+   "seed": 1,
+   "generations": 8,
+   "d0": 28.12172681831621,
+   "seconds": 13.127349138259888,
+   "values": {
+    "points": 10974,
+    "length mm": 8.026743511648199,
+    "d P50": 6.566992730382093,
+    "d P90": 20.94653098921209,
+    "d P99": 28.12172681831621,
+    "arc/chord mean": 1.3085886438104328,
+    "arc/chord P90": 1.8017644112073408,
+    "curvature 1/um": 0.13432252266150604,
+    "tips": 38,
+    "tips/mm": 4.734173945493013,
+    "junctions": 106,
+    "b0": 1,
+    "b1": 35,
+    "FA": 0.18941709270795135,
+    "min clearance um": 1.0006894979662793,
+    "violations": 0,
+    "length density mm/mm3": 142.53562232899918,
+    "bound_terminations": 0,
+    "walk_bound_terminations": 1,
+    "collision_truncated_stems": 0,
+    "collision_terminations": 28,
+    "anastomosis_bridges": 36,
+    "anastomosis_bridges_arteriovenous": 9,
+    "anastomosis_no_partner": 2,
+    "anastomosis_collision_failed": 9
+   }
+  },
+  {
+   "configuration": "anastomosis arteriovenous, fraction 1.0, radius 20",
+   "options": [
+    "--iterations",
+    "8",
+    "8",
+    "--tortuosity",
+    "walk",
+    "--persistence",
+    "8",
+    "--avoid-collisions",
+    "--grow-in-volume",
+    "--anastomose",
+    "--anastomose-mode",
+    "arteriovenous",
+    "--anastomosis-fraction",
+    "1.0",
+    "--anastomosis-radius",
+    "20"
+   ],
+   "seed": 2,
+   "generations": 8,
+   "d0": 17.916210762972646,
+   "seconds": 7.600440263748169,
+   "values": {
+    "points": 10168,
+    "length mm": 9.210272545539675,
+    "d P50": 4.2997544116257105,
+    "d P90": 12.386422270584873,
+    "d P99": 17.916210762972646,
+    "arc/chord mean": 1.3243475045613873,
+    "arc/chord P90": 1.9081349414259674,
+    "curvature 1/um": 0.1478410694529303,
+    "tips": 23,
+    "tips/mm": 2.497211660814356,
+    "junctions": 117,
+    "b0": 1,
+    "b1": 48,
+    "FA": 0.11797355219195317,
+    "min clearance um": 1.0042068684227932,
+    "violations": 0,
+    "length density mm/mm3": 184.71494920654007,
     "bound_terminations": 0,
     "walk_bound_terminations": 0,
     "collision_truncated_stems": 0,
     "collision_terminations": 17,
     "anastomosis_bridges": 49,
-    "anastomosis_bridges_arteriovenous": 3,
-    "anastomosis_no_partner": 9,
-    "anastomosis_collision_failed": 5
-   }
-  },
-  {
-   "configuration": "anastomosis arteriovenous, fraction 1.0, radius 10",
-   "options": [
-    "--iterations",
-    "8",
-    "8",
-    "--tortuosity",
-    "walk",
-    "--persistence",
-    "8",
-    "--avoid-collisions",
-    "--grow-in-volume",
-    "--anastomose",
-    "--anastomose-mode",
-    "arteriovenous",
-    "--anastomosis-fraction",
-    "1.0",
-    "--anastomosis-radius",
-    "10"
-   ],
-   "seed": 3,
-   "generations": 8,
-   "d0": 28.943142367151594,
-   "seconds": 9.562953472137451,
-   "values": {
-    "points": 10591,
-    "length mm": 9.031346734090148,
-    "d P50": 8.006349685492344,
-    "d P90": 19.55513633654937,
-    "d P99": 28.943142367151594,
-    "arc/chord mean": 1.4026384791612925,
-    "arc/chord P90": 2.1238456971124435,
-    "curvature 1/um": 0.13034149737116765,
-    "tips": 38,
-    "tips/mm": 4.207567389320067,
-    "junctions": 120,
-    "b0": 1,
-    "b1": 42,
-    "FA": 0.1295323863518393,
-    "min clearance um": 1.0012608644780512,
-    "violations": 0,
-    "length density mm/mm3": 194.6187052613889,
-    "bound_terminations": 0,
-    "walk_bound_terminations": 0,
-    "collision_truncated_stems": 0,
-    "collision_terminations": 29,
-    "anastomosis_bridges": 43,
-    "anastomosis_bridges_arteriovenous": 12,
-    "anastomosis_no_partner": 2,
-    "anastomosis_collision_failed": 13
-   }
-  },
-  {
-   "configuration": "anastomosis arteriovenous, fraction 1.0, radius 10",
-   "options": [
-    "--iterations",
-    "8",
-    "8",
-    "--tortuosity",
-    "walk",
-    "--persistence",
-    "8",
-    "--avoid-collisions",
-    "--grow-in-volume",
-    "--anastomose",
-    "--anastomose-mode",
-    "arteriovenous",
-    "--anastomosis-fraction",
-    "1.0",
-    "--anastomosis-radius",
-    "10"
-   ],
-   "seed": 4,
-   "generations": 8,
-   "d0": 20.2528085357147,
-   "seconds": 16.358670473098755,
-   "values": {
-    "points": 14341,
-    "length mm": 8.0982479742486,
-    "d P50": 5.082351448863827,
-    "d P90": 13.686924856942701,
-    "d P99": 20.2528085357147,
-    "arc/chord mean": 1.3590268389721225,
-    "arc/chord P90": 2.140859336431061,
-    "curvature 1/um": 0.1998209361906942,
-    "tips": 61,
-    "tips/mm": 7.532493471917907,
-    "junctions": 169,
-    "b0": 1,
-    "b1": 55,
-    "FA": 0.16492734363092956,
-    "min clearance um": 1.000143021929925,
-    "violations": 0,
-    "length density mm/mm3": 871.188967543083,
-    "bound_terminations": 0,
-    "walk_bound_terminations": 0,
-    "collision_truncated_stems": 0,
-    "collision_terminations": 47,
-    "anastomosis_bridges": 56,
-    "anastomosis_bridges_arteriovenous": 14,
-    "anastomosis_no_partner": 3,
-    "anastomosis_collision_failed": 18
-   }
-  },
-  {
-   "configuration": "anastomosis arteriovenous, fraction 1.0, radius 10",
-   "options": [
-    "--iterations",
-    "8",
-    "8",
-    "--tortuosity",
-    "walk",
-    "--persistence",
-    "8",
-    "--avoid-collisions",
-    "--grow-in-volume",
-    "--anastomose",
-    "--anastomose-mode",
-    "arteriovenous",
-    "--anastomosis-fraction",
-    "1.0",
-    "--anastomosis-radius",
-    "10"
-   ],
-   "seed": 5,
-   "generations": 8,
-   "d0": 22.20613743442521,
-   "seconds": 7.2569804191589355,
-   "values": {
-    "points": 9017,
-    "length mm": 8.67832298901919,
-    "d P50": 5.874114520346095,
-    "d P90": 14.909728129644229,
-    "d P99": 22.20613743442521,
-    "arc/chord mean": 1.6617410432638582,
-    "arc/chord P90": 2.966401547992782,
-    "curvature 1/um": 0.13459255397056563,
-    "tips": 32,
-    "tips/mm": 3.687348355262886,
-    "junctions": 116,
-    "b0": 1,
-    "b1": 43,
-    "FA": 0.10013199021848807,
-    "min clearance um": 1.0003076078024784,
-    "violations": 0,
-    "length density mm/mm3": 207.8818008738148,
-    "bound_terminations": 0,
-    "walk_bound_terminations": 0,
-    "collision_truncated_stems": 0,
-    "collision_terminations": 21,
-    "anastomosis_bridges": 44,
-    "anastomosis_bridges_arteriovenous": 2,
-    "anastomosis_no_partner": 1,
-    "anastomosis_collision_failed": 12
-   }
-  },
-  {
-   "configuration": "anastomosis arteriovenous, fraction 1.0, radius 20",
-   "options": [
-    "--iterations",
-    "8",
-    "8",
-    "--tortuosity",
-    "walk",
-    "--persistence",
-    "8",
-    "--avoid-collisions",
-    "--grow-in-volume",
-    "--anastomose",
-    "--anastomose-mode",
-    "arteriovenous",
-    "--anastomosis-fraction",
-    "1.0",
-    "--anastomosis-radius",
-    "20"
-   ],
-   "seed": 1,
-   "generations": 8,
-   "d0": 28.12172681831621,
-   "seconds": 15.663988828659058,
-   "values": {
-    "points": 10319,
-    "length mm": 7.563098807253178,
-    "d P50": 6.705297313284593,
-    "d P90": 20.94653098921209,
-    "d P99": 28.12172681831621,
-    "arc/chord mean": 1.3797135022811593,
-    "arc/chord P90": 2.1710199982166576,
-    "curvature 1/um": 0.13858431376148556,
-    "tips": 39,
-    "tips/mm": 5.156616486696979,
-    "junctions": 101,
-    "b0": 1,
-    "b1": 32,
-    "FA": 0.149474129638536,
-    "min clearance um": 1.0006894979662793,
-    "violations": 0,
-    "length density mm/mm3": 134.3024096463481,
-    "bound_terminations": 0,
-    "walk_bound_terminations": 1,
-    "collision_truncated_stems": 0,
-    "collision_terminations": 28,
-    "anastomosis_bridges": 33,
-    "anastomosis_bridges_arteriovenous": 9,
-    "anastomosis_no_partner": 0,
-    "anastomosis_collision_failed": 12
-   }
-  },
-  {
-   "configuration": "anastomosis arteriovenous, fraction 1.0, radius 20",
-   "options": [
-    "--iterations",
-    "8",
-    "8",
-    "--tortuosity",
-    "walk",
-    "--persistence",
-    "8",
-    "--avoid-collisions",
-    "--grow-in-volume",
-    "--anastomose",
-    "--anastomose-mode",
-    "arteriovenous",
-    "--anastomosis-fraction",
-    "1.0",
-    "--anastomosis-radius",
-    "20"
-   ],
-   "seed": 2,
-   "generations": 8,
-   "d0": 17.916210762972646,
-   "seconds": 8.512046575546265,
-   "values": {
-    "points": 9838,
-    "length mm": 9.1102104995952,
-    "d P50": 4.300406342515788,
-    "d P90": 12.386422270584873,
-    "d P99": 17.916210762972646,
-    "arc/chord mean": 1.613033263892365,
-    "arc/chord P90": 2.7446955427184645,
-    "curvature 1/um": 0.14966156349439264,
-    "tips": 20,
-    "tips/mm": 2.1953389552182876,
-    "junctions": 110,
-    "b0": 1,
-    "b1": 46,
-    "FA": 0.11242400886453396,
-    "min clearance um": 1.0042068684227932,
-    "violations": 0,
-    "length density mm/mm3": 182.70817300716612,
-    "bound_terminations": 0,
-    "walk_bound_terminations": 0,
-    "collision_truncated_stems": 0,
-    "collision_terminations": 17,
-    "anastomosis_bridges": 47,
     "anastomosis_bridges_arteriovenous": 11,
-    "anastomosis_no_partner": 1,
-    "anastomosis_collision_failed": 5
+    "anastomosis_no_partner": 6,
+    "anastomosis_collision_failed": 4
    }
   },
   {
@@ -4592,33 +4592,33 @@
    "seed": 3,
    "generations": 8,
    "d0": 28.943142367151594,
-   "seconds": 13.50766396522522,
+   "seconds": 11.74662709236145,
    "values": {
-    "points": 11207,
-    "length mm": 9.499918940169067,
-    "d P50": 7.812104434164338,
-    "d P90": 19.55513633654937,
+    "points": 12073,
+    "length mm": 10.08906425373365,
+    "d P50": 6.956110417173934,
+    "d P90": 19.496750274741313,
     "d P99": 28.943142367151594,
-    "arc/chord mean": 1.4041453732825262,
-    "arc/chord P90": 2.1327285884395417,
-    "curvature 1/um": 0.13010147761487104,
-    "tips": 37,
-    "tips/mm": 3.8947700746740814,
-    "junctions": 107,
+    "arc/chord mean": 1.330489395868787,
+    "arc/chord P90": 1.8925289135517718,
+    "curvature 1/um": 0.12692532642129653,
+    "tips": 33,
+    "tips/mm": 3.270868255972076,
+    "junctions": 119,
     "b0": 1,
-    "b1": 36,
-    "FA": 0.15236263473516917,
+    "b1": 44,
+    "FA": 0.14693217208559387,
     "min clearance um": 1.0012608644780512,
     "violations": 0,
-    "length density mm/mm3": 204.71608262420577,
+    "length density mm/mm3": 217.41171944478734,
     "bound_terminations": 0,
     "walk_bound_terminations": 0,
     "collision_truncated_stems": 0,
     "collision_terminations": 29,
-    "anastomosis_bridges": 37,
-    "anastomosis_bridges_arteriovenous": 13,
-    "anastomosis_no_partner": 0,
-    "anastomosis_collision_failed": 12
+    "anastomosis_bridges": 45,
+    "anastomosis_bridges_arteriovenous": 16,
+    "anastomosis_no_partner": 2,
+    "anastomosis_collision_failed": 7
    }
   },
   {
@@ -4644,32 +4644,32 @@
    "seed": 4,
    "generations": 8,
    "d0": 20.2528085357147,
-   "seconds": 28.68348741531372,
+   "seconds": 27.820781707763672,
    "values": {
-    "points": 15876,
-    "length mm": 8.870789494574877,
-    "d P50": 4.695027557130036,
-    "d P90": 13.632970634949563,
+    "points": 16595,
+    "length mm": 9.135479070638569,
+    "d P50": 4.588546554627269,
+    "d P90": 13.503291330070171,
     "d P99": 20.2528085357147,
-    "arc/chord mean": 1.278752987289017,
-    "arc/chord P90": 1.9349620557796818,
-    "curvature 1/um": 0.19679020902400238,
-    "tips": 61,
-    "tips/mm": 6.8765018082444485,
-    "junctions": 165,
+    "arc/chord mean": 1.2653656579679458,
+    "arc/chord P90": 1.8323640593181352,
+    "curvature 1/um": 0.1945131386205611,
+    "tips": 59,
+    "tips/mm": 6.458336726929407,
+    "junctions": 173,
     "b0": 1,
-    "b1": 53,
-    "FA": 0.17427750558063848,
+    "b1": 58,
+    "FA": 0.17912557023643536,
     "min clearance um": 1.000143021929925,
     "violations": 0,
-    "length density mm/mm3": 954.297023954465,
+    "length density mm/mm3": 982.7716568903303,
     "bound_terminations": 0,
     "walk_bound_terminations": 0,
     "collision_truncated_stems": 0,
     "collision_terminations": 47,
-    "anastomosis_bridges": 54,
-    "anastomosis_bridges_arteriovenous": 27,
-    "anastomosis_no_partner": 0,
+    "anastomosis_bridges": 59,
+    "anastomosis_bridges_arteriovenous": 30,
+    "anastomosis_no_partner": 1,
     "anastomosis_collision_failed": 21
    }
   },
@@ -4696,33 +4696,33 @@
    "seed": 5,
    "generations": 8,
    "d0": 22.20613743442521,
-   "seconds": 9.076169490814209,
+   "seconds": 7.286466836929321,
    "values": {
-    "points": 9626,
-    "length mm": 9.250459043423653,
+    "points": 10245,
+    "length mm": 9.428802096043587,
     "d P50": 5.2841306193808,
     "d P90": 14.793669246612835,
     "d P99": 22.20613743442521,
-    "arc/chord mean": 1.4991654225279347,
-    "arc/chord P90": 2.7025897200736355,
-    "curvature 1/um": 0.13339501060189204,
-    "tips": 27,
-    "tips/mm": 2.918774070914337,
-    "junctions": 101,
+    "arc/chord mean": 1.3740460958652234,
+    "arc/chord P90": 2.2234433222980394,
+    "curvature 1/um": 0.1317053196420118,
+    "tips": 28,
+    "tips/mm": 2.969624318634184,
+    "junctions": 108,
     "b0": 1,
-    "b1": 38,
-    "FA": 0.09483321830965039,
+    "b1": 41,
+    "FA": 0.11513919816705667,
     "min clearance um": 1.0003076078024784,
     "violations": 0,
-    "length density mm/mm3": 221.58683046132046,
+    "length density mm/mm3": 225.85888567277962,
     "bound_terminations": 0,
     "walk_bound_terminations": 0,
     "collision_truncated_stems": 0,
     "collision_terminations": 21,
-    "anastomosis_bridges": 39,
+    "anastomosis_bridges": 42,
     "anastomosis_bridges_arteriovenous": 4,
-    "anastomosis_no_partner": 0,
-    "anastomosis_collision_failed": 10
+    "anastomosis_no_partner": 6,
+    "anastomosis_collision_failed": 3
    }
   },
   {
@@ -4737,7 +4737,7 @@
    "seed": 1,
    "generations": 8,
    "d0": 28.12172681831621,
-   "seconds": 0.5071413516998291,
+   "seconds": 0.5264251232147217,
    "values": {
     "points": 15942,
     "length mm": 7.32723459510781,
@@ -4778,7 +4778,7 @@
    "seed": 2,
    "generations": 8,
    "d0": 17.916210762972646,
-   "seconds": 0.3994290828704834,
+   "seconds": 0.42185282707214355,
    "values": {
     "points": 16006,
     "length mm": 10.300179807489677,
@@ -4819,7 +4819,7 @@
    "seed": 3,
    "generations": 8,
    "d0": 28.943142367151594,
-   "seconds": 0.5159149169921875,
+   "seconds": 0.49735522270202637,
    "values": {
     "points": 15942,
     "length mm": 8.99377540070709,
@@ -4860,7 +4860,7 @@
    "seed": 4,
    "generations": 8,
    "d0": 20.2528085357147,
-   "seconds": 0.47520875930786133,
+   "seconds": 0.5016899108886719,
    "values": {
     "points": 15718,
     "length mm": 6.158512078974462,
@@ -4901,7 +4901,7 @@
    "seed": 5,
    "generations": 8,
    "d0": 22.20613743442521,
-   "seconds": 0.41959142684936523,
+   "seconds": 0.4379587173461914,
    "values": {
     "points": 16070,
     "length mm": 10.128476197783506,
@@ -4942,33 +4942,33 @@
    "seed": 1,
    "generations": 8,
    "d0": 28.12172681831621,
-   "seconds": 9.388689756393433,
+   "seconds": 10.485869884490967,
    "values": {
-    "points": 12483,
-    "length mm": 9.107135416591438,
-    "d P50": 7.09480871973224,
-    "d P90": 17.74818876190767,
+    "points": 13554,
+    "length mm": 9.58439430572196,
+    "d P50": 6.950348468267807,
+    "d P90": 16.62527266367988,
     "d P99": 28.12172681831621,
-    "arc/chord mean": 1.2138943179048614,
-    "arc/chord P90": 1.6179702585277078,
-    "curvature 1/um": 0.1284655929085772,
-    "tips": 56,
-    "tips/mm": 6.149024631606864,
-    "junctions": 122,
+    "arc/chord mean": 1.283510443219614,
+    "arc/chord P90": 1.7930047305805272,
+    "curvature 1/um": 0.12439845678393292,
+    "tips": 55,
+    "tips/mm": 5.738495125056005,
+    "junctions": 125,
     "b0": 1,
-    "b1": 34,
-    "FA": 0.1798923240596588,
+    "b1": 36,
+    "FA": 0.15901922578872404,
     "min clearance um": 1.0022317275121608,
     "violations": 0,
-    "length density mm/mm3": 148.24900835217184,
+    "length density mm/mm3": 156.01798880588953,
     "bound_terminations": 0,
     "walk_bound_terminations": 1,
     "collision_truncated_stems": 0,
     "collision_terminations": 32,
-    "anastomosis_bridges": 35,
-    "anastomosis_bridges_arteriovenous": 2,
+    "anastomosis_bridges": 37,
+    "anastomosis_bridges_arteriovenous": 3,
     "anastomosis_no_partner": 0,
-    "anastomosis_collision_failed": 2
+    "anastomosis_collision_failed": 3
    }
   },
   {
@@ -4983,33 +4983,33 @@
    "seed": 2,
    "generations": 8,
    "d0": 17.916210762972646,
-   "seconds": 13.365204811096191,
+   "seconds": 13.129673957824707,
    "values": {
-    "points": 18244,
-    "length mm": 14.970448008642093,
-    "d P50": 4.650113565372431,
+    "points": 19514,
+    "length mm": 15.834460290126696,
+    "d P50": 4.532922542400377,
     "d P90": 11.863674669245485,
     "d P99": 17.916210762972646,
-    "arc/chord mean": 1.3272243066233866,
-    "arc/chord P90": 1.6628255899434916,
-    "curvature 1/um": 0.1522454214374797,
-    "tips": 86,
-    "tips/mm": 5.7446510585624555,
-    "junctions": 190,
+    "arc/chord mean": 1.2581050224239396,
+    "arc/chord P90": 1.6580263140977438,
+    "curvature 1/um": 0.14910182216883056,
+    "tips": 85,
+    "tips/mm": 5.368038975916361,
+    "junctions": 201,
     "b0": 1,
-    "b1": 53,
-    "FA": 0.1607474847125802,
-    "min clearance um": 1.0012700139114352,
+    "b1": 59,
+    "FA": 0.1624564160287202,
+    "min clearance um": 1.0020864652236,
     "violations": 0,
-    "length density mm/mm3": 266.3320752825823,
+    "length density mm/mm3": 281.7033042441066,
     "bound_terminations": 0,
     "walk_bound_terminations": 0,
     "collision_truncated_stems": 0,
     "collision_terminations": 32,
-    "anastomosis_bridges": 54,
-    "anastomosis_bridges_arteriovenous": 19,
-    "anastomosis_no_partner": 0,
-    "anastomosis_collision_failed": 11
+    "anastomosis_bridges": 60,
+    "anastomosis_bridges_arteriovenous": 25,
+    "anastomosis_no_partner": 3,
+    "anastomosis_collision_failed": 7
    }
   },
   {
@@ -5024,33 +5024,33 @@
    "seed": 3,
    "generations": 8,
    "d0": 28.943142367151594,
-   "seconds": 8.668596744537354,
+   "seconds": 9.339428424835205,
    "values": {
-    "points": 11651,
-    "length mm": 9.911169249709216,
-    "d P50": 7.002219299950765,
-    "d P90": 19.408523353056367,
+    "points": 12076,
+    "length mm": 10.510380893009401,
+    "d P50": 6.949808266345372,
+    "d P90": 19.402945773701298,
     "d P99": 28.943142367151594,
-    "arc/chord mean": 1.257217796665479,
-    "arc/chord P90": 1.7740493003321642,
-    "curvature 1/um": 0.11386551545927777,
-    "tips": 51,
-    "tips/mm": 5.145709725570097,
+    "arc/chord mean": 1.220233202094343,
+    "arc/chord P90": 1.742383267614471,
+    "curvature 1/um": 0.10911004444813968,
+    "tips": 57,
+    "tips/mm": 5.423209737138212,
     "junctions": 115,
     "b0": 1,
-    "b1": 33,
-    "FA": 0.1381500946076511,
+    "b1": 30,
+    "FA": 0.16726730735155526,
     "min clearance um": 1.0012410868175923,
     "violations": 0,
-    "length density mm/mm3": 208.5515061909825,
+    "length density mm/mm3": 221.16015887251083,
     "bound_terminations": 0,
     "walk_bound_terminations": 1,
     "collision_truncated_stems": 0,
     "collision_terminations": 34,
-    "anastomosis_bridges": 34,
+    "anastomosis_bridges": 31,
     "anastomosis_bridges_arteriovenous": 18,
-    "anastomosis_no_partner": 0,
-    "anastomosis_collision_failed": 1
+    "anastomosis_no_partner": 1,
+    "anastomosis_collision_failed": 3
    }
   },
   {
@@ -5065,33 +5065,33 @@
    "seed": 4,
    "generations": 8,
    "d0": 20.2528085357147,
-   "seconds": 15.371877908706665,
+   "seconds": 12.85678744316101,
    "values": {
-    "points": 9785,
-    "length mm": 5.699304635840448,
-    "d P50": 5.8090511061178605,
-    "d P90": 15.039132860087102,
+    "points": 10299,
+    "length mm": 6.07628092351876,
+    "d P50": 4.995568593806643,
+    "d P90": 14.059124482969008,
     "d P99": 20.2528085357147,
-    "arc/chord mean": 1.2240505008590779,
-    "arc/chord P90": 1.6323228545311748,
-    "curvature 1/um": 0.16786946162218902,
-    "tips": 69,
-    "tips/mm": 12.106740104062697,
-    "junctions": 103,
+    "arc/chord mean": 1.222571200537694,
+    "arc/chord P90": 1.5959175072413199,
+    "curvature 1/um": 0.16619789455167694,
+    "tips": 62,
+    "tips/mm": 10.203609869323808,
+    "junctions": 102,
     "b0": 1,
-    "b1": 18,
-    "FA": 0.21863575892953968,
-    "min clearance um": 1.0006091840792897,
+    "b1": 21,
+    "FA": 0.2517921899194434,
+    "min clearance um": 1.0010628275505358,
     "violations": 0,
-    "length density mm/mm3": 419.2550015935892,
+    "length density mm/mm3": 446.98631342721416,
     "bound_terminations": 0,
     "walk_bound_terminations": 0,
     "collision_truncated_stems": 0,
     "collision_terminations": 30,
-    "anastomosis_bridges": 19,
-    "anastomosis_bridges_arteriovenous": 14,
+    "anastomosis_bridges": 22,
+    "anastomosis_bridges_arteriovenous": 16,
     "anastomosis_no_partner": 0,
-    "anastomosis_collision_failed": 11
+    "anastomosis_collision_failed": 6
    }
   },
   {
@@ -5106,33 +5106,33 @@
    "seed": 5,
    "generations": 8,
    "d0": 22.20613743442521,
-   "seconds": 11.53585147857666,
+   "seconds": 11.276139736175537,
    "values": {
-    "points": 14958,
-    "length mm": 14.008736234864536,
-    "d P50": 5.502243245018842,
+    "points": 15754,
+    "length mm": 14.607641616210065,
+    "d P50": 5.18029234617182,
     "d P90": 13.569945917749946,
     "d P99": 22.20613743442521,
-    "arc/chord mean": 1.3334097848247481,
-    "arc/chord P90": 1.984047228273937,
-    "curvature 1/um": 0.1242534650379778,
-    "tips": 63,
-    "tips/mm": 4.497193675701269,
+    "arc/chord mean": 1.281936989521912,
+    "arc/chord P90": 1.827705956762617,
+    "curvature 1/um": 0.12091140252368877,
+    "tips": 65,
+    "tips/mm": 4.449725815279425,
     "junctions": 155,
     "b0": 1,
-    "b1": 47,
-    "FA": 0.06307654525690162,
+    "b1": 46,
+    "FA": 0.11242461829381901,
     "min clearance um": 1.0004162962005627,
     "violations": 0,
-    "length density mm/mm3": 269.43366740876695,
+    "length density mm/mm3": 280.95257037198866,
     "bound_terminations": 0,
     "walk_bound_terminations": 0,
     "collision_truncated_stems": 0,
     "collision_terminations": 24,
-    "anastomosis_bridges": 48,
-    "anastomosis_bridges_arteriovenous": 25,
-    "anastomosis_no_partner": 0,
-    "anastomosis_collision_failed": 8
+    "anastomosis_bridges": 47,
+    "anastomosis_bridges_arteriovenous": 23,
+    "anastomosis_no_partner": 1,
+    "anastomosis_collision_failed": 4
    }
   },
   {
@@ -5147,33 +5147,33 @@
    "seed": 1,
    "generations": 8,
    "d0": 36.24345363663242,
-   "seconds": 3.1764345169067383,
+   "seconds": 2.795980215072632,
    "values": {
-    "points": 4491,
-    "length mm": 3.313060978613463,
-    "d P50": 8.463580422831104,
-    "d P90": 31.587331497832146,
+    "points": 5169,
+    "length mm": 3.5981656881225987,
+    "d P50": 8.247559106432396,
+    "d P90": 30.331847137357435,
     "d P99": 47.38099724674822,
-    "arc/chord mean": 1.4936595955194,
-    "arc/chord P90": 2.3737666374356197,
-    "curvature 1/um": 0.18883655186366705,
+    "arc/chord mean": 1.382497989768035,
+    "arc/chord P90": 1.963175435322967,
+    "curvature 1/um": 0.19541934640220635,
     "tips": 19,
-    "tips/mm": 5.734877843374806,
-    "junctions": 45,
+    "tips/mm": 5.280468340498672,
+    "junctions": 43,
     "b0": 1,
-    "b1": 14,
-    "FA": 0.16615192688237182,
+    "b1": 13,
+    "FA": 0.16611800666283982,
     "min clearance um": 1.0002135749121808,
     "violations": 0,
-    "length density mm/mm3": 53.05418462852548,
+    "length density mm/mm3": 55.877752432009125,
     "bound_terminations": 0,
     "walk_bound_terminations": 0,
     "collision_truncated_stems": 0,
     "collision_terminations": 18,
-    "anastomosis_bridges": 14,
+    "anastomosis_bridges": 13,
     "anastomosis_bridges_arteriovenous": 0,
-    "anastomosis_no_partner": 0,
-    "anastomosis_collision_failed": 2
+    "anastomosis_no_partner": 1,
+    "anastomosis_collision_failed": 0
    }
   },
   {
@@ -5188,33 +5188,33 @@
    "seed": 2,
    "generations": 8,
    "d0": 15.832421525945293,
-   "seconds": 5.307675361633301,
+   "seconds": 7.230221509933472,
    "values": {
-    "points": 10666,
-    "length mm": 7.053849288485433,
-    "d P50": 4.286164042397419,
-    "d P90": 10.482384922998131,
+    "points": 11890,
+    "length mm": 8.081884788184356,
+    "d P50": 3.6793385104751475,
+    "d P90": 9.36521537510948,
     "d P99": 15.832421525945293,
-    "arc/chord mean": 1.7713309639733064,
-    "arc/chord P90": 2.408250231692118,
-    "curvature 1/um": 0.27216742890555473,
-    "tips": 38,
-    "tips/mm": 5.387129558045769,
-    "junctions": 108,
+    "arc/chord mean": 1.673087404036078,
+    "arc/chord P90": 2.462773736603123,
+    "curvature 1/um": 0.2666794687909876,
+    "tips": 23,
+    "tips/mm": 2.8458708089511244,
+    "junctions": 95,
     "b0": 1,
-    "b1": 36,
-    "FA": 0.07765950497709986,
+    "b1": 37,
+    "FA": 0.06601052086911503,
     "min clearance um": 1.0000165726753667,
     "violations": 0,
-    "length density mm/mm3": 194.17764614388454,
+    "length density mm/mm3": 217.8574383734825,
     "bound_terminations": 0,
     "walk_bound_terminations": 0,
     "collision_truncated_stems": 0,
     "collision_terminations": 24,
-    "anastomosis_bridges": 36,
+    "anastomosis_bridges": 37,
     "anastomosis_bridges_arteriovenous": 0,
-    "anastomosis_no_partner": 6,
-    "anastomosis_collision_failed": 6
+    "anastomosis_no_partner": 0,
+    "anastomosis_collision_failed": 2
    }
   },
   {
@@ -5229,33 +5229,33 @@
    "seed": 3,
    "generations": 8,
    "d0": 37.88628473430319,
-   "seconds": 4.113598108291626,
+   "seconds": 3.2122297286987305,
    "values": {
-    "points": 5426,
-    "length mm": 5.1982339657284315,
-    "d P50": 10.427460664325661,
-    "d P90": 26.366163332697607,
+    "points": 6349,
+    "length mm": 6.144767749174824,
+    "d P50": 8.855497006996075,
+    "d P90": 25.59747845850574,
     "d P99": 37.88628473430319,
-    "arc/chord mean": 1.375288665981555,
-    "arc/chord P90": 1.5856484573358558,
-    "curvature 1/um": 0.14807822850028685,
-    "tips": 22,
-    "tips/mm": 4.232206581128198,
-    "junctions": 52,
+    "arc/chord mean": 1.3566017709575988,
+    "arc/chord P90": 1.8770284289524617,
+    "curvature 1/um": 0.14485988336938885,
+    "tips": 18,
+    "tips/mm": 2.9293214544060198,
+    "junctions": 48,
     "b0": 1,
     "b1": 16,
-    "FA": 0.13460589091811118,
-    "min clearance um": 1.001890934191032,
+    "FA": 0.11732080203835052,
+    "min clearance um": 1.0030616682600755,
     "violations": 0,
-    "length density mm/mm3": 43.25448151685841,
+    "length density mm/mm3": 50.543934363941425,
     "bound_terminations": 0,
     "walk_bound_terminations": 0,
     "collision_truncated_stems": 0,
     "collision_terminations": 13,
     "anastomosis_bridges": 16,
     "anastomosis_bridges_arteriovenous": 0,
-    "anastomosis_no_partner": 1,
-    "anastomosis_collision_failed": 3
+    "anastomosis_no_partner": 0,
+    "anastomosis_collision_failed": 0
    }
   },
   {
@@ -5270,33 +5270,33 @@
    "seed": 4,
    "generations": 8,
    "d0": 20.505617071429395,
-   "seconds": 3.3896615505218506,
+   "seconds": 4.003685712814331,
    "values": {
-    "points": 5648,
-    "length mm": 3.5750784871837435,
-    "d P50": 6.448725884065661,
-    "d P90": 14.234619484943785,
+    "points": 6718,
+    "length mm": 4.204143386854497,
+    "d P50": 5.2823560262043,
+    "d P90": 13.857773824651005,
     "d P99": 22.84029143203577,
-    "arc/chord mean": 1.41981070312246,
-    "arc/chord P90": 1.9113354932706532,
-    "curvature 1/um": 0.22858467254683712,
-    "tips": 22,
-    "tips/mm": 6.153711052461516,
-    "junctions": 54,
+    "arc/chord mean": 1.3728477694882324,
+    "arc/chord P90": 1.9283250087075237,
+    "curvature 1/um": 0.22511451661584567,
+    "tips": 19,
+    "tips/mm": 4.519351090500182,
+    "junctions": 53,
     "b0": 1,
-    "b1": 17,
-    "FA": 0.17828401494388424,
+    "b1": 18,
+    "FA": 0.16831112209127422,
     "min clearance um": 1.0023128044658618,
     "violations": 0,
-    "length density mm/mm3": 95.6560698195596,
+    "length density mm/mm3": 105.6154708397366,
     "bound_terminations": 0,
     "walk_bound_terminations": 0,
     "collision_truncated_stems": 0,
     "collision_terminations": 15,
-    "anastomosis_bridges": 17,
+    "anastomosis_bridges": 18,
     "anastomosis_bridges_arteriovenous": 0,
-    "anastomosis_no_partner": 2,
-    "anastomosis_collision_failed": 2
+    "anastomosis_no_partner": 1,
+    "anastomosis_collision_failed": 1
    }
   },
   {
@@ -5311,33 +5311,33 @@
    "seed": 5,
    "generations": 8,
    "d0": 24.412274868850414,
-   "seconds": 3.452876567840576,
+   "seconds": 3.769495725631714,
    "values": {
-    "points": 5708,
-    "length mm": 4.148582443682732,
-    "d P50": 5.570299325261923,
-    "d P90": 16.263392093003134,
+    "points": 6826,
+    "length mm": 4.983180612281745,
+    "d P50": 4.790798813687556,
+    "d P90": 13.736884272518077,
     "d P99": 24.412274868850414,
-    "arc/chord mean": 1.685073051457706,
-    "arc/chord P90": 2.726093744850023,
-    "curvature 1/um": 0.23658818245531307,
-    "tips": 23,
-    "tips/mm": 5.5440624146263096,
-    "junctions": 55,
+    "arc/chord mean": 1.524321876072417,
+    "arc/chord P90": 2.3537741874746887,
+    "curvature 1/um": 0.2285640023480935,
+    "tips": 16,
+    "tips/mm": 3.2108007405081334,
+    "junctions": 50,
     "b0": 1,
-    "b1": 17,
-    "FA": 0.14012496903750432,
+    "b1": 18,
+    "FA": 0.1341820029393158,
     "min clearance um": 1.00010172699464,
     "violations": 0,
-    "length density mm/mm3": 155.26664812132066,
+    "length density mm/mm3": 188.28382916488368,
     "bound_terminations": 0,
     "walk_bound_terminations": 0,
     "collision_truncated_stems": 0,
     "collision_terminations": 11,
-    "anastomosis_bridges": 17,
+    "anastomosis_bridges": 18,
     "anastomosis_bridges_arteriovenous": 0,
-    "anastomosis_no_partner": 0,
-    "anastomosis_collision_failed": 4
+    "anastomosis_no_partner": 1,
+    "anastomosis_collision_failed": 1
    }
   }
  ],
@@ -5359,7 +5359,7 @@
     10,
     12
    ],
-   "seconds": 10.92509412765503,
+   "seconds": 11.433323383331299,
    "stats": {
     "points": {
      "mean": 70546.8,
@@ -5509,7 +5509,7 @@
     8,
     8
    ],
-   "seconds": 2.5662975311279297,
+   "seconds": 2.5183796882629395,
    "stats": {
     "points": {
      "mean": 15935.6,
@@ -5661,7 +5661,7 @@
     10,
     12
    ],
-   "seconds": 7.9571311473846436,
+   "seconds": 7.4568915367126465,
    "stats": {
     "points": {
      "mean": 58128.8,
@@ -5816,7 +5816,7 @@
     8,
     8
    ],
-   "seconds": 2.402132034301758,
+   "seconds": 2.399211883544922,
    "stats": {
     "points": {
      "mean": 15764.0,
@@ -5970,7 +5970,7 @@
     8,
     8
    ],
-   "seconds": 5.735422134399414,
+   "seconds": 5.855499029159546,
    "stats": {
     "points": {
      "mean": 11855.6,
@@ -6124,7 +6124,7 @@
     8,
     8
    ],
-   "seconds": 5.720628023147583,
+   "seconds": 6.0856099128723145,
    "stats": {
     "points": {
      "mean": 11855.6,
@@ -6278,7 +6278,7 @@
     8,
     8
    ],
-   "seconds": 5.826009750366211,
+   "seconds": 5.872299432754517,
    "stats": {
     "points": {
      "mean": 11855.6,
@@ -6432,7 +6432,7 @@
     8,
     8
    ],
-   "seconds": 5.5716776847839355,
+   "seconds": 5.768708229064941,
    "stats": {
     "points": {
      "mean": 11855.6,
@@ -6586,7 +6586,7 @@
     8,
     8
    ],
-   "seconds": 6.030554533004761,
+   "seconds": 5.674535274505615,
    "stats": {
     "points": {
      "mean": 11855.6,
@@ -6740,7 +6740,7 @@
     8,
     8
    ],
-   "seconds": 5.5070390701293945,
+   "seconds": 5.726022243499756,
    "stats": {
     "points": {
      "mean": 11855.6,
@@ -6894,7 +6894,7 @@
     8,
     8
    ],
-   "seconds": 5.551467180252075,
+   "seconds": 5.6329872608184814,
    "stats": {
     "points": {
      "mean": 11855.6,
@@ -7045,7 +7045,7 @@
     8,
     8
    ],
-   "seconds": 4.160330533981323,
+   "seconds": 4.216105699539185,
    "stats": {
     "points": {
      "mean": 15870.2,
@@ -7200,7 +7200,7 @@
     8,
     8
    ],
-   "seconds": 15.445234298706055,
+   "seconds": 16.2832248210907,
    "stats": {
     "points": {
      "mean": 8021.8,
@@ -7360,26 +7360,26 @@
     8,
     8
    ],
-   "seconds": 23.01190161705017,
+   "seconds": 21.442484855651855,
    "stats": {
     "points": {
-     "mean": 8638.4,
-     "sd": 3035.8541302243098,
+     "mean": 9353.8,
+     "sd": 3215.973056479174,
      "n": 5
     },
     "length mm": {
-     "mean": 6.966289501866974,
-     "sd": 2.7764205769631256,
+     "mean": 7.479422014952695,
+     "sd": 2.902989762310385,
      "n": 5
     },
     "d P50": {
-     "mean": 6.71010339834085,
-     "sd": 1.5817144401785648,
+     "mean": 6.379386980742936,
+     "sd": 1.4920123991188752,
      "n": 5
     },
     "d P90": {
-     "mean": 14.839626834805566,
-     "sd": 3.951274182293815,
+     "mean": 14.49072484805832,
+     "sd": 4.1985052830783385,
      "n": 5
     },
     "d P99": {
@@ -7388,33 +7388,33 @@
      "n": 5
     },
     "arc/chord mean": {
-     "mean": 1.2165696236044967,
-     "sd": 0.10130458085595033,
+     "mean": 1.1976554924055947,
+     "sd": 0.032790078320920533,
      "n": 5
     },
     "arc/chord P90": {
-     "mean": 1.2073978093333781,
-     "sd": 0.04595063655076063,
+     "mean": 1.356665560468707,
+     "sd": 0.10717901529997077,
      "n": 5
     },
     "curvature 1/um": {
-     "mean": 0.1352835885847474,
-     "sd": 0.027093101530392846,
+     "mean": 0.1325621127985232,
+     "sd": 0.02799330825599048,
      "n": 5
     },
     "tips": {
-     "mean": 68.6,
-     "sd": 23.373061416938945,
+     "mean": 62.4,
+     "sd": 22.40089283934906,
      "n": 5
     },
     "tips/mm": {
-     "mean": 10.071590185015165,
-     "sd": 1.9793422063179649,
+     "mean": 8.470580135814483,
+     "sd": 1.8276588802814353,
      "n": 5
     },
     "junctions": {
-     "mean": 95.4,
-     "sd": 33.63480340361751,
+     "mean": 93.2,
+     "sd": 32.28312252555505,
      "n": 5
     },
     "b0": {
@@ -7423,18 +7423,18 @@
      "n": 5
     },
     "b1": {
-     "mean": 14.4,
-     "sd": 6.107372593840989,
+     "mean": 16.4,
+     "sd": 5.366563145999495,
      "n": 5
     },
     "FA": {
-     "mean": 0.11282473004306841,
-     "sd": 0.03487232537936643,
+     "mean": 0.10248444094322147,
+     "sd": 0.049850585389375465,
      "n": 5
     },
     "min clearance um": {
-     "mean": 1.0018243126916684,
-     "sd": 0.00048475692389026044,
+     "mean": 1.0019602408616257,
+     "sd": 0.00036014448831480224,
      "n": 5
     },
     "violations": {
@@ -7443,8 +7443,8 @@
      "n": 5
     },
     "length density mm/mm3": {
-     "mean": 49.503056149964706,
-     "sd": 16.548422663192657,
+     "mean": 53.06353112813188,
+     "sd": 18.404919823892875,
      "n": 5
     },
     "bound_terminations": {
@@ -7468,8 +7468,8 @@
      "n": 5
     },
     "anastomosis_bridges": {
-     "mean": 14.4,
-     "sd": 6.107372593840989,
+     "mean": 16.4,
+     "sd": 5.366563145999495,
      "n": 5
     },
     "anastomosis_bridges_arteriovenous": {
@@ -7478,13 +7478,13 @@
      "n": 5
     },
     "anastomosis_no_partner": {
-     "mean": 2.0,
-     "sd": 3.391164991562634,
+     "mean": 1.0,
+     "sd": 0.0,
      "n": 5
     },
     "anastomosis_collision_failed": {
-     "mean": 2.4,
-     "sd": 1.51657508881031,
+     "mean": 0.4,
+     "sd": 0.894427190999916,
      "n": 5
     }
    }
@@ -7520,26 +7520,26 @@
     8,
     8
    ],
-   "seconds": 28.128877878189087,
+   "seconds": 26.094568252563477,
    "stats": {
     "points": {
-     "mean": 9165.4,
-     "sd": 3224.947487944571,
+     "mean": 10441.4,
+     "sd": 3546.6925860581714,
      "n": 5
     },
     "length mm": {
-     "mean": 7.400538086089307,
-     "sd": 2.9350588116549075,
+     "mean": 8.363011963853038,
+     "sd": 3.0955987605777313,
      "n": 5
     },
     "d P50": {
-     "mean": 6.537334438814966,
-     "sd": 1.6802877020083882,
+     "mean": 5.721911861749173,
+     "sd": 1.1618182072581882,
      "n": 5
     },
     "d P90": {
-     "mean": 14.484901549206677,
-     "sd": 4.205360639677227,
+     "mean": 13.859662073884664,
+     "sd": 3.9728464994573454,
      "n": 5
     },
     "d P99": {
@@ -7548,33 +7548,33 @@
      "n": 5
     },
     "arc/chord mean": {
-     "mean": 1.394730116562131,
-     "sd": 0.20185713961594448,
+     "mean": 1.289369360935051,
+     "sd": 0.04419121203510689,
      "n": 5
     },
     "arc/chord P90": {
-     "mean": 1.9036617415909305,
-     "sd": 0.8951030716606869,
+     "mean": 1.9912246031713636,
+     "sd": 0.23137154318752012,
      "n": 5
     },
     "curvature 1/um": {
-     "mean": 0.13866248991614313,
-     "sd": 0.027442890410928043,
+     "mean": 0.13522037466165565,
+     "sd": 0.029814076864065224,
      "n": 5
     },
     "tips": {
-     "mean": 49.2,
-     "sd": 15.352524222420234,
+     "mean": 40.6,
+     "sd": 15.42076522096099,
      "n": 5
     },
     "tips/mm": {
-     "mean": 6.9424669378198605,
-     "sd": 1.8704589649628953,
+     "mean": 4.937856059118301,
+     "sd": 1.654897641855504,
      "n": 5
     },
     "junctions": {
-     "mean": 104.4,
-     "sd": 37.633761438368076,
+     "mean": 98.2,
+     "sd": 36.00277767061869,
      "n": 5
     },
     "b0": {
@@ -7583,18 +7583,18 @@
      "n": 5
     },
     "b1": {
-     "mean": 28.6,
-     "sd": 11.588787684654509,
+     "mean": 29.8,
+     "sd": 10.639548862616309,
      "n": 5
     },
     "FA": {
-     "mean": 0.09149153022174675,
-     "sd": 0.0324905046768536,
+     "mean": 0.09104906377430821,
+     "sd": 0.04237379352828595,
      "n": 5
     },
     "min clearance um": {
-     "mean": 1.001716137804023,
-     "sd": 0.00061620630398446,
+     "mean": 1.0019602408616257,
+     "sd": 0.00036014448831480224,
      "n": 5
     },
     "violations": {
@@ -7603,8 +7603,8 @@
      "n": 5
     },
     "length density mm/mm3": {
-     "mean": 52.47603812934185,
-     "sd": 17.666368303427955,
+     "mean": 58.215293718004,
+     "sd": 18.514607776426185,
      "n": 5
     },
     "bound_terminations": {
@@ -7628,8 +7628,8 @@
      "n": 5
     },
     "anastomosis_bridges": {
-     "mean": 28.6,
-     "sd": 11.588787684654509,
+     "mean": 29.8,
+     "sd": 10.639548862616309,
      "n": 5
     },
     "anastomosis_bridges_arteriovenous": {
@@ -7638,13 +7638,13 @@
      "n": 5
     },
     "anastomosis_no_partner": {
-     "mean": 2.2,
-     "sd": 3.3466401061363023,
+     "mean": 2.0,
+     "sd": 1.224744871391589,
      "n": 5
     },
     "anastomosis_collision_failed": {
-     "mean": 4.6,
-     "sd": 2.6076809620810595,
+     "mean": 1.2,
+     "sd": 1.6431676725154982,
      "n": 5
     }
    }
@@ -7680,26 +7680,26 @@
     8,
     8
    ],
-   "seconds": 31.649088382720947,
+   "seconds": 29.04373550415039,
    "stats": {
     "points": {
-     "mean": 9586.0,
-     "sd": 3359.911754793569,
+     "mean": 11489.2,
+     "sd": 4092.718497527041,
      "n": 5
     },
     "length mm": {
-     "mean": 7.788659461124944,
-     "sd": 3.126298900487619,
+     "mean": 9.283105895869458,
+     "sd": 3.39402109659085,
      "n": 5
     },
     "d P50": {
-     "mean": 6.361448753662738,
-     "sd": 1.6812070604988536,
+     "mean": 5.624799580835565,
+     "sd": 1.4872725152937267,
      "n": 5
     },
     "d P90": {
-     "mean": 14.284101114317076,
-     "sd": 4.420695937463264,
+     "mean": 13.441963925264446,
+     "sd": 3.9124591189516154,
      "n": 5
     },
     "d P99": {
@@ -7708,33 +7708,33 @@
      "n": 5
     },
     "arc/chord mean": {
-     "mean": 1.5352859339268794,
-     "sd": 0.24352229350835114,
+     "mean": 1.3555155524000593,
+     "sd": 0.07442376375782127,
      "n": 5
     },
     "arc/chord P90": {
-     "mean": 2.802365197130631,
-     "sd": 1.0020557341894534,
+     "mean": 2.2387805872174447,
+     "sd": 0.36558457573847475,
      "n": 5
     },
     "curvature 1/um": {
-     "mean": 0.1412113239651154,
-     "sd": 0.030366726109360174,
+     "mean": 0.1330852590763804,
+     "sd": 0.02743178426315405,
      "n": 5
     },
     "tips": {
-     "mean": 34.0,
-     "sd": 9.9498743710662,
+     "mean": 25.4,
+     "sd": 9.044335243676011,
      "n": 5
     },
     "tips/mm": {
-     "mean": 4.632139787538469,
-     "sd": 1.044771112161255,
+     "mean": 2.8161506775768546,
+     "sd": 0.5844037533854926,
      "n": 5
     },
     "junctions": {
-     "mean": 110.0,
-     "sd": 39.11521443121589,
+     "mean": 101.4,
+     "sd": 37.091778064687055,
      "n": 5
     },
     "b0": {
@@ -7744,12 +7744,12 @@
     },
     "b1": {
      "mean": 39.0,
-     "sd": 15.556349186104045,
+     "sd": 14.560219778561036,
      "n": 5
     },
     "FA": {
-     "mean": 0.09350639122245481,
-     "sd": 0.04047932320851763,
+     "mean": 0.10029784897920344,
+     "sd": 0.052147009649151754,
      "n": 5
     },
     "min clearance um": {
@@ -7763,8 +7763,8 @@
      "n": 5
     },
     "length density mm/mm3": {
-     "mean": 54.97971774679331,
-     "sd": 19.209075495407816,
+     "mean": 63.70306399873148,
+     "sd": 20.679178715643477,
      "n": 5
     },
     "bound_terminations": {
@@ -7789,7 +7789,7 @@
     },
     "anastomosis_bridges": {
      "mean": 39.0,
-     "sd": 15.556349186104045,
+     "sd": 14.560219778561036,
      "n": 5
     },
     "anastomosis_bridges_arteriovenous": {
@@ -7798,13 +7798,13 @@
      "n": 5
     },
     "anastomosis_no_partner": {
-     "mean": 3.0,
-     "sd": 3.6742346141747673,
+     "mean": 2.4,
+     "sd": 1.9493588689617927,
      "n": 5
     },
     "anastomosis_collision_failed": {
-     "mean": 7.8,
-     "sd": 4.764451699828638,
+     "mean": 1.6,
+     "sd": 2.073644135332772,
      "n": 5
     }
    }
@@ -7841,26 +7841,26 @@
     8,
     8
    ],
-   "seconds": 31.649773836135864,
+   "seconds": 37.03116154670715,
    "stats": {
     "points": {
-     "mean": 9419.4,
-     "sd": 2051.337319896462,
+     "mean": 10260.0,
+     "sd": 2163.1999445266265,
      "n": 5
     },
     "length mm": {
-     "mean": 7.28380236607007,
-     "sd": 0.7651905567948016,
+     "mean": 7.906497881420893,
+     "sd": 0.6916584079957885,
      "n": 5
     },
     "d P50": {
-     "mean": 6.68694465623196,
-     "sd": 1.552426681078752,
+     "mean": 6.350265572479827,
+     "sd": 1.4376459965347517,
      "n": 5
     },
     "d P90": {
-     "mean": 17.090492081792615,
-     "sd": 3.982324031385646,
+     "mean": 16.661251312649096,
+     "sd": 4.018578564927915,
      "n": 5
     },
     "d P99": {
@@ -7869,53 +7869,53 @@
      "n": 5
     },
     "arc/chord mean": {
-     "mean": 1.2539565275708582,
-     "sd": 0.04774203014086547,
+     "mean": 1.242294236999291,
+     "sd": 0.031155742249204442,
      "n": 5
     },
     "arc/chord P90": {
-     "mean": 1.5039191588365362,
-     "sd": 0.11593393692201676,
+     "mean": 1.6256194129878363,
+     "sd": 0.13210860884650255,
      "n": 5
     },
     "curvature 1/um": {
-     "mean": 0.1478750671037754,
-     "sd": 0.027427577228303305,
+     "mean": 0.14513103496501836,
+     "sd": 0.02630166727751318,
      "n": 5
     },
     "tips": {
-     "mean": 81.0,
-     "sd": 18.748333259252675,
+     "mean": 77.0,
+     "sd": 21.920310216782973,
      "n": 5
     },
     "tips/mm": {
-     "mean": 11.203113705013482,
-     "sd": 2.7275758936785945,
+     "mean": 9.80012519614531,
+     "sd": 2.92444605109931,
      "n": 5
     },
     "junctions": {
-     "mean": 107.4,
-     "sd": 24.460171708309815,
+     "mean": 105.4,
+     "sd": 25.422431040323424,
      "n": 5
     },
     "b0": {
-     "mean": 1.2,
-     "sd": 0.4472135954999579,
+     "mean": 1.0,
+     "sd": 0.0,
      "n": 5
     },
     "b1": {
-     "mean": 14.4,
-     "sd": 2.9664793948382653,
+     "mean": 15.2,
+     "sd": 2.588435821108957,
      "n": 5
     },
     "FA": {
-     "mean": 0.1483100137361622,
-     "sd": 0.027634461391358958,
+     "mean": 0.16117008394218732,
+     "sd": 0.02665460247986606,
      "n": 5
     },
     "min clearance um": {
-     "mean": 1.0012985616814505,
-     "sd": 0.0016195610803378003,
+     "mean": 1.0013215721199054,
+     "sd": 0.0016692245277551451,
      "n": 5
     },
     "violations": {
@@ -7924,8 +7924,8 @@
      "n": 5
     },
     "length density mm/mm3": {
-     "mean": 278.3644562980086,
-     "sd": 281.2650748740693,
+     "mean": 300.65807524259986,
+     "sd": 301.3385001531354,
      "n": 5
     },
     "bound_terminations": {
@@ -7949,23 +7949,23 @@
      "n": 5
     },
     "anastomosis_bridges": {
-     "mean": 15.2,
-     "sd": 3.271085446759225,
+     "mean": 16.2,
+     "sd": 2.588435821108957,
      "n": 5
     },
     "anastomosis_bridges_arteriovenous": {
-     "mean": 2.6,
-     "sd": 2.073644135332772,
+     "mean": 5.6,
+     "sd": 3.361547262794322,
      "n": 5
     },
     "anastomosis_no_partner": {
-     "mean": 0.8,
-     "sd": 0.8366600265340756,
+     "mean": 0.0,
+     "sd": 0.0,
      "n": 5
     },
     "anastomosis_collision_failed": {
-     "mean": 3.0,
-     "sd": 1.224744871391589,
+     "mean": 1.6,
+     "sd": 1.140175425099138,
      "n": 5
     }
    }
@@ -8002,26 +8002,26 @@
     8,
     8
    ],
-   "seconds": 38.4157338142395,
+   "seconds": 48.06342577934265,
    "stats": {
     "points": {
-     "mean": 9918.2,
-     "sd": 2193.2818332353004,
+     "mean": 11403.2,
+     "sd": 2118.1901944820725,
      "n": 5
     },
     "length mm": {
-     "mean": 7.683563490134921,
-     "sd": 0.8220579126805324,
+     "mean": 8.835229072204205,
+     "sd": 0.8314175089604892,
      "n": 5
     },
     "d P50": {
-     "mean": 6.450694143430461,
-     "sd": 1.5317262040972501,
+     "mean": 5.640866630671709,
+     "sd": 1.1262931076468878,
      "n": 5
     },
     "d P90": {
-     "mean": 16.670183223219844,
-     "sd": 4.02666020210535,
+     "mean": 16.262059527618764,
+     "sd": 3.748851485508005,
      "n": 5
     },
     "d P99": {
@@ -8030,48 +8030,48 @@
      "n": 5
     },
     "arc/chord mean": {
-     "mean": 1.3630652507244745,
-     "sd": 0.07818015500944951,
+     "mean": 1.3165799166376841,
+     "sd": 0.06284599064020206,
      "n": 5
     },
     "arc/chord P90": {
-     "mean": 1.7640700097467559,
-     "sd": 0.12795463871315302,
+     "mean": 1.89702448844014,
+     "sd": 0.2494010107937352,
      "n": 5
     },
     "curvature 1/um": {
-     "mean": 0.15052222738739537,
-     "sd": 0.02774702663002428,
+     "mean": 0.14638560818374824,
+     "sd": 0.027629860968508467,
      "n": 5
     },
     "tips": {
-     "mean": 60.2,
-     "sd": 16.284962388657824,
+     "mean": 54.4,
+     "sd": 24.84552273549502,
      "n": 5
     },
     "tips/mm": {
-     "mean": 7.922111033182285,
-     "sd": 2.325623989282055,
+     "mean": 6.29230104421959,
+     "sd": 3.2231242186531817,
      "n": 5
     },
     "junctions": {
-     "mean": 112.6,
-     "sd": 24.935917869611295,
+     "mean": 110.4,
+     "sd": 23.394443784796426,
      "n": 5
     },
     "b0": {
-     "mean": 1.2,
-     "sd": 0.4472135954999579,
+     "mean": 1.0,
+     "sd": 0.0,
      "n": 5
     },
     "b1": {
-     "mean": 27.4,
-     "sd": 5.176871642217914,
+     "mean": 29.0,
+     "sd": 2.6457513110645907,
      "n": 5
     },
     "FA": {
-     "mean": 0.13868660017212223,
-     "sd": 0.03383969098082701,
+     "mean": 0.14867038133085247,
+     "sd": 0.02976945440802046,
      "n": 5
     },
     "min clearance um": {
@@ -8085,8 +8085,8 @@
      "n": 5
     },
     "length density mm/mm3": {
-     "mean": 293.3759537971502,
-     "sd": 295.7724362431425,
+     "mean": 328.4020287142167,
+     "sd": 315.1281607241016,
      "n": 5
     },
     "bound_terminations": {
@@ -8110,23 +8110,23 @@
      "n": 5
     },
     "anastomosis_bridges": {
-     "mean": 28.2,
-     "sd": 5.310367218940701,
+     "mean": 30.0,
+     "sd": 2.6457513110645907,
      "n": 5
     },
     "anastomosis_bridges_arteriovenous": {
-     "mean": 4.0,
-     "sd": 3.8078865529319543,
+     "mean": 8.8,
+     "sd": 4.207136793592526,
      "n": 5
     },
     "anastomosis_no_partner": {
-     "mean": 1.4,
-     "sd": 1.3416407864998738,
+     "mean": 0.0,
+     "sd": 0.0,
      "n": 5
     },
     "anastomosis_collision_failed": {
-     "mean": 6.4,
-     "sd": 2.1908902300206643,
+     "mean": 4.0,
+     "sd": 2.9154759474226504,
      "n": 5
     }
    }
@@ -8163,26 +8163,26 @@
     8,
     8
    ],
-   "seconds": 43.797966957092285,
+   "seconds": 66.47040677070618,
    "stats": {
     "points": {
-     "mean": 10220.2,
-     "sd": 2174.0565080052543,
+     "mean": 12000.0,
+     "sd": 2393.501410068521,
      "n": 5
     },
     "length mm": {
-     "mean": 7.941130735758764,
-     "sd": 0.7535458867461635,
+     "mean": 9.294800698277507,
+     "sd": 0.7533927475998401,
      "n": 5
     },
     "d P50": {
-     "mean": 6.314829680733906,
-     "sd": 1.582611141683753,
+     "mean": 5.539544309007901,
+     "sd": 1.2302215675865589,
      "n": 5
     },
     "d P90": {
-     "mean": 16.661251312649096,
-     "sd": 4.018578564927915,
+     "mean": 16.13387005572718,
+     "sd": 3.6413410743759065,
      "n": 5
     },
     "d P99": {
@@ -8191,33 +8191,33 @@
      "n": 5
     },
     "arc/chord mean": {
-     "mean": 1.4530170668915816,
-     "sd": 0.09439714307412342,
+     "mean": 1.3447271235548144,
+     "sd": 0.057137150875691274,
      "n": 5
     },
     "arc/chord P90": {
-     "mean": 2.2988726619757545,
-     "sd": 0.3849981317753009,
+     "mean": 2.000488091547825,
+     "sd": 0.20959446553245503,
      "n": 5
     },
     "curvature 1/um": {
-     "mean": 0.15205911320810955,
-     "sd": 0.028079328146441145,
+     "mean": 0.14579632072807563,
+     "sd": 0.027433307984626856,
      "n": 5
     },
     "tips": {
-     "mean": 49.0,
-     "sd": 15.198684153570664,
+     "mean": 41.6,
+     "sd": 21.290843102141352,
      "n": 5
     },
     "tips/mm": {
-     "mean": 6.224451237168801,
-     "sd": 2.018238271157867,
+     "mean": 4.54833044422424,
+     "sd": 2.459827115619478,
      "n": 5
     },
     "junctions": {
-     "mean": 120.2,
-     "sd": 24.903814968795444,
+     "mean": 117.2,
+     "sd": 25.27251471460646,
      "n": 5
     },
     "b0": {
@@ -8226,13 +8226,13 @@
      "n": 5
     },
     "b1": {
-     "mean": 36.6,
-     "sd": 6.877499545619759,
+     "mean": 38.8,
+     "sd": 4.764451699828639,
      "n": 5
     },
     "FA": {
-     "mean": 0.13777012566113092,
-     "sd": 0.029732251477271963,
+     "mean": 0.14388224520331827,
+     "sd": 0.03324985097838234,
      "n": 5
     },
     "min clearance um": {
@@ -8246,8 +8246,8 @@
      "n": 5
     },
     "length density mm/mm3": {
-     "mean": 303.8768517012647,
-     "sd": 307.78590342317653,
+     "mean": 351.420375245357,
+     "sd": 348.65902936913125,
      "n": 5
     },
     "bound_terminations": {
@@ -8271,23 +8271,23 @@
      "n": 5
     },
     "anastomosis_bridges": {
-     "mean": 37.6,
-     "sd": 6.877499545619759,
+     "mean": 39.8,
+     "sd": 4.764451699828639,
      "n": 5
     },
     "anastomosis_bridges_arteriovenous": {
-     "mean": 5.0,
-     "sd": 4.0,
+     "mean": 13.8,
+     "sd": 7.886697661252142,
      "n": 5
     },
     "anastomosis_no_partner": {
-     "mean": 3.0,
-     "sd": 3.1622776601683795,
+     "mean": 0.6,
+     "sd": 0.8944271909999157,
      "n": 5
     },
     "anastomosis_collision_failed": {
-     "mean": 8.6,
-     "sd": 3.1304951684997055,
+     "mean": 6.0,
+     "sd": 5.385164807134504,
      "n": 5
     }
    }
@@ -8326,21 +8326,21 @@
     8,
     8
    ],
-   "seconds": 49.71652388572693,
+   "seconds": 41.676088094711304,
    "stats": {
     "points": {
-     "mean": 10485.0,
-     "sd": 2244.375525619543,
+     "mean": 10362.4,
+     "sd": 2492.594291095123,
      "n": 5
     },
     "length mm": {
-     "mean": 8.156364837977028,
-     "sd": 0.8680401451231795,
+     "mean": 7.953520742980567,
+     "sd": 0.8639002122896178,
      "n": 5
     },
     "d P50": {
-     "mean": 6.240826888683345,
-     "sd": 1.5034728827002408,
+     "mean": 6.380654030937529,
+     "sd": 1.5192459320465586,
      "n": 5
     },
     "d P90": {
@@ -8354,33 +8354,33 @@
      "n": 5
     },
     "arc/chord mean": {
-     "mean": 1.4793283860648656,
-     "sd": 0.11918620784549715,
+     "mean": 1.265865444000029,
+     "sd": 0.02441636052615143,
      "n": 5
     },
     "arc/chord P90": {
-     "mean": 2.405559550886454,
-     "sd": 0.3775325920889495,
+     "mean": 1.7410307193172887,
+     "sd": 0.11834138873864654,
      "n": 5
     },
     "curvature 1/um": {
-     "mean": 0.15227991283008654,
-     "sd": 0.02815922411443461,
+     "mean": 0.1468344011543498,
+     "sd": 0.02637844439395069,
      "n": 5
     },
     "tips": {
-     "mean": 40.4,
-     "sd": 13.164345787011218,
+     "mean": 55.0,
+     "sd": 7.648529270389178,
      "n": 5
     },
     "tips/mm": {
-     "mean": 5.045428385967324,
-     "sd": 1.8703876864887703,
+     "mean": 7.0082025903305745,
+     "sd": 1.361502807590766,
      "n": 5
     },
     "junctions": {
-     "mean": 125.2,
-     "sd": 25.897876360813832,
+     "mean": 122.2,
+     "sd": 27.031463149448644,
      "n": 5
     },
     "b0": {
@@ -8389,13 +8389,13 @@
      "n": 5
     },
     "b1": {
-     "mean": 43.4,
-     "sd": 9.555103348473004,
+     "mean": 34.6,
+     "sd": 11.458621208504974,
      "n": 5
     },
     "FA": {
-     "mean": 0.13316928160080557,
-     "sd": 0.025012608533140704,
+     "mean": 0.14076310403290684,
+     "sd": 0.027242471955731123,
      "n": 5
     },
     "min clearance um": {
@@ -8409,8 +8409,8 @@
      "n": 5
     },
     "length density mm/mm3": {
-     "mean": 311.6957136763244,
-     "sd": 314.58414697663665,
+     "mean": 309.42916867313147,
+     "sd": 322.8225823569268,
      "n": 5
     },
     "bound_terminations": {
@@ -8434,23 +8434,23 @@
      "n": 5
     },
     "anastomosis_bridges": {
-     "mean": 44.4,
-     "sd": 9.555103348473004,
+     "mean": 35.6,
+     "sd": 11.458621208504974,
      "n": 5
     },
     "anastomosis_bridges_arteriovenous": {
-     "mean": 6.8,
-     "sd": 5.718391382198319,
+     "mean": 7.0,
+     "sd": 5.958187643906492,
      "n": 5
     },
     "anastomosis_no_partner": {
-     "mean": 4.0,
-     "sd": 3.1622776601683795,
+     "mean": 23.4,
+     "sd": 8.792041856133308,
      "n": 5
     },
     "anastomosis_collision_failed": {
-     "mean": 12.0,
-     "sd": 4.636809247747852,
+     "mean": 8.2,
+     "sd": 3.7682887362833544,
      "n": 5
     }
    }
@@ -8489,26 +8489,26 @@
     8,
     8
    ],
-   "seconds": 75.44335627555847,
+   "seconds": 67.5816650390625,
    "stats": {
     "points": {
-     "mean": 11373.2,
-     "sd": 2589.580796190766,
+     "mean": 12011.0,
+     "sd": 2674.3071065231084,
      "n": 5
     },
     "length mm": {
-     "mean": 8.858895357003195,
-     "sd": 0.7593784999008489,
+     "mean": 9.178072295520735,
+     "sd": 0.7451813182506972,
      "n": 5
     },
     "d P50": {
-     "mean": 5.759393253295111,
-     "sd": 1.465925424003865,
+     "mean": 5.539106946637961,
+     "sd": 1.1799386331814725,
      "n": 5
     },
     "d P90": {
-     "mean": 16.262945895581744,
-     "sd": 3.770857541288734,
+     "mean": 16.22533282224426,
+     "sd": 3.7811469484414237,
      "n": 5
     },
     "d P99": {
@@ -8517,33 +8517,33 @@
      "n": 5
     },
     "arc/chord mean": {
-     "mean": 1.4349621098546004,
-     "sd": 0.1267228976182258,
+     "mean": 1.3205674596147552,
+     "sd": 0.039253754683995196,
      "n": 5
     },
     "arc/chord P90": {
-     "mean": 2.3371991810455963,
-     "sd": 0.3642739284440962,
+     "mean": 1.931647129560251,
+     "sd": 0.16878590319859274,
      "n": 5
     },
     "curvature 1/um": {
-     "mean": 0.14970651489932874,
-     "sd": 0.027345028298465635,
+     "mean": 0.14706147535966113,
+     "sd": 0.02763975868886446,
      "n": 5
     },
     "tips": {
-     "mean": 36.8,
-     "sd": 15.56277610196844,
+     "mean": 36.2,
+     "sd": 13.917614738165444,
      "n": 5
     },
     "tips/mm": {
-     "mean": 4.208400279149627,
-     "sd": 1.8595560829031554,
+     "mean": 3.9860429815686076,
+     "sd": 1.6150183273484016,
      "n": 5
     },
     "junctions": {
-     "mean": 116.8,
-     "sd": 27.22498852157701,
+     "mean": 124.6,
+     "sd": 27.627884464793897,
      "n": 5
     },
     "b0": {
@@ -8552,13 +8552,13 @@
      "n": 5
     },
     "b1": {
-     "mean": 41.0,
-     "sd": 8.426149773176359,
+     "mean": 45.2,
+     "sd": 8.5848704125339,
      "n": 5
     },
     "FA": {
-     "mean": 0.1366742994257056,
-     "sd": 0.03225954623305864,
+     "mean": 0.14971751707779807,
+     "sd": 0.03410273994816173,
      "n": 5
     },
     "min clearance um": {
@@ -8572,8 +8572,8 @@
      "n": 5
     },
     "length density mm/mm3": {
-     "mean": 339.5221039387011,
-     "sd": 345.23011392868983,
+     "mean": 350.6585667086873,
+     "sd": 354.8764170941727,
      "n": 5
     },
     "bound_terminations": {
@@ -8597,23 +8597,23 @@
      "n": 5
     },
     "anastomosis_bridges": {
-     "mean": 42.0,
-     "sd": 8.426149773176359,
+     "mean": 46.2,
+     "sd": 8.5848704125339,
      "n": 5
     },
     "anastomosis_bridges_arteriovenous": {
-     "mean": 12.8,
-     "sd": 8.613942186943213,
+     "mean": 14.0,
+     "sd": 9.924716620639604,
      "n": 5
     },
     "anastomosis_no_partner": {
-     "mean": 0.2,
-     "sd": 0.44721359549995804,
+     "mean": 3.4,
+     "sd": 2.4083189157584592,
      "n": 5
     },
     "anastomosis_collision_failed": {
-     "mean": 12.0,
-     "sd": 5.787918451395113,
+     "mean": 8.8,
+     "sd": 7.224956747275377,
      "n": 5
     }
    }
@@ -8641,7 +8641,7 @@
     8,
     8
    ],
-   "seconds": 2.3172855377197266,
+   "seconds": 2.385281801223755,
    "stats": {
     "points": {
      "mean": 15935.6,
@@ -8793,26 +8793,26 @@
     8,
     8
    ],
-   "seconds": 58.3302206993103,
+   "seconds": 57.08789944648743,
    "stats": {
     "points": {
-     "mean": 13424.2,
-     "sd": 3273.2585751816187,
+     "mean": 14239.4,
+     "sd": 3563.4338495333404,
      "n": 5
     },
     "length mm": {
-     "mean": 10.739358709129545,
-     "sd": 3.7862627281168537,
+     "mean": 11.322631605717376,
+     "sd": 3.9482054296379947,
      "n": 5
     },
     "d P50": {
-     "mean": 6.011687187238428,
-     "sd": 1.0378804555274577,
+     "mean": 5.721788043398403,
+     "sd": 1.1457975218232892,
      "n": 5
     },
     "d P90": {
-     "mean": 15.525893112409316,
-     "sd": 3.0613691559640537,
+     "mean": 15.104192701469122,
+     "sd": 2.947032410718571,
      "n": 5
     },
     "d P99": {
@@ -8821,33 +8821,33 @@
      "n": 5
     },
     "arc/chord mean": {
-     "mean": 1.2711593413755105,
-     "sd": 0.05637217947416701,
+     "mean": 1.2532713715595005,
+     "sd": 0.03079571573729182,
      "n": 5
     },
     "arc/chord P90": {
-     "mean": 1.734243046321695,
-     "sd": 0.15247475769017424,
+     "mean": 1.723407555259336,
+     "sd": 0.09566924802108487,
      "n": 5
     },
     "curvature 1/um": {
-     "mean": 0.1373398912931003,
-     "sd": 0.02210929407568024,
+     "mean": 0.1339439240952538,
+     "sd": 0.023171990782218682,
      "n": 5
     },
     "tips": {
-     "mean": 65.0,
-     "sd": 13.583077707206124,
+     "mean": 64.8,
+     "sd": 11.966620241321273,
      "n": 5
     },
     "tips/mm": {
-     "mean": 6.728663839100676,
-     "sd": 3.070552470263275,
+     "mean": 6.236615904542761,
+     "sd": 2.269041487764553,
      "n": 5
     },
     "junctions": {
-     "mean": 137.0,
-     "sd": 35.34826728426727,
+     "mean": 139.6,
+     "sd": 39.494303386691094,
      "n": 5
     },
     "b0": {
@@ -8856,18 +8856,18 @@
      "n": 5
     },
     "b1": {
-     "mean": 37.0,
-     "sd": 13.619838471876236,
+     "mean": 38.4,
+     "sd": 14.67310464761974,
      "n": 5
     },
     "FA": {
-     "mean": 0.15210044151326627,
-     "sd": 0.05786617068438717,
+     "mean": 0.1705919514764524,
+     "sd": 0.050468023411364166,
      "n": 5
     },
     "min clearance um": {
-     "mean": 1.0011536617042083,
-     "sd": 0.0007112613167564816,
+     "mean": 1.0014076806608903,
+     "sd": 0.0007532134525130891,
      "n": 5
     },
     "violations": {
@@ -8876,8 +8876,8 @@
      "n": 5
     },
     "length density mm/mm3": {
-     "mean": 262.3642517656186,
-     "sd": 100.74538203829859,
+     "mean": 277.36406714434196,
+     "sd": 108.03606203627147,
      "n": 5
     },
     "bound_terminations": {
@@ -8901,23 +8901,23 @@
      "n": 5
     },
     "anastomosis_bridges": {
-     "mean": 38.0,
-     "sd": 13.619838471876236,
+     "mean": 39.4,
+     "sd": 14.67310464761974,
      "n": 5
     },
     "anastomosis_bridges_arteriovenous": {
-     "mean": 15.6,
-     "sd": 8.561541917201597,
+     "mean": 17.0,
+     "sd": 8.631338250816034,
      "n": 5
     },
     "anastomosis_no_partner": {
-     "mean": 0.0,
-     "sd": 0.0,
+     "mean": 1.0,
+     "sd": 1.224744871391589,
      "n": 5
     },
     "anastomosis_collision_failed": {
-     "mean": 6.6,
-     "sd": 4.8270073544588685,
+     "mean": 4.6,
+     "sd": 1.816590212458495,
      "n": 5
     }
    }
@@ -8945,26 +8945,26 @@
     8,
     8
    ],
-   "seconds": 19.440246105194092,
+   "seconds": 21.01161289215088,
    "stats": {
     "points": {
-     "mean": 6387.8,
-     "sd": 2441.0723463265076,
+     "mean": 7390.4,
+     "sd": 2599.8173589696644,
      "n": 5
     },
     "length mm": {
-     "mean": 4.657761032738761,
-     "sd": 1.522582714189015,
+     "mean": 5.402428444923604,
+     "sd": 1.7746530547702983,
      "n": 5
     },
     "d P50": {
-     "mean": 7.039246067776354,
-     "sd": 2.428719094782117,
+     "mean": 6.1711098927590955,
+     "sd": 2.2595155591375664,
      "n": 5
     },
     "d P90": {
-     "mean": 19.786778266294963,
-     "sd": 8.836767185580513,
+     "mean": 18.57783981362835,
+     "sd": 8.916534324044223,
      "n": 5
     },
     "d P99": {
@@ -8973,33 +8973,33 @@
      "n": 5
     },
     "arc/chord mean": {
-     "mean": 1.5490325960108853,
-     "sd": 0.17166463666409923,
+     "mean": 1.461871362064472,
+     "sd": 0.13584853897144525,
      "n": 5
     },
     "arc/chord P90": {
-     "mean": 2.2010189129168536,
-     "sd": 0.45030196983726223,
+     "mean": 2.1170153594121524,
+     "sd": 0.27040159741925784,
      "n": 5
     },
     "curvature 1/um": {
-     "mean": 0.21485101285433178,
-     "sd": 0.04764883632050961,
+     "mean": 0.21212744350530438,
+     "sd": 0.04532889021580607,
      "n": 5
     },
     "tips": {
-     "mean": 24.8,
-     "sd": 7.52994023880668,
+     "mean": 19.0,
+     "sd": 2.5495097567963922,
      "n": 5
     },
     "tips/mm": {
-     "mean": 5.41039748992732,
-     "sd": 0.7183912719309752,
+     "mean": 3.757162486972826,
+     "sd": 1.0857804389431043,
      "n": 5
     },
     "junctions": {
-     "mean": 62.8,
-     "sd": 25.56755756813701,
+     "mean": 57.8,
+     "sd": 21.111608181282637,
      "n": 5
     },
     "b0": {
@@ -9008,18 +9008,18 @@
      "n": 5
     },
     "b1": {
-     "mean": 20.0,
-     "sd": 9.027735042633894,
+     "mean": 20.4,
+     "sd": 9.50263121456368,
      "n": 5
     },
     "FA": {
-     "mean": 0.1393652613517943,
-     "sd": 0.03893271106625742,
+     "mean": 0.13038849092017907,
+     "sd": 0.041965469448676664,
      "n": 5
     },
     "min clearance um": {
-     "mean": 1.0009071226478163,
-     "sd": 0.001103015910961706,
+     "mean": 1.001141269461625,
+     "sd": 0.0014375877703635867,
      "n": 5
     },
     "violations": {
@@ -9028,8 +9028,8 @@
      "n": 5
     },
     "length density mm/mm3": {
-     "mean": 108.28180604602974,
-     "sd": 65.23749506433016,
+     "mean": 123.63568503481068,
+     "sd": 76.34689074882301,
      "n": 5
     },
     "bound_terminations": {
@@ -9053,8 +9053,8 @@
      "n": 5
     },
     "anastomosis_bridges": {
-     "mean": 20.0,
-     "sd": 9.027735042633894,
+     "mean": 20.4,
+     "sd": 9.50263121456368,
      "n": 5
     },
     "anastomosis_bridges_arteriovenous": {
@@ -9063,13 +9063,13 @@
      "n": 5
     },
     "anastomosis_no_partner": {
-     "mean": 1.8,
-     "sd": 2.489979919597747,
+     "mean": 0.6,
+     "sd": 0.5477225575051662,
      "n": 5
     },
     "anastomosis_collision_failed": {
-     "mean": 3.4,
-     "sd": 1.6733200530681511,
+     "mean": 0.8,
+     "sd": 0.8366600265340756,
      "n": 5
     }
    }

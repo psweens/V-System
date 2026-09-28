@@ -14,6 +14,7 @@ import hashlib
 import inspect
 import io
 import json
+import math
 import os
 import random
 import shutil
@@ -531,13 +532,60 @@ class AnastomosisTests(unittest.TestCase):
                          events["anastomosis_bridges"] + events["anastomosis_no_partner"]
                          + events["anastomosis_source_consumed"] + events["anastomosis_collision_failed"])
 
+    def test_bridges_never_join_a_tip_to_its_sister_by_default(self):
+        # a sister tip is two segments away; the default separation of three
+        # rules it out, a separation of two lets it back in
+        for separation, expected in ((3, 0), (2, None)):
+            grown = grow(2, niter=7, anastomose=True, anastomosis_fraction=1.0,
+                         anastomosis_min_separation=separation)
+            nodes = grown["nodes"]
+            n_plain = self.plain["nodes"].shape[1]
+            canonical = graph.canonical_columns(nodes)
+            segments = graph.segments(self.plain["nodes"], self.plain["edges"], graph.canonical_columns(self.plain["nodes"]))
+            junction_of_tip = {}
+            for path in segments:
+                for end, other in ((path[0], path[-1]), (path[-1], path[0])):
+                    junction_of_tip[int(end)] = int(other)
+            sisters = 0
+            for bridge in grown["bridges"]:
+                tip, partner = bridge["tip"], bridge["partner"]
+                if partner < n_plain and bridge["partner_kind"] == "tip":
+                    a = junction_of_tip.get(int(canonical[tip]))
+                    b = junction_of_tip.get(int(canonical[partner]))
+                    sisters += int(a is not None and a == b)
+            if expected == 0:
+                self.assertEqual(sisters, 0)
+                self.assertGreater(grown["events"]["anastomosis_kin_skipped"], 0)
+                self.assertGreater(grown["events"]["anastomosis_bridges"], 0)
+            else:
+                self.assertGreater(sisters, 0)
+
+    def test_bridges_lead_forward_and_carry_curvature(self):
+        # a partner lies within the forward cone of its tip, and a bridge is a
+        # curve rather than a strut: its arc exceeds its chord
+        from anastomosis import FORWARD_CONE_DEG
+        cone = math.cos(math.radians(FORWARD_CONE_DEG))
+        nodes = self.looped["nodes"]
+        runs = graph.polylines(nodes)
+        polyline_of = graph.polyline_of_column(nodes)
+        for bridge in self.looped["bridges"]:
+            tip, partner = bridge["tip"], bridge["partner"]
+            own = runs[polyline_of[tip]]
+            before = [c for c in own if c != tip and not np.array_equal(nodes[:3, c], nodes[:3, tip])]
+            tangent = nodes[:3, tip] - nodes[:3, before[-1]]
+            tangent /= np.linalg.norm(tangent)
+            chord = nodes[:3, partner] - nodes[:3, tip]
+            self.assertGreaterEqual(float(chord @ tangent), cone * np.linalg.norm(chord) - 1e-9)
+            self.assertGreater(bridge["arc_um"], 1.02 * bridge["chord_um"])
+        self.assertGreater(self.looped["events"]["anastomosis_behind_skipped"], 0)
+
     def test_a_zero_fraction_changes_nothing(self):
         nothing = grow(2, niter=7, anastomose=True, anastomosis_fraction=0.0)
         np.testing.assert_array_equal(nothing["nodes"], self.plain["nodes"])
 
     def test_arteriovenous_mode_grows_two_trees_and_joins_them(self):
         grown = grow(3, niter=7, anastomose=True, anastomose_mode="arteriovenous",
-                     anastomosis_fraction=0.7, anastomosis_radius=6.0, grow_in_volume=True)
+                     anastomosis_fraction=0.7, grow_in_volume=True)
         labels = set(np.unique(grown["tree"]).tolist()) - {-1}
         self.assertEqual(len(grown["programs"]), 2)
         self.assertIn(0, labels)

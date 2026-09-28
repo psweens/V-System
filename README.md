@@ -137,7 +137,7 @@ Useful options (`python main.py --help` lists them all):
 | `--tortuosity` | `stems` | `stems`: five sub-segments smoothed by a B-spline; `walk`: a persistent random walk of the same arc length |
 | `--persistence` | none | persistence length of the walk in vessel diameters; required by `walk` |
 | `--avoid-collisions` | off | keep branches apart by at least `--collision-margin` (default 1 µm), redrawing or shortening, and count what could not be placed |
-| `--anastomose` | off | join `--anastomosis-fraction` (0.5) of the tips to partners within `--anastomosis-radius` (10) tip diameters; `--anastomose-mode arteriovenous` grows a second tree from the opposite face |
+| `--anastomose` | off | join `--anastomosis-fraction` (0.5) of the tips to partners within `--anastomosis-radius` (25) tip diameters, never closer kin than `--anastomosis-min-separation` (3) segments; `--anastomose-mode arteriovenous` grows a second tree from the opposite face |
 
 `--d-min` and `--iterations` are both stopping criteria and whichever comes first
 wins. `--d-min` is the one a modality states directly, as its smallest resolvable
@@ -366,19 +366,30 @@ as the minimum surface clearance over the whole network.
 ### Anastomosis: `--anastomose`
 
 After growth, a seeded random fraction of the tips (`--anastomosis-fraction`)
-each search within `--anastomosis-radius` tip diameters (default 10; at the
-default segment lengths a tip's nearest eligible partner lies about 6.5
-diameters away and its nearest fellow tip about 8) for a partner: another tip
-first, otherwise an interior point of a segment that is not their own, nearest
-first, never a junction, a root, or a point inside a junction's overlap zone.
+each search within `--anastomosis-radius` tip diameters for a partner: another
+tip first, otherwise an interior point of a segment that is not their own,
+nearest first, never a junction, a root, or a point inside a junction's
+overlap zone, and never closer kin than `--anastomosis-min-separation`
+segments along the tree (default 3, which rules out the parent stem and the
+sister stem, two segments away). Without that rule the commonest bridge joins
+a tip to its sister's tip, usually the nearest, closing the two sister stems
+into a small triangle. The nearest partner beyond the sister lies about
+2 ε tip diameters away (8 at ε = 4, 14 at ε = 7, 20 at ε = 10), which is why
+the default radius is 25; a radius in multiples of the segment length would
+be self-scaling and is an open question.
 A branch that avoidance or the growth box terminated within a step or two of
 its junction leaves a stub whose tip sits inside that zone; such stubs are
-neither sources nor partners, and are counted. A bridge of diameter
-min(d_tip, d_partner) is traced from the tip along its own direction to the
-partner by the pinned form of the walk, checked against the network when
-avoidance is on, and appended as a new polyline whose end columns copy the two
-joined points, so the graph gains a cycle (β₁ = E − V + C rises by one) or joins
-two components. `--anastomose-mode arteriovenous` grows a second tree from the
+neither sources nor partners, and are counted. Partners are sought ahead of the tip, within 120° of its
+direction, as a sprouting tip fuses with what it grows towards rather than
+doubling back. A bridge of diameter min(d_tip, d_partner) is traced by the
+pinned form of the walk: it leaves the tip along the tip's direction, arrives
+into a partner tip along that vessel's direction (so the two tips become one
+continuous vessel) or into the side of a vessel along the chord, and carries
+the walk's curvature at `--persistence` diameters, or at 8 when the stems are
+not walked, so that it is a vessel rather than a straight strut. When
+avoidance is on it is checked against the network. It is appended as a new
+polyline whose end columns copy the two joined points, so the graph gains a
+cycle (β₁ = E − V + C rises by one) or joins two components. `--anastomose-mode arteriovenous` grows a second tree from the
 opposite face of the volume, heading back towards the first, and ranks partners
 in the other tree first — the arteriole → capillary → venule design of a
 capillary bed; it works best with `--grow-in-volume`, which the `mesh` preset
@@ -390,8 +401,7 @@ special handling.
 ### Families: `--family`
 
 `tree` is the plain grammar. `mesh` is walk (P = 10) + collision avoidance +
-arteriovenous anastomosis of half the tips within 20 tip diameters, grown in the
-volume. `tumour` is a
+arteriovenous anastomosis of half the tips, grown in the volume. `tumour` is a
 low-persistence walk (P = 3), avoidance, anastomosis of 80% of the tips within
 one tree, a root calibre of 20 ± 10 µm and aneurysm and stenosis probabilities
 of 0.1. Options given explicitly override the preset. `aligned` — capillaries
