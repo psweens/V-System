@@ -9,8 +9,10 @@ whether the volume's own boundary accounts for the breaks.
     python check_connectivity.py output/*.npz output/*.tiff
 
 `--generate N` makes N fresh networks and checks them without writing any files.
-Every other option is passed through to the generator, so the networks are the
-ones `main.py` would write for the same seeds and settings.
+Every other option is passed through to the generator, the geometry options and
+`--family` included, so the networks are the ones `main.py` would write for the
+same seeds and settings. A network with anastomoses is still one component: the
+bridges start and end on points of the tree.
 
 A centreline archive (.npz) is checked as geometry: the branches are walked and
 joined wherever they share a point, so the answer is independent of any volume.
@@ -210,11 +212,18 @@ def generate_and_check(count, passthrough):
     carrying a break the volume boundary does not explain.
     """
     import random
-    from main import build_parser, generate_network, sample_parameters
+    from main import (FAMILIES, build_parser, generate_network, sample_parameters, shaping_options,
+                      validate_shaping)
 
-    args = build_parser().parse_args(passthrough)
+    peel = argparse.ArgumentParser(add_help=False)
+    peel.add_argument("--family", choices=sorted(FAMILIES), default="tree")
+    family = peel.parse_known_args(passthrough)[0].family
+    if FAMILIES[family] is None:
+        raise SystemExit(f"--family {family} is not available")
+    args = build_parser(family).parse_args(passthrough)
     if args.fit == "voxel_size" and args.voxel_size is None:
         raise SystemExit("--fit voxel_size requires --voxel-size")
+    validate_shaping(args)
     base = args.seed if args.seed is not None else random.SystemRandom().randrange(2 ** 31)
     tVol = tuple(args.volume)
     shaping = ("grown in the volume" if args.grow_in_volume
@@ -236,7 +245,8 @@ def generate_and_check(count, passthrough):
                                             clip_axes=args.clip_axes, voxel_size=args.voxel_size,
                                             subdivisions=args.subdivisions, d_min=args.d_min,
                                             connect=args.connect,
-                                            grow_in_volume=args.grow_in_volume)
+                                            grow_in_volume=args.grow_in_volume, seed=seed,
+                                            **shaping_options(args))
         stem = f"Lnet_i{niter}_s{seed}"
         broken = report_centreline(nodes, stem + " (centreline)")
         broken += report_volume(volume, stem + " (volume)")

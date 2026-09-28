@@ -32,6 +32,13 @@ centreline is the source of truth for the geometry and the TIFF is one
 rasterisation of it, so step 4 can be repeated at any resolution without
 regenerating the network.
 
+Three optional stages shape the geometry between steps 2 and 4 without changing
+what the grammar decides: a persistent random walk that bends each stem
+smoothly (`--tortuosity walk`), collision avoidance between branches
+(`--avoid-collisions`) and anastomosis, which joins tips into loops
+(`--anastomose`). `--family` bundles them, and `describe.py` measures what
+they change. See *Geometry* below.
+
 ---
 
 ## Units
@@ -93,7 +100,7 @@ Each network is written as three files sharing the stem
 | File | Contents |
 | --- | --- |
 | `.tiff` | a uint8 volume of 0 and 255 whose pages are z, rows y and columns x |
-| `.npz` | the centreline: `nodes`, the (4, N) array of x, y, z and diameter in grammar units with NaN column separators; `program`, the grammar string; and `metadata`, the sidecar record |
+| `.npz` | the centreline: `nodes`, the (4, N) array of x, y, z and diameter in grammar units with NaN column separators; `edges`, the (2, E) graph of column indices; `node_kind` and `tree`, per-column labels; `program`, the grammar string; and `metadata`, the sidecar record |
 | `.json` | the seed, the unit convention and every parameter used |
 
 Network *i* of a run uses `seed + i`, and the same seed and parameters reproduce
@@ -126,6 +133,11 @@ Useful options (`python main.py --help` lists them all):
 | `--grow-in-volume` | off | confine growth to the volume's proportions so no vessel is cut |
 | `--no-connect` | off | rasterise bare capsules, leaving sub-voxel vessels dotted |
 | `--units` | `um` | the unit one grammar unit stands for, recorded in the sidecar |
+| `--family` | `tree` | preset bundle of the geometry options: `tree`, `mesh`, `tumour` (`aligned` is not available yet) |
+| `--tortuosity` | `stems` | `stems`: five sub-segments smoothed by a B-spline; `walk`: a persistent random walk of the same arc length |
+| `--persistence` | none | persistence length of the walk in vessel diameters; required by `walk` |
+| `--avoid-collisions` | off | keep branches apart by at least `--collision-margin` (default 1 µm), redrawing or shortening, and count what could not be placed |
+| `--anastomose` | off | join `--anastomosis-fraction` (0.5) of the tips to partners within `--anastomosis-radius` (25) tip diameters, never closer kin than `--anastomosis-min-separation` (3) segments, by bridges routed clear of the network at `--collision-margin`; `--anastomose-mode arteriovenous` grows a second tree from the opposite face |
 
 `--d-min` and `--iterations` are both stopping criteria and whichever comes first
 wins. `--d-min` is the one a modality states directly, as its smallest resolvable
@@ -280,6 +292,158 @@ network is centred and clipped rather than scaled to fit.
 
 ---
 
+## Geometry
+
+The grammar fixes the tree's topology, calibres, segment lengths and
+bifurcation angles. What a segmentation model trained on these volumes also
+learns is the *local* geometry — how smoothly vessels curve, whether they cross,
+how often they end — and the plain grammar has three properties real
+vasculature lacks: stems are zig-zags of five straight pieces, branches pass
+through one another, and every terminal branch ends in a free tip. Three
+opt-in stages address them. None is used unless asked for, and the default
+command line writes the same `nodes`, `program` and TIFF as before for a given
+seed (`tests/fixtures` pins this).
+
+### The graph in the archive
+
+Every archive carries `edges`, a `(2, E)` array of column indices into `nodes`:
+one edge between consecutive points of a polyline and, because a daughter
+polyline starts on a bitwise copy of its parent's branch point, one shared
+vertex wherever polylines meet. Coincident columns (within `graph.DEFAULT_TOL`,
+10⁻⁶ µm) are one vertex, represented by the lowest column index. `node_kind`
+labels every column interior (degree 2), junction (degree 3 or more) or tip
+(degree 1; the root counts as a tip), and `tree` labels the tree a column
+belongs to (0, 1) or marks it as an anastomosis bridge (2). `graph.py` rebuilds
+all of this from `nodes` alone — `edges_from_nodes`, `node_kind`, `betti`,
+`segments` — so an archive written before this version gains a graph when read
+with `load_network`. The rasteriser ignores the graph.
+
+### Smooth tortuosity: `--tortuosity walk --persistence P`
+
+A stem is normally the grammar's five straight sub-segments with alternating
+turns of `--stem-angle`, smoothed by an approximating B-spline; its arc/chord
+ratio is fixed by the stem angle and does not vary. With `walk`, the path of
+each stem is a persistent random walk on the unit tangent: at every step of
+length h (a sub-segment divided into 2^`--subdivisions` steps) the tangent is
+rotated by an angle drawn from N(0, √(h / l_p)) about a random perpendicular
+axis, with persistence length l_p = P × the local diameter. Total arc length
+equals the grammar's, the daughters leave from where the walk actually ends
+and at the grammar's angles relative to the walk's final direction, and the
+walk draws from its own random stream seeded from the run seed, so the
+grammar's draws are untouched. Lower P is more tortuous; `docs/geometry`
+tabulates arc/chord and curvature against P. Under `--grow-in-volume` a step
+that would leave the box is redrawn up to a budget, turning more sharply each
+time, then the branch terminates and the sidecar counts it.
+
+The rotation rule gives a tangent autocorrelation of exp(−s / 2 l_p) in three
+dimensions, so P is a shape parameter calibrated against measured arc/chord
+ratios rather than a literal persistence length; `tortuosity.py` documents the
+factor of two.
+
+### Collision avoidance: `--avoid-collisions`
+
+Every accepted point is stored in a spatial index (`--collision-index grid` or
+`kdtree`; `auto` is the grid hash, which was faster than the k-d tree at both
+10⁵ and 10⁶ points: 1.3 s against 1.8 s, and 16 s against 60 s, for the
+insert-and-query mix of `python spatial.py --benchmark`). A proposed point
+collides when it lies closer than the sum of the two radii plus
+`--collision-margin` to a stored point that is not on its own stem within an
+arc-length window, nor on its parent or sibling close to their common junction
+(the two distances to the junction, measured along the vessels, summing to
+less than 1.7 times the collision threshold, which is how far tubes meeting at
+Zamir's angles overlap; `collisions.py` derives the bound). A colliding walk step is redrawn up to
+`--collision-attempts` times, each redraw turning more sharply than the last
+(the rotation's spread grows by one multiple of its base per attempt) so the
+walk steers away from what it hit rather than repeating almost the same step;
+a spline stem is shortened to its longest clear prefix of control points; a
+branch that cannot be placed terminates. The
+sidecar counts redraws, shortened stems and terminations. Terminated branches
+are new tips, so avoidance raises tip density unless anastomosis absorbs them.
+The check is on centreline points, so keep the margin at or above the point
+spacing of the finest vessels. `describe.py` verifies the result independently
+as the minimum surface clearance over the whole network.
+
+### Anastomosis: `--anastomose`
+
+After growth, a seeded random fraction of the tips (`--anastomosis-fraction`)
+each search within `--anastomosis-radius` tip diameters for a partner: another
+tip first, otherwise an interior point of a segment that is not their own,
+nearest first, never a junction, a root, or a point inside a junction's
+overlap zone, and never closer kin than `--anastomosis-min-separation`
+segments along the tree (default 3, which rules out the parent stem and the
+sister stem, two segments away). Without that rule the commonest bridge joins
+a tip to its sister's tip, usually the nearest, closing the two sister stems
+into a small triangle. The nearest partner beyond the sister lies about
+2 ε tip diameters away (8 at ε = 4, 14 at ε = 7, 20 at ε = 10), which is why
+the default radius is 25; a radius in multiples of the segment length would
+be self-scaling and is an open question.
+A branch that avoidance or the growth box terminated within a step or two of
+its junction leaves a stub whose tip sits inside that zone; such stubs are
+neither sources nor partners, and are counted. Partners are sought ahead of the tip, within 120° of its
+direction, as a sprouting tip fuses with what it grows towards rather than
+doubling back. A bridge of diameter min(d_tip, d_partner) is traced by the
+pinned form of the walk: it leaves the tip along the tip's direction, arrives
+into a partner tip along that vessel's direction (so the two tips become one
+continuous vessel) or into the side of a vessel along the chord, and carries
+the walk's curvature at `--persistence` diameters, or at 8 when the stems are
+not walked, so that it is a vessel rather than a straight strut. Every
+bridge is routed clear of the network at `--collision-margin`, whether or not
+the tree was grown with `--avoid-collisions`, redrawn on a collision and
+abandoned (and counted) when no candidate clears. It is appended as a new
+polyline whose end columns copy the two joined points, so the graph gains a
+cycle (β₁ = E − V + C rises by one) or joins two components. `--anastomose-mode arteriovenous` grows a second tree from the
+opposite face of the volume, heading back towards the first, and ranks partners
+in the other tree first — the arteriole → capillary → venule design of a
+capillary bed; it works best with `--grow-in-volume`, which the `mesh` preset
+turns on. The second root is placed at the nearest spot on its face that is
+clear of the first tree, and both root positions are recorded in the sidecar. Tips that found no partner, or whose every candidate bridge collided,
+are counted. The rasteriser draws polylines independently, so cycles need no
+special handling.
+
+### Families: `--family`
+
+`tree` is the plain grammar. `mesh` is walk (P = 10) + collision avoidance +
+arteriovenous anastomosis of half the tips, grown in the volume. `tumour` is a
+low-persistence walk (P = 3), avoidance, anastomosis of 80% of the tips within
+one tree, a root calibre of 20 ± 10 µm and aneurysm and stenosis probabilities
+of 0.1. Options given explicitly override the preset. `aligned` — capillaries
+running in parallel as in muscle — is listed but refused: it needs a
+directional bias in the turtle, which no bundle of the existing options
+expresses. The persistence values of the presets are provisional calibrations
+from the sweep in `docs/geometry`.
+
+### Cost
+
+The default command line is unchanged in what it draws and about 8% slower at
+twelve generations (21 s against 20 s for a 512 × 512 × 140 volume on one
+core), the difference being the graph built for the archive; shallow trees
+take the same 1.5 s as before. The opt-in stages are Python loops over walk
+steps: at twelve generations the walk adds a quarter, stems-mode avoidance a
+half, walk with avoidance takes 2.5×, with anastomosis 4×, and the two-tree
+`mesh` preset 7× (146 s). `docs/geometry/audit.md` has the table.
+
+### Measuring: `describe.py`
+
+```bash
+python describe.py output/Lnet_i8_s1.npz
+python describe.py output/*.npz --margin 1 --volume 1024 1024 280
+```
+
+reports, as JSON, length-weighted diameter percentiles and total length,
+per-segment arc/chord ratios and mean absolute curvature, tip count and tips
+per mm, the junction degree histogram, components β₀ and cycles β₁, the
+length-weighted tangent covariance and its anisotropy, length density, the
+minimum surface clearance between branches with the number of pairs closer
+than the margin, and every counted event from the sidecar. The docstring of
+`describe.describe` is the definition of each quantity, so that the same
+descriptors can be computed from voxel skeletons of real images and compared.
+`docs/geometry/sweep.py` regenerates the descriptor tables in `docs/geometry`,
+and `docs/geometry/mips.py` renders one seed under each option as
+maximum-intensity projections (`docs/geometry/mips`), so the effect of every
+stage can be seen as well as measured.
+
+---
+
 ## Grammar
 
 The alphabet is the dissertation's. `f(l, d)` moves by `l` along the direction
@@ -332,7 +496,18 @@ TIFF exactly. Connectivity is covered too: an unclipped network renders as one
 component under both 6- and 26-connectivity, the chain drawn for a segment is
 face-connected at every orientation and never strays more than `sqrt(3)/2`
 from it, bare capsules do break, and connecting changes nothing once a vessel
-fills a voxel.
+fills a voxel. `tests/test_geometry.py` covers the geometry stages: the default
+command line draws bit for bit what the previous generator (kept under
+`tests/fixtures/reference_code`) draws in the same environment, centreline and
+TIFF alike, and matches the stored reference centrelines to rounding (the
+B-spline's matrix products go through BLAS kernels whose last bits differ
+between machines), every new option is reproducible from its seed, `edges` round-trip and the
+degree-derived tip count matches the grammar's, avoided networks have no pair
+of branches closer than the margin while plain trees do, anastomosed networks
+have cycles and a lower tip density than the same seed without, arc/chord
+rises as persistence falls, a cycle-containing archive renders through
+`process_network(..., connect=True)`, and `computeVoxel` imports under Python
+3.9 when an interpreter is available.
 
 ---
 
@@ -363,7 +538,9 @@ Version 3.1 adds the centreline archive, the declared unit convention and the
 `d_min` stopping criterion. It also renders sub-voxel vessels as face-connected
 one-voxel paths rather than dotted lines, so its volumes contain vessels that
 3.0 dropped and hold together under a six-connected label; `--no-connect`
-reproduces the 3.0 rasterisation.
+reproduces the 3.0 rasterisation. Version 3.2 adds the graph to the archive,
+the walk, collision avoidance, anastomosis, the family presets and
+`describe.py`; the default command line still writes the 3.1 geometry.
 
 ---
 

@@ -1,0 +1,229 @@
+{
+  "Lnet_i10_s4.npz": {
+    "seed": 4,
+    "iterations": 10,
+    "d0": 20.2528085357147,
+    "nodes_shape": [
+      4,
+      65428
+    ],
+    "nodes_sha256": "2c14595bfd90c4caaaff559f57a27a89ac972c0fbc66076b4fc40eeeeb6a5dd9",
+    "program_sha256": "a9eebc5d9fc3d73b51f0acb5adc93e871687c42f9781ea4dd56f9d3201388baf",
+    "metadata": {
+      "seed": 4,
+      "iterations": 10,
+      "d0": 20.2528085357147,
+      "d_min": null,
+      "properties": {
+        "k": 3,
+        "epsilon": 5.416288538424607,
+        "randmarg": 0.12063320684614316,
+        "sigma": 5,
+        "stochparams": true,
+        "roll_angle": 70.0,
+        "stem_angle": 25.0,
+        "aneurysm_prob": 0.02,
+        "stenosis_prob": 0.02
+      },
+      "volume": [
+        64,
+        64,
+        32
+      ],
+      "axis_order": "zyx",
+      "units": "um",
+      "fit": "isotropic",
+      "clip_axes": [
+        2
+      ],
+      "connect": true,
+      "grow_in_volume": false,
+      "voxel_size": null,
+      "subdivisions": 3
+    },
+    "fixture_stored": false
+  },
+  "Lnet_i12_s5.npz": {
+    "seed": 5,
+    "iterations": 12,
+    "d0": 22.20613743442521,
+    "nodes_shape": [
+      4,
+      262660
+    ],
+    "nodes_sha256": "830250f29cd254274b80410a4e07a539e426efcbb66845ab03274314850a2e6f",
+    "program_sha256": "ba32459e4b4249e3b41eb3bb2568009cb8e44da5697c5383e92ed71e16d26c10",
+    "metadata": {
+      "seed": 5,
+      "iterations": 12,
+      "d0": 22.20613743442521,
+      "d_min": null,
+      "properties": {
+        "k": 3,
+        "epsilon": 7.737410169338212,
+        "randmarg": 0.24835739785214586,
+        "sigma": 5,
+        "stochparams": true,
+        "roll_angle": 70.0,
+        "stem_angle": 25.0,
+        "aneurysm_prob": 0.02,
+        "stenosis_prob": 0.02
+      },
+      "volume": [
+        64,
+        64,
+        32
+      ],
+      "axis_order": "zyx",
+      "units": "um",
+      "fit": "isotropic",
+      "clip_axes": [
+        2
+      ],
+      "connect": true,
+      "grow_in_volume": false,
+      "voxel_size": null,
+      "subdivisions": 3
+    },
+    "fixture_stored": false
+  },
+  "Lnet_i4_s2.npz": {
+    "seed": 2,
+    "iterations": 4,
+    "d0": 17.916210762972646,
+    "nodes_shape": [
+      4,
+      948
+    ],
+    "nodes_sha256": "f558f2e611f081ecaaa165cb39dfa7d43ade2db8ef15b591d110add40aaad1f0",
+    "program_sha256": "d68189f8da9c35dc437db9c78ae31d43123c0c787dea9bc0c4cee7bad6c2e54e",
+    "metadata": {
+      "seed": 2,
+      "iterations": 4,
+      "d0": 17.916210762972646,
+      "d_min": null,
+      "properties": {
+        "k": 3,
+        "epsilon": 9.736205631335496,
+        "randmarg": 0.2895654974118699,
+        "sigma": 5,
+        "stochparams": true,
+        "roll_angle": 70.0,
+        "stem_angle": 25.0,
+        "aneurysm_prob": 0.02,
+        "stenosis_prob": 0.02
+      },
+      "volume": [
+        64,
+        64,
+        32
+      ],
+      "axis_order": "zyx",
+      "units": "um",
+      "fit": "isotropic",
+      "clip_axes": [
+        2
+      ],
+      "connect": true,
+      "grow_in_volume": false,
+      "voxel_size": null,
+      "subdivisions": 3
+    },
+    "fixture_stored": true,
+    "default_volume_tiff_sha256": "786c11e7d02a037991dff60d547f6dee58a5e80120c528770892b2d08643e74d",
+    "default_volume_tiff_name": "Lnet_i4_s2.tiff"
+  },
+  "Lnet_i5_s1.npz": {
+    "seed": 1,
+    "iterations": 5,
+    "d0": 28.12172681831621,
+    "nodes_shape": [
+      4,
+      2148
+    ],
+    "nodes_sha256": "440050a25d003f4612113ad591c436c372ee8975894f032acf51e56ea5c5c319",
+    "program_sha256": "2a6b82ea1e17efd2801f037e88f84c2b8c180f12633cd2c2a6bced12bb4d9a69",
+    "metadata": {
+      "seed": 1,
+      "iterations": 5,
+      "d0": 28.12172681831621,
+      "d_min": null,
+      "properties": {
+        "k": 3,
+        "epsilon": 4.8061854646744075,
+        "randmarg": 0.2694867473874465,
+        "sigma": 5,
+        "stochparams": true,
+        "roll_angle": 70.0,
+        "stem_angle": 25.0,
+        "aneurysm_prob": 0.02,
+        "stenosis_prob": 0.02
+      },
+      "volume": [
+        64,
+        64,
+        32
+      ],
+      "axis_order": "zyx",
+      "units": "um",
+      "fit": "isotropic",
+      "clip_axes": [
+        2
+      ],
+      "connect": true,
+      "grow_in_volume": false,
+      "voxel_size": null,
+      "subdivisions": 3
+    },
+    "fixture_stored": true,
+    "default_volume_tiff_sha256": "ba95dd2e8b92cfa2907aebe28610291f34a755ef92aba96de6d5eee95b721c61",
+    "default_volume_tiff_name": "Lnet_i5_s1.tiff"
+  },
+  "Lnet_i9_s3.npz": {
+    "seed": 3,
+    "iterations": 9,
+    "d0": 28.943142367151594,
+    "nodes_shape": [
+      4,
+      32900
+    ],
+    "nodes_sha256": "eedc6c588b1e6f6ed37225d627dec5999390b0ac7feb88b76e16da062c40c4c0",
+    "program_sha256": "b4c563edef9175ea5224dcf9afae45aa3324d30a6947a14bcdacbc64062ef1ea",
+    "metadata": {
+      "seed": 3,
+      "iterations": 9,
+      "d0": 28.943142367151594,
+      "d_min": null,
+      "properties": {
+        "k": 3,
+        "epsilon": 5.427787762551349,
+        "randmarg": 0.20884584505919035,
+        "sigma": 5,
+        "stochparams": true,
+        "roll_angle": 70.0,
+        "stem_angle": 25.0,
+        "aneurysm_prob": 0.02,
+        "stenosis_prob": 0.02
+      },
+      "volume": [
+        64,
+        64,
+        32
+      ],
+      "axis_order": "zyx",
+      "units": "um",
+      "fit": "isotropic",
+      "clip_axes": [
+        2
+      ],
+      "connect": true,
+      "grow_in_volume": false,
+      "voxel_size": null,
+      "subdivisions": 3
+    },
+    "fixture_stored": true,
+    "default_volume_tiff_sha256": "c454f1ebf06cc76c3cbae2e6087c368f26b3a3a4f9fee7042dc71775cc84cf5d",
+    "default_volume_tiff_name": "Lnet_i9_s3.tiff"
+  },
+  "_note": "Reference outputs of the default command line before the geometry upgrades, drawn with python main.py --count 1 --seed S on one machine (nodes are independent of --volume; the stored .npz fixtures were rendered at --volume 64 64 32, the TIFF hashes at the default 512 512 140). The hashes hold only on a machine whose BLAS rounds the B-spline's matrix products the same way; tests/fixtures/reference_code holds the generator as it was, so the bit-for-bit comparison is made against it in the test's own environment."
+}
