@@ -606,6 +606,15 @@ class AnastomosisTests(unittest.TestCase):
         report = describe(grown["nodes"], grown["edges"], margin=1.0)
         self.assertEqual(report["clearance_um"]["violations"], 0)
 
+    def test_bridges_never_cross_the_tree_even_without_avoidance(self):
+        # the plain 7-generation tree has no crossing of its own, so every
+        # sub-margin pair after anastomosis would be a bridge through a vessel
+        before = describe(self.plain["nodes"], self.plain["edges"], margin=1.0)
+        after = describe(self.looped["nodes"], self.looped["edges"], margin=1.0)
+        self.assertEqual(before["clearance_um"]["violations"], 0)
+        self.assertEqual(after["clearance_um"]["violations"], 0)
+        self.assertGreater(self.looped["events"]["anastomosis_bridges"], 0)
+
     def test_a_cycle_containing_network_renders_through_the_rasteriser(self):
         # what a downstream reader does: load the archive, check the layout, rasterise with connect
         with tempfile.TemporaryDirectory() as out:

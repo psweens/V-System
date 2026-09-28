@@ -51,8 +51,9 @@ and the reference fixtures under `tests/fixtures` pin that.
   joined by a bridge of diameter min(d_tip, d_partner) traced by the walk and
   pinned at both ends, leaving along the tip's direction and arriving along a
   partner tip's vessel, with the walk's curvature at the stems' persistence or
-  at 8 diameters when the stems are not walked, and checked against the
-  network under the collision rules when avoidance is on.
+  at 8 diameters when the stems are not walked, and always routed clear of
+  the network at `--collision-margin` under the collision rules, whether or
+  not the tree was grown with avoidance.
   Bridges are appended as polylines whose end columns copy the joined points,
   so the graph gains a cycle per bridge. Stub tips left inside a junction's
   overlap zone by a terminated branch are excluded and counted. `--anastomose-mode arteriovenous` grows a

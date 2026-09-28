@@ -137,7 +137,7 @@ Useful options (`python main.py --help` lists them all):
 | `--tortuosity` | `stems` | `stems`: five sub-segments smoothed by a B-spline; `walk`: a persistent random walk of the same arc length |
 | `--persistence` | none | persistence length of the walk in vessel diameters; required by `walk` |
 | `--avoid-collisions` | off | keep branches apart by at least `--collision-margin` (default 1 µm), redrawing or shortening, and count what could not be placed |
-| `--anastomose` | off | join `--anastomosis-fraction` (0.5) of the tips to partners within `--anastomosis-radius` (25) tip diameters, never closer kin than `--anastomosis-min-separation` (3) segments; `--anastomose-mode arteriovenous` grows a second tree from the opposite face |
+| `--anastomose` | off | join `--anastomosis-fraction` (0.5) of the tips to partners within `--anastomosis-radius` (25) tip diameters, never closer kin than `--anastomosis-min-separation` (3) segments, by bridges routed clear of the network at `--collision-margin`; `--anastomose-mode arteriovenous` grows a second tree from the opposite face |
 
 `--d-min` and `--iterations` are both stopping criteria and whichever comes first
 wins. `--d-min` is the one a modality states directly, as its smallest resolvable
@@ -386,8 +386,10 @@ pinned form of the walk: it leaves the tip along the tip's direction, arrives
 into a partner tip along that vessel's direction (so the two tips become one
 continuous vessel) or into the side of a vessel along the chord, and carries
 the walk's curvature at `--persistence` diameters, or at 8 when the stems are
-not walked, so that it is a vessel rather than a straight strut. When
-avoidance is on it is checked against the network. It is appended as a new
+not walked, so that it is a vessel rather than a straight strut. Every
+bridge is routed clear of the network at `--collision-margin`, whether or not
+the tree was grown with `--avoid-collisions`, redrawn on a collision and
+abandoned (and counted) when no candidate clears. It is appended as a new
 polyline whose end columns copy the two joined points, so the graph gains a
 cycle (β₁ = E − V + C rises by one) or joins two components. `--anastomose-mode arteriovenous` grows a second tree from the
 opposite face of the volume, heading back towards the first, and ranks partners

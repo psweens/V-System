@@ -181,7 +181,11 @@ def grow_network(niter, d0, properties, tVol, fit="isotropic", clip_axes=(2,), v
         collision_index (str): "grid", "kdtree" or "auto", which is the grid
             hash: it was the faster of the two at 10^5 and 10^6 points.
         anastomose (bool): after growth, bridge a fraction of the tips to
-            partners within `anastomosis_radius` tip diameters.
+            partners within `anastomosis_radius` tip diameters. Every bridge
+            is routed clear of the network at `collision_margin`, whether or
+            not the tree itself was grown with avoidance; a tip whose every
+            candidate bridge would cross a vessel is left as it is and
+            counted.
         anastomose_mode (str): "any" joins tips within one tree;
             "arteriovenous" grows a second tree from the opposite face of the
             volume and joins arterial tips to venous partners first.
@@ -282,7 +286,7 @@ def grow_network(niter, d0, properties, tVol, fit="isotropic", clip_axes=(2,), v
         rng = np.random.default_rng([int(seed), RNG_STREAMS["anastomosis"]])
         nodes, tree, bridges = bridge_tips(nodes, rng, anastomosis_fraction, anastomosis_radius,
                                            mode=anastomose_mode, tree=tree, persistence=persistence,
-                                           collision_margin=collision_margin if avoid_collisions else None,
+                                           collision_margin=collision_margin,
                                            events=events, attempts=collision_attempts,
                                            index_kind=resolved_index,
                                            min_separation=anastomosis_min_separation)
@@ -580,7 +584,9 @@ def build_parser(family="tree"):
                             "--collision-margin to another branch is redrawn (walk) or the stem is "
                             "shortened (stems); a branch that cannot be placed terminates and is counted")
     shape.add_argument("--collision-margin", type=float, default=1.0,
-                       help="clearance required between vessel surfaces, grammar units (default 1)")
+                       help="clearance required between vessel surfaces, grammar units (default 1); "
+                            "also the clearance every anastomosis bridge keeps, with or without "
+                            "--avoid-collisions")
     shape.add_argument("--collision-attempts", type=int, default=10,
                        help="redraws of a colliding walk step or bridge before giving up (default 10)")
     shape.add_argument("--collision-index", choices=("auto", "grid", "kdtree"), default="auto",
@@ -588,7 +594,8 @@ def build_parser(family="tree"):
                             "grid hash; kdtree needs scipy and was slower at every size measured)")
     shape.add_argument("--anastomose", action="store_true",
                        help="after growth, bridge a random fraction of the tips to nearby "
-                            "partners, closing the tree into a network with loops")
+                            "partners, closing the tree into a network with loops; bridges are "
+                            "always routed clear of the network at --collision-margin")
     shape.add_argument("--anastomosis-radius", type=float, default=25.0,
                        help="partner search radius in multiples of the tip diameter (default 25: "
                             "the nearest partner that is not the parent or sister stem lies about "
