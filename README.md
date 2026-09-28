@@ -497,8 +497,11 @@ component under both 6- and 26-connectivity, the chain drawn for a segment is
 face-connected at every orientation and never strays more than `sqrt(3)/2`
 from it, bare capsules do break, and connecting changes nothing once a vessel
 fills a voxel. `tests/test_geometry.py` covers the geometry stages: the default
-command line reproduces the reference centrelines in `tests/fixtures` byte for
-byte, every new option is reproducible from its seed, `edges` round-trip and the
+command line draws bit for bit what the previous generator (kept under
+`tests/fixtures/reference_code`) draws in the same environment, centreline and
+TIFF alike, and matches the stored reference centrelines to rounding (the
+B-spline's matrix products go through BLAS kernels whose last bits differ
+between machines), every new option is reproducible from its seed, `edges` round-trip and the
 degree-derived tip count matches the grammar's, avoided networks have no pair
 of branches closer than the margin while plain trees do, anastomosed networks
 have cycles and a lower tip density than the same seed without, arc/chord

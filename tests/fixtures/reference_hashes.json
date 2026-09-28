@@ -225,5 +225,5 @@
     "default_volume_tiff_sha256": "c454f1ebf06cc76c3cbae2e6087c368f26b3a3a4f9fee7042dc71775cc84cf5d",
     "default_volume_tiff_name": "Lnet_i9_s3.tiff"
   },
-  "_note": "Reference outputs of the default command line before the geometry upgrades: python main.py --count 1 --seed S (nodes are independent of --volume; the stored .npz fixtures were rendered at --volume 64 64 32, the TIFF hashes at the default 512 512 140)."
+  "_note": "Reference outputs of the default command line before the geometry upgrades, drawn with python main.py --count 1 --seed S on one machine (nodes are independent of --volume; the stored .npz fixtures were rendered at --volume 64 64 32, the TIFF hashes at the default 512 512 140). The hashes hold only on a machine whose BLAS rounds the B-spline's matrix products the same way; tests/fixtures/reference_code holds the generator as it was, so the bit-for-bit comparison is made against it in the test's own environment."
 }

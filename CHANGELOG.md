@@ -6,7 +6,8 @@ Version 3.2 adds an explicit graph to the centreline archive, three opt-in
 geometry stages, family presets that bundle them, and a descriptor tool that
 measures what they change. The default command line is unchanged: for a given
 seed it writes the same `nodes` and `program` arrays and the same TIFF as 3.1,
-and the reference fixtures under `tests/fixtures` pin that.
+which the tests check by running the 3.1 generator, kept under
+`tests/fixtures/reference_code`, alongside the current one.
 
 ### Archive
 

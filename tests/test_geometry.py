@@ -145,17 +145,62 @@ def connected_count(volume, connectivity=6):
 
 class ReferenceFixtureTests(unittest.TestCase):
     """
-    The default command line must reproduce the centrelines written before the
-    geometry stages existed, byte for byte in `nodes` and `program`.
+    The default command line must draw exactly what the generator drew before
+    the geometry stages existed. The generator as it was (tests/fixtures/
+    reference_code, the modules of the last release) is run in the same
+    environment as the current one and the two outputs compared bit for bit:
+    that is the only comparison that is portable, since the B-spline's small
+    matrix products go through BLAS kernels whose rounding differs between
+    machines. The stored fixture archives, drawn on one machine, are compared
+    to a tolerance for the same reason.
     """
+
+    REFERENCE = os.path.join(FIXTURES, "reference_code")
 
     @classmethod
     def setUpClass(cls):
         with open(os.path.join(FIXTURES, "reference_hashes.json")) as handle:
             cls.reference = {k: v for k, v in json.load(handle).items() if not k.startswith("_")}
 
-    def test_default_command_line_reproduces_the_reference_centrelines(self):
+    @staticmethod
+    def _run(code_dir, args, out):
+        result = subprocess.run([sys.executable, os.path.join(code_dir, "main.py"), "--count", "1",
+                                 "--out", out] + args, capture_output=True, text=True, cwd=code_dir)
+        if result.returncode:
+            raise AssertionError(f"{code_dir}: {result.stderr}")
+        stem = next(n[:-4] for n in os.listdir(out) if n.endswith(".npz"))
+        with np.load(os.path.join(out, stem + ".npz"), allow_pickle=False) as handle:
+            nodes = np.asarray(handle["nodes"])
+            program = handle["program"].item()
+        with open(os.path.join(out, stem + ".tiff"), "rb") as handle:
+            tiff = handle.read()
+        return stem, nodes, program, tiff
+
+    def _compare(self, args):
+        with tempfile.TemporaryDirectory() as before, tempfile.TemporaryDirectory() as after:
+            old = self._run(self.REFERENCE, args, before)
+            new = self._run(ROOT, args, after)
+        self.assertEqual(old[0], new[0])                                 # same file stem
+        self.assertEqual(old[2], new[2])                                 # same grammar string
+        self.assertEqual(old[1].shape, new[1].shape)
+        np.testing.assert_array_equal(old[1], new[1])                    # bit for bit, NaN included
+        self.assertEqual(old[3], new[3])                                 # the same TIFF bytes
+
+    def test_default_command_line_draws_what_the_previous_generator_drew(self):
         self.assertGreaterEqual(len(self.reference), 3)
+        for record in self.reference.values():
+            with self.subTest(seed=record["seed"]):
+                self._compare(["--seed", str(record["seed"]), "--volume", "64", "64", "32"])
+
+    @unittest.skipUnless(os.environ.get("VSYSTEM_SLOW_TESTS"), "set VSYSTEM_SLOW_TESTS=1 to render the default volume")
+    def test_default_volume_is_byte_identical_to_the_previous_generator(self):
+        for record in list(self.reference.values())[:3]:
+            with self.subTest(seed=record["seed"]):
+                self._compare(["--seed", str(record["seed"])])
+
+    def test_stored_fixtures_match_to_rounding_and_keep_their_metadata(self):
+        # the archives drawn before the change, on one machine: equal to the
+        # rounding of another machine's BLAS, exact in everything else
         for name, record in self.reference.items():
             with self.subTest(fixture=name):
                 with tempfile.TemporaryDirectory() as out:
@@ -164,27 +209,16 @@ class ReferenceFixtureTests(unittest.TestCase):
                                        "--volume", "64", "64", "32", "--out", out])
                     self.assertEqual(status, 0)
                     written = load_network(os.path.join(out, name))
-                self.assertEqual(sha256(written["nodes"].tobytes()), record["nodes_sha256"])
                 self.assertEqual(sha256(written["program"].encode()), record["program_sha256"])
                 self.assertEqual(list(written["nodes"].shape), record["nodes_shape"])
                 for key, value in record["metadata"].items():
                     self.assertEqual(written["metadata"][key], value, key)   # old keys, old values
                 if record.get("fixture_stored"):
                     stored = load_network(os.path.join(FIXTURES, name))
-                    np.testing.assert_array_equal(stored["nodes"], written["nodes"])
                     self.assertEqual(stored["program"], written["program"])
-
-    @unittest.skipUnless(os.environ.get("VSYSTEM_SLOW_TESTS"), "set VSYSTEM_SLOW_TESTS=1 to render the default volume")
-    def test_default_volume_tiff_is_byte_identical(self):
-        for name, record in self.reference.items():
-            if "default_volume_tiff_sha256" not in record:
-                continue
-            with self.subTest(fixture=name):
-                with tempfile.TemporaryDirectory() as out:
-                    with contextlib.redirect_stdout(io.StringIO()):
-                        main(["--count", "1", "--seed", str(record["seed"]), "--out", out])
-                    with open(os.path.join(out, record["default_volume_tiff_name"]), "rb") as handle:
-                        self.assertEqual(sha256(handle.read()), record["default_volume_tiff_sha256"])
+                    np.testing.assert_allclose(written["nodes"], stored["nodes"], rtol=1e-9, atol=1e-9)
+                    if np.array_equal(written["nodes"], stored["nodes"], equal_nan=True):
+                        self.assertEqual(sha256(written["nodes"].tobytes()), record["nodes_sha256"])
 
     def test_archives_written_before_the_graph_upgrade_on_load(self):
         for name in os.listdir(FIXTURES):
