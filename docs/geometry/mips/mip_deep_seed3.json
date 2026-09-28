@@ -1,0 +1,117 @@
+{
+ "seed": 3,
+ "voxel_size_um": 2.0,
+ "shape_xyz": [
+  391,
+  263,
+  294
+ ],
+ "axis_order": "zyx",
+ "units": "um",
+ "panels": [
+  {
+   "panel": 0,
+   "title": "plain grammar, 11 generations",
+   "options": [
+    "--iterations",
+    "11",
+    "11",
+    "--epsilon",
+    "4",
+    "4"
+   ],
+   "vessel_fraction": 0.003507073188012186,
+   "tips": 1025,
+   "cycles": 0,
+   "arc_chord_mean": 1.0217203278308307,
+   "total_length_mm": 26.36535261386151,
+   "clearance_um": {
+    "min": -2.6082536005626014,
+    "min_columns": [
+     7572,
+     95838
+    ],
+    "min_is_lower_bound": false,
+    "search_reach_um": 0.0,
+    "violations": 4944,
+    "pairs_checked": 4944,
+    "margin": 0.0
+   },
+   "events": {},
+   "tiff": "mip_deep_seed3_0_plain_grammar_11_generations.tiff"
+  },
+  {
+   "panel": 1,
+   "title": "collision avoidance, 11 generations",
+   "options": [
+    "--iterations",
+    "11",
+    "11",
+    "--epsilon",
+    "4",
+    "4",
+    "--avoid-collisions"
+   ],
+   "vessel_fraction": 0.003302957817281318,
+   "tips": 857,
+   "cycles": 0,
+   "arc_chord_mean": 1.020453639124091,
+   "total_length_mm": 22.073300833290165,
+   "clearance_um": {
+    "min": 1.0006217224349936,
+    "min_columns": [
+     37409,
+     37462
+    ],
+    "min_is_lower_bound": false,
+    "search_reach_um": 1.1048771369721662,
+    "violations": 0,
+    "pairs_checked": 893,
+    "margin": 1.0
+   },
+   "events": {
+    "collision_truncated_stems": 129
+   },
+   "tiff": "mip_deep_seed3_1_collision_avoidance_11_generations.tiff"
+  },
+  {
+   "panel": 2,
+   "title": "walk 10 + avoidance, 11 generations",
+   "options": [
+    "--iterations",
+    "11",
+    "11",
+    "--epsilon",
+    "4",
+    "4",
+    "--avoid-collisions",
+    "--tortuosity",
+    "walk",
+    "--persistence",
+    "10"
+   ],
+   "vessel_fraction": 0.003037220839732818,
+   "tips": 692,
+   "cycles": 0,
+   "arc_chord_mean": 1.040285267603449,
+   "total_length_mm": 18.010447110647064,
+   "clearance_um": {
+    "min": 1.0000159963088815,
+    "min_columns": [
+     42706,
+     42785
+    ],
+    "min_is_lower_bound": false,
+    "search_reach_um": 1.0866856584055422,
+    "violations": 0,
+    "pairs_checked": 818,
+    "margin": 1.0
+   },
+   "events": {
+    "collision_redraws": 2652,
+    "collision_terminations": 144
+   },
+   "tiff": "mip_deep_seed3_2_walk_10_avoidance_11_generations.tiff"
+  }
+ ]
+}

@@ -4,9 +4,16 @@ Maximum-intensity projections of one seed under each geometry option.
 Renders the same network (same seed, so the same grammar draws) with the
 plain grammar and with each geometry stage, at one voxel size into volumes
 of one shape, and writes the projections along z (the xy view) and along x
-(the yz view) side by side:
+(the yz view) side by side, together with every rendered volume as a TIFF
+for viewing in three dimensions:
 
     python docs/geometry/mips.py --out docs/geometry/mips --seed 3
+
+The TIFFs have the layout of the generator's own output (pages z, rows y,
+columns x, values 0 and 255) and are zlib-compressed, which any TIFF reader
+that handles deflate opens (tifffile, ImageJ, napari); --no-tiff skips them.
+A JSON sidecar per figure records each panel's options, descriptors and
+voxel size.
 
 Because every configuration of a seed shares its grammar, the panels differ
 only by the stage under test: the walk bends the same stems, avoidance
@@ -14,11 +21,14 @@ removes the same crossings, anastomosis closes the same tips. matplotlib is
 imported on use.
 """
 import argparse
+import json
 import os
 import random
+import re
 import sys
 
 import numpy as np
+import tifffile
 
 ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 if ROOT not in sys.path:
@@ -107,20 +117,45 @@ def figure(panels, grown, volumes, shape, voxel_size, seed, path):
     plt.close(fig)
 
 
+def slug(title):
+    return re.sub(r"[^a-z0-9]+", "_", title.lower()).strip("_")
+
+
+def write_tiff(path, volume):
+    """Writes a 0/1 volume indexed (x, y, z) as a compressed uint8 TIFF of 0 and 255, pages z."""
+    stack = np.transpose(volume.astype(np.uint8) * 255, (2, 1, 0))
+    tifffile.imwrite(path, stack, photometric="minisblack", compression="zlib")
+
+
 def main(argv=None):
     parser = argparse.ArgumentParser(description=__doc__.split("\n\n")[0])
     parser.add_argument("--out", default=os.path.join(os.path.dirname(os.path.abspath(__file__)), "mips"))
     parser.add_argument("--seed", type=int, default=3)
     parser.add_argument("--voxel-size", type=float, default=2.0)
+    parser.add_argument("--no-tiff", action="store_false", dest="tiff", help="write the figures only")
     args = parser.parse_args(argv)
     os.makedirs(args.out, exist_ok=True)
     for name, panels in (("stages", PANELS), ("deep", DEEP)):
         grown, volumes, shape = render_all(panels, args.seed, args.voxel_size)
-        path = os.path.join(args.out, f"mip_{name}_seed{args.seed}.png")
+        stem = f"mip_{name}_seed{args.seed}"
+        path = os.path.join(args.out, stem + ".png")
         figure(panels, grown, volumes, shape, args.voxel_size, args.seed, path)
         print(path)
-        for (title, _), (g, report) in zip(panels, grown):
+        record = {"seed": args.seed, "voxel_size_um": args.voxel_size, "shape_xyz": list(shape),
+                  "axis_order": "zyx", "units": "um", "panels": []}
+        for k, ((title, options), (g, report), volume) in enumerate(zip(panels, grown, volumes)):
+            entry = {"panel": k, "title": title, "options": options, "vessel_fraction": float(volume.mean()),
+                     "tips": report["tips"]["count"], "cycles": report["cycles"],
+                     "arc_chord_mean": report["arc_chord"]["mean"], "total_length_mm": report["total_length_mm"],
+                     "clearance_um": report["clearance_um"], "events": {k2: v for k2, v in g["events"].items() if v}}
+            if args.tiff:
+                tiff = os.path.join(args.out, f"{stem}_{k}_{slug(title)}.tiff")
+                write_tiff(tiff, volume)
+                entry["tiff"] = os.path.basename(tiff)
+            record["panels"].append(entry)
             print(f"  {title}: {caption(report, g['events']).replace(chr(10), ' | ')}")
+        with open(os.path.join(args.out, stem + ".json"), "w") as handle:
+            json.dump(record, handle, indent=1)
     return 0
 
 
