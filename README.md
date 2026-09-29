@@ -261,9 +261,8 @@ for modality, voxel_size in [("two-photon", 1.0), ("light-sheet", 2.0)]:
     volume = process_network(nodes, shape, fit="voxel_size", voxel_size=voxel_size)
 ```
 
-Only the sampling changes between the two, so the vessel calibre distribution of
-each result is that modality's — which is exactly what an unpaired
-image-to-image model learns as its output prior. A 20 µm vessel is 20 voxels
+Only the sampling changes between the two, so each result carries the vessel
+calibre distribution at that modality's resolution. A 20 µm vessel is 20 voxels
 across at 1 µm and 10 voxels across at 2 µm.
 
 Holding `shape` fixed instead would render the same network into two different

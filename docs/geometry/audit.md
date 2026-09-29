@@ -18,7 +18,7 @@ problem of sub-voxel vessels; it never looks beyond one polyline and never
 creates geometry. Grepping the repository for tip joining, merging, loops or
 anastomosis finds nothing: the only place polylines are related to one another
 is `check_connectivity.report_centreline`, which *reads* shared coordinates to
-count components and writes nothing. vox2vess's reading of `connect` is right.
+count components and writes nothing.
 
 ## 2. How a stem's path is produced
 
@@ -188,9 +188,8 @@ spline of a fixed 25° zig-zag; tip density is 15–20 tips per mm of
 centreline, every one a free end; and branches cross only in deep trees, at
 a rate that the default depth range reaches (172 overlapping point pairs per
 network on average, all from the seeds that drew ten or more generations).
-The LSM calibration could not be checked against vox2vess's `REBUILD_LOG.md`,
-which is not in this checkout; the values used are the ones quoted in the
-brief.
+The LSM calibration rows use `--d0 25 5 --d-min 1`, a light-sheet setting
+taken as given rather than re-derived here.
 
 ## 9. Cost
 
