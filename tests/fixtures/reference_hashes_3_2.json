@@ -1,0 +1,36 @@
+{
+  "_note": "sha256 of nodes, tree and the bridges list drawn by the 3.2 modules (tests/fixtures/reference_code_3_2) for each case of tests/test_pinned_geometry.py; equality is exact only where BLAS rounding matches the recording machine",
+  "_recorded_with": {
+    "python": "3.11.15",
+    "numpy": "2.4.6",
+    "platform": "Linux-6.18.44-fc-v64-x86_64-with-glibc2.39"
+  },
+  "mesh_s3_i7": {
+    "columns": 5886,
+    "bridges": 17,
+    "nodes_sha256": "5989a058ebc701c7bc1b3deb7c95004b4133a789654b5d43eb3c7ae978c31991",
+    "tree_sha256": "d452016ffe4630fe802c139220eead31f6f08a9e845def91dd41a6d316540c9a",
+    "bridges_sha256": "dd27ba74af62cc8df9fad1e94df854e200f54804ae31cbff7616b22fb669a8ca"
+  },
+  "mesh_s5_i7": {
+    "columns": 9020,
+    "bridges": 27,
+    "nodes_sha256": "9c22cb9400c7458e1ed4367651030dd7e972a7eabf02a90e81a70ac97b871d12",
+    "tree_sha256": "6d1a32cc4d2a26e13121819418ddaea15c2d17e9a29c7bbc1fee9d68fe17f51c",
+    "bridges_sha256": "c98e56f219d824d9d70fd11dbcb0cea894253b4597693fd3b874ca144acf2a74"
+  },
+  "tumour_s1_i6": {
+    "columns": 3570,
+    "bridges": 9,
+    "nodes_sha256": "8bdd6452d196f849764ee2cee722f917795b756451b74b28d0f4d8d4639fe66f",
+    "tree_sha256": "e1113248883ce583f017d1053293561a404c630df6a619f5b7342b153b592281",
+    "bridges_sha256": "8a75fd79140bbf56d8fbaaf56e148259a1881b85c89cbbd461096063f6134bbb"
+  },
+  "tumour_s2_i6": {
+    "columns": 4731,
+    "bridges": 13,
+    "nodes_sha256": "f24adf637a0364c1dff9eda599237a8a28acf18e174247a0b5ccfa2664d60e2e",
+    "tree_sha256": "2dd3f9b29d69aa54cb5ff38691623220aa2908c0ce011db835d74600b1466088",
+    "bridges_sha256": "0dbb74406fd76824e9ead99ad199d7f4c51182aac0b4179d544e467f7c5361f0"
+  }
+}

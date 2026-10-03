@@ -1,5 +1,92 @@
 # Changelog
 
+## 3.3.0
+
+Version 3.3 adds two opt-in tools built around forests of many independently
+grown networks: `join.py` joins networks placed in one field of view with the
+anastomosis rules, and `vsystem-library` grows a reproducible library of
+networks in relative units to sample from and rescale. The default command
+line is unchanged: for a given seed it writes the same `nodes`, `program` and
+TIFF as 3.1 and 3.2, and the mesh and tumour families draw what 3.2 drew,
+which the tests check by running the 3.2 modules, kept under
+`tests/fixtures/reference_code_3_2`, alongside the current ones.
+
+### Archive
+
+- A library archive records, in its metadata, `"units": "d_min"`, the
+  family, the root ratio with its law, bin and draw, the seed, every keyword
+  passed to `grow_network`, the counters, the root column of each tree, the
+  smallest per-point diameter and the sha256 of its `nodes` and `program`.
+  The layout of `nodes`, `edges`, `node_kind` and `tree` is the one of 3.2.
+
+### Geometry
+
+- `join.join_networks` bridges a seeded fraction of the free tips of placed
+  networks to partners on other networks (or, under policy `any`, anywhere
+  at least `min_separation` segments away along the graph), inside a box.
+  The rules are those of `anastomose`: the search radius in tip diameters,
+  the forward cone, the ranking of tips before interior points, the
+  exclusions of junctions, roots, stubs, junction zones and kin, the bridge
+  diameter, sampling step, departure and arrival tangents, the walk's
+  curvature, the collision rule against every vessel and every earlier
+  bridge, and the bitwise end columns. It differs where a forest needs it
+  to: networks are identified by their position in the input, never by the
+  int8 tree label, so hundreds can be joined; roots and cut ends (vertices
+  the crop made, or lying outside the box or within `boundary_margin` of a
+  face) are never sources or partners; partners lie inside the box and a
+  bridge that leaves it is redrawn; bridge points are obstacles, never
+  partners; the selected tips are processed in a drawn permutation; and a
+  volume budget stops the joining once the bridges placed would exceed it.
+  Every degree-one vertex of the input receives exactly one outcome, the
+  outcome counts agree with the event counters, and the first k bridges of
+  any result are themselves a valid result.
+- `join.crop_network` crops a placed network to a box by whole columns,
+  keeping a column when either of its segments reaches the padded box, so
+  that polylines are never split into per-segment pairs and the tip
+  tangents, sampling steps, stub tests and collision excusals stay per
+  polyline.
+- The joining runs at a few milliseconds per selected tip: about 300
+  networks of 0.25 million points with 3.4 thousand selected tips join in
+  under 10 s, 650 networks of 2.1 million points with 15 thousand selected
+  tips in under 2.5 minutes, both within 1 GB.
+
+### Measurement
+
+- `join_networks` returns a tips table (network, column, outcome) and a
+  summary of components and free in-box tips per unit length before and
+  after joining, besides the counters.
+- The library index records, per network and in units of d_min, points,
+  tips, junctions, cycles, components, total length, length- and
+  volume-weighted diameter percentiles, the smallest and largest diameter,
+  the minimum clearance with the count of pairs below the margin, the
+  counters, and the time and peak memory of its growth.
+
+### Tools
+
+- `vsystem-library` grows `--count` networks of the families listed, with
+  the smallest drawn diameter d_min = 1 unit and root ratios R = d0 / d_min
+  drawn log-uniformly and stratified over `--ratio-range`, one network per
+  bin per family; each network grows in a fresh process from a seed derived
+  from the library seed and its id, through `main`'s own parser, parameter
+  sampling and `grow_network`, so it equals what `vsystem` writes for the
+  same settings. Archives are written atomically; `index.json` and
+  `index.csv` hold the descriptors; `manifest.json` records every
+  parameter, the ratio law, the code hash and the hash of every network's
+  nodes and program, and its `content` part is hashed canonically. A run
+  into an existing library resumes it, refusing a different parameter set
+  or code hash and reporting every failure. `library_weights` gives the
+  weights that turn the log-uniform library into a power-law sample.
+
+### Compatibility
+
+- `main.py` and every module it imports are unchanged, so `main.RNG_STREAMS`
+  and the sidecar are as in 3.2; `join.py` and `library.py` keep their own
+  random-stream tags, which collide with none of `main`'s.
+- The new modules parse as Python 3.9 and add no dependency: numpy and
+  tifffile remain the only ones, scipy optional.
+- `pyproject` version 3.3.0 lists `join` and `library` among the modules and
+  adds the `vsystem-library` console script.
+
 ## 3.2.0
 
 Version 3.2 adds an explicit graph to the centreline archive, three opt-in

@@ -441,6 +441,333 @@ and `docs/geometry/mips.py` renders one seed under each option as
 maximum-intensity projections (`docs/geometry/mips`), so the effect of every
 stage can be seen as well as measured.
 
+### Joining networks inside a field of view: `join.py`
+
+A volume assembled from many independently grown networks is a forest: every
+network is its own connected component and ends in free tips everywhere,
+whereas the vasculature inside a real field of view is essentially one
+connected network whose only free ends are the vessels the field's edge cuts.
+`join.join_networks` applies the anastomosis rules across a forest. The caller
+places the networks (rotates and translates them into one frame and unit);
+`join_networks` adds bridges and returns them separately from the inputs.
+
+```python
+import numpy as np
+from join import crop_network, join_networks
+
+lo, hi = np.zeros(3), np.array([512.0, 512.0, 140.0]) * 2.0   # the field of view, caller units
+margin = 1.0                                                  # clearance between vessel surfaces
+r_max = max(np.nanmax(n["nodes"][3]) for n in placed) / 2.0
+cropped = [crop_network(n, lo, hi, r_max + margin) for n in placed]
+result = join_networks(cropped, np.random.default_rng([seed, 3]), fraction=0.9,
+                       collision_margin=margin, box=(lo, hi), boundary_margin=2.0)
+```
+
+Each placed network is a dict with `nodes` ((4, N) x, y, z, diameter with NaN
+separators), `node_kind` (the kind each column had in the *uncropped*
+network), and optionally `tree` and `roots` (root columns, empty meaning
+none). A network's identity is its position in the sequence, an int32, never
+the int8 `tree` label, so hundreds of networks can be joined. Edges on input
+are ignored: each network's graph is rebuilt from its own coordinates with
+`tol`, per network, so networks never merge by coincidence.
+
+`crop_network(network, lo, hi, margin)` crops by whole columns: a column is
+kept when either segment it belongs to has a radius-padded bounding box
+meeting `[lo - margin, hi + margin]`, kept columns stay in archive order, and
+each dropped run becomes one NaN column. Polylines are never split into
+per-segment pairs: the tip tangent, the sampling step, the stub test and the
+collision excusal are all per polyline, and a tree split into two-column
+chains makes every one of its tips a stub. It returns the cropped `nodes`,
+`node_kind` and `tree`, the `roots` remapped, and `columns`, the original
+column of each kept one (-1 at separators). Make the crop margin at least the
+largest vessel radius plus `collision_margin`, so that bridges near a face are
+checked against the vessels just outside it. A network with no kept column
+comes back empty and `join_networks` accepts it.
+
+Keyword arguments, all required unless a default is shown:
+
+| Argument | Meaning |
+| --- | --- |
+| `rng` | a `numpy.random.Generator` seeded by the caller; `join.RNG_STREAMS["join"]` is the tag to pair with a run seed |
+| `fraction` | share of the eligible tips drawn as sources |
+| `collision_margin` | clearance every bridge keeps from every input vessel and every earlier bridge, caller units |
+| `box` | `(lo, hi)`, the field of view in caller units |
+| `boundary_margin` | a tip within this distance of a face is a cut end, caller units |
+| `radius=25.0` | partner search radius in tip diameters |
+| `policy="cross"` | `cross`: partners on other networks only; `any`: also the same network at a graph separation of at least `min_separation` segments (another component of the same network counts as far enough) |
+| `min_separation=3` | the kin rule of anastomosis under `any`; 3 excludes the parent and sister stems |
+| `persistence=8.0` | curvature of the bridge walk, in bridge diameters |
+| `attempts=10`, `max_candidates=5` | redraws per candidate, partners tried per tip |
+| `tol=graph.DEFAULT_TOL` | coincidence tolerance of each network's graph, caller units |
+| `max_bridge_volume=None` | budget for the summed bridge volumes, caller units cubed |
+| `merged=False` | also return inputs and bridges as one archive with its graph |
+| `events=None` | counters incremented in place (`join.EVENT_KEYS`) |
+
+Roots come from `roots` when given; otherwise the first finite column of each
+`tree` label other than the bridge label (so both trees of an arteriovenous
+mesh are roots), or the first finite column when `tree` is absent, a default
+valid only for uncropped networks. A root is never a source or a partner and
+is reported as `root` inside the box, `cut_end` outside it. A degree-one
+vertex is a `cut_end` when the crop made it (its input `node_kind` is not a
+tip) or when it lies outside the box or within `boundary_margin` of a face;
+cut ends are vessels that continue beyond the field and are never sources or
+partners. A network's own anastomosis bridges (`tree == 2`) are ordinary
+vessels of that network.
+
+The rules kept from `anastomose`: partner search within `radius` tip
+diameters; partners within 120° of the tip's direction; candidates ranked tip
+before interior point, then by distance, then by (network, column);
+exclusions of the tip's own polyline, kin closer than `min_separation` under
+`any`, junctions, roots, stubs, junction zones, the zone of the junction the
+tip's polyline leaves, and points already touching; bridge diameter
+min(d_tip, d_partner); step the median spacing of the tip's polyline (0.2
+d_tip when undefined); departure along the tip tangent and arrival along a
+partner tip's inward tangent; the walk's curvature at `persistence`
+diameters; the collision rule of `collisions.py` (strict r + r + margin
+against every input vessel and every earlier bridge, excused only along the
+tip's and partner's polylines, plus the bridge against itself); bitwise end
+columns, so the graph closes; a tip used as a partner stops being a source
+and a bridged interior point becomes a junction. The deviations: bridge
+points are collision obstacles only, never partners, so every bridge end is
+a (network, column) of an input network; partners must lie inside the box;
+a bridge whose centreline leaves the box counts as a redraw
+(`join_box_redraws`); the selected tips are processed in a permutation drawn
+right after the Bernoulli draws, so the result does not depend on the order
+of the networks beyond the draws. The walk takes its angle and axis draws in
+bulk, one array of each per bridge, where `tortuosity.bridge_path`
+interleaves them step by step, so the same generator state gives a different
+(equally distributed) bridge here.
+
+Draws come from `rng` in a fixed order: one Bernoulli per eligible tip in
+(network, column) order, the processing permutation, then the bridge walks in
+processing order; identical inputs, parameters and generator state give
+identical output. The result is also invariant under a change of unit:
+scaling the nodes, `collision_margin`, `box`, `boundary_margin` and `tol` by
+λ (and `max_bridge_volume` by λ³) gives the same topology and outcomes and
+bridges equal to λ times the original. To keep a library's clearance when
+joining library networks rescaled by λ, pass λ times the library margin, and
+work in a frame where one library unit maps to at least one caller unit, or
+scale `tol` by λ as well.
+
+With `max_bridge_volume` set (π r² × arc per bridge, caller units cubed), no
+new bridge starts once the sum would exceed it; the remaining selected tips
+are reported as `over_budget`. Each bridge reports its `volume`, and the
+first k bridges of any result are themselves a valid result (each was checked
+against the inputs and the bridges before it only), so a caller may truncate
+after measuring what it rendered: a run with `max_bridge_volume` equal to the
+volume of the first k bridges reproduces exactly those k.
+
+The result holds `bridges` (per bridge: `tip` and `partner` as (network,
+column), `partner_kind`, `geometry` as a (4, m) float64 array in the caller's
+frame whose first and last columns are bitwise copies of the joined columns,
+`chord`, `arc`, `diameter`, `volume` and `redraws`), `bridge_nodes` (the
+bridges concatenated with NaN separators), `tips` (a structured array with
+one row per degree-one vertex of the input: `network`, `column` and an
+`outcome` code into `join.TIP_OUTCOMES`, exactly one of `root`, `cut_end`,
+`stub`, `not_selected`, `bridged_source`, `bridged_partner`, `no_partner`,
+`collision_failed`, `over_budget`; degree-zero columns are counted in
+`events["join_isolated"]` and are not tips), `events` and `summary`
+(components and free in-box tips per unit length before and after). With
+`merged=True` it also holds `merged`: `nodes` with the bridges appended after
+NaN separators, `edges`, `node_kind`, a `network` id per column (-2 on
+bridges) and `tree`.
+
+To render placed geometry, map it to voxels yourself and call the rasteriser
+directly; `process_network` re-centres the network and must not be used here.
+With voxel i centred at i, the field of view of a volume of n voxels is
+`[-0.5, n - 0.5]` per axis, so a box `(lo, hi)` renders into `(hi - lo) / v`
+voxels when `lo` maps to -0.5, which an origin half a voxel inside the box
+does:
+
+```python
+from computeVoxel import rasterise_segments
+
+v = 2.0                                                        # caller units per voxel
+shape = tuple(int(round(s)) for s in (hi - lo) / v)
+origin = lo + v / 2.0
+result = join_networks(cropped, rng, fraction=0.9, collision_margin=margin, box=(lo, hi),
+                       boundary_margin=2.0, merged=True)
+xyz = result["merged"]["nodes"]                               # inputs and bridges, NaN separated
+volume = rasterise_segments((xyz[:3] - origin[:, None]) / v, xyz[3] / (2.0 * v), shape, connect=True)
+```
+
+`result["bridge_nodes"]` alone renders the bridges on their own, for
+measuring what they add.
+
+Measured cost (one process, this machine): the test forest of 253 networks of
+4-generation trees (186 thousand points) goes from 310 components to 31 and
+from 0.0141 to 0.0002 free in-box tips per unit length with 721 bridges. The
+two benchmark forests of grown trees placed at random rotations and offsets
+with a point-clearance rejection and cropped with `crop_network`
+(`VSYSTEM_SLOW_TESTS=1 python -m unittest tests.test_join.BenchmarkTests`):
+
+| forest | networks | points | eligible tips | selected | bridges | joining | per selected tip | peak RSS |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| typical | 317 | 256 208 | 3 778 | 3 365 | 1 908 | 8.5 s | 2.5 ms | 160 MB |
+| large | 650 | 2 117 568 | 17 118 | 15 408 | 7 293 | 143 s | 9.3 ms | 968 MB |
+
+The large forest is denser (6-generation trees), so a bridge needs 8.5
+redraws on average against 3.2 in the typical one, which is where the extra
+time per tip goes; the fixed setup (graph, per-column arrays, indexes) is
+about 1.3 s per 0.35 million points. The cost per tip splits roughly into the
+collision checks (half, through one grid per octave of vessel radius and a
+growing grid of the earlier bridges), the bridge walk (a quarter) and the
+partner search with its vectorised filtering.
+
+---
+
+## Network libraries: `vsystem-library`
+
+A library is a fixed, reproducible set of networks grown once and sampled from
+afterwards, rendered at whatever scale a use needs. V-System is scale free:
+growth at (λ d0, λ d_min, λ margin, same seed) gives λ times the nodes up to
+float rounding, so a library grown in **relative units**, with the smallest
+drawn vessel diameter d_min = 1 unit, can be rescaled to any resolution. Its
+networks are described by the root ratio R = d0 / d_min.
+
+```bash
+vsystem-library --out lib --count 2000 --seed 1 --workers 8
+```
+
+| Option | Default | Meaning |
+| --- | --- | --- |
+| `--out DIR` | required | output directory; a run into a directory holding a manifest resumes it |
+| `--count N` | required | number of networks |
+| `--families` | `tree mesh tumour` | families to grow, in id order; only presets that exist are accepted, so `aligned` and unknown names are refused before anything is grown |
+| `--family-shares` | `1 1 1` | relative share of each family, by largest remainder with ties to the family listed first (2000 at `1 1 1` gives 667 667 666) |
+| `--ratio-range R_LO R_HI` | `2.52 25` | range of R, log-uniform and stratified; 2^(4/3) gives at least about four generations |
+| `--seed S` | required | library seed |
+| `--workers W` | `1` | worker processes |
+| `--collision-margin` | `1.0` | clearance between vessel surfaces, units of d_min |
+| `--mesh-box-c` | `15` | a mesh grows in a cube of side this many times its root diameter, which keeps its two trees within reach of each other |
+| `--iteration-cap` | `64` | generations allowed; d_min stops growth first |
+| `--avoid-collisions` / `--no-avoid-collisions` | on | collision avoidance for the tree family; the mesh and tumour presets avoid collisions already |
+
+Ids run 0 .. N-1 in contiguous family blocks in `--families` order and the
+archives are named `net_{id:05d}_{family}.npz`. Network `id` grows from the
+seed `int(np.random.SeedSequence([S, id]).generate_state(1)[0])`. For family
+f at index j in `--families` with n_f networks, `default_rng([S, 4, j])`
+draws `u = rng.random(n_f)` and `perm = rng.permutation(n_f)`, and the k-th
+network of f gets `R = R_LO (R_HI / R_LO) ** ((perm[k] + u[k]) / n_f)`: one
+network per bin of equal width in log R, in a random order. The bins depend
+on n_f, so a library of a different size or share is a new library, not an
+extension of an old one. The law (`log-uniform`), range, bin and u are
+recorded per network.
+
+Each network is grown exactly as `vsystem` would grow it from
+
+```
+--family f --d0 R 0 --d0-min R --d-min 1.0 --iterations 64 64 --collision-margin 1.0
+--volume 3 3 3 --fit voxel_size --voxel-size (15 R / 3 for mesh, 1.0 otherwise) [--avoid-collisions]
+```
+
+with the global generators seeded from the network's seed, through
+`main.build_parser(f)`, `sample_parameters` and `grow_network`, so a library
+network's `nodes` and `program` equal what `vsystem` writes for the same
+arguments and seed on the same machine (the tests check this). The tumour
+preset's root calibre is replaced by R; its aneurysm and stenosis
+probabilities reach the properties through the parser's defaults as on the
+command line. Tree and tumour growth never read the volume; a mesh grows in a
+cube of side 3 × voxel size = 15 R. A library in another unit is the same
+library rescaled: growth at (2R, d_min 2, margin 2, box 2 × 15 R) equals
+twice the library network to float rounding.
+
+Every archive is written atomically (`save_network` to a temporary file,
+then renamed) with metadata recording `"units": "d_min"`, the family, R, bin,
+u and seed, every keyword passed to `grow_network`, the counters, the root
+column of each tree, the smallest per-point diameter (stenoses and spline
+blending dip to about 0.5–0.67 d_min) and the sha256 of `nodes` and
+`program`. `index.json` and `index.csv` hold, per network and in units of
+d_min, id, family, R, seed, file, generations reached, points, polylines,
+tips, junctions, cycles, components, total length, length- and
+volume-weighted diameter percentiles (P50, P90, P99), the smallest and
+largest diameter, the minimum clearance with the count of pairs below the
+margin, the bridges, the counters, and in separate columns the time and the
+peak resident set of the growth. `manifest.json` has two parts: `content`
+(every parameter, the ratio law, the family counts, a code hash over
+`library.py` and `main`'s import closure, per-network nodes and program
+hashes, and failures with their reasons), whose canonical JSON (`sort_keys`)
+is hashed into `content_sha256`, and `run` (host, Python and numpy versions,
+per-network time and peak memory, dates). Archive bytes are not compared:
+zip entries carry timestamps and BLAS rounding differs between machines.
+
+A run into a directory that holds a manifest resumes it: a different
+parameter set or a different code hash is refused, a different Python or
+numpy version is recorded with a warning, every archive that loads and
+matches its plan (seed, family, ratio, arguments and recorded hash) is kept,
+an unreadable one is grown again, an archive of another network under a
+planned name is refused, and failures are listed in the manifest and
+reported, never dropped. Networks grow in fresh processes
+(`multiprocessing` with a spawned worker per network and the BLAS thread
+counts set to one), so the peak memory recorded per network is that
+network's own; the grammar's global generators and `libGenerator`'s module
+globals rule out threads.
+
+`library.library_weights(index, exponent=3.0, mask=None)` gives the weight to
+draw each network with so that the drawn root ratios follow a power law,
+p_target(R) ∝ R^(-exponent) per unit log R, instead of the library's law:
+w_i ∝ p_target(R_i) / p_library(R_i), with p_library read from the recorded
+law, constant per unit log R for `log-uniform`, so w_i ∝ R_i^(-exponent). The
+weights are normalised to sum one over `mask` and are zero elsewhere. Writing
+x = ln R, uniform on [a, b] = [ln R_LO, ln R_HI], the effective sample size
+(Σw)² / Σw² of N draws is N (E[e^(-3x)])² / E[e^(-6x)] =
+N (e^(-3a) - e^(-3b))² / (2 (b - a) (e^(-6a) - e^(-6b))) ≈ 0.29 N at the
+defaults, so a library of 2000 networks is worth about 580 equally weighted
+draws from the R^(-3) law.
+
+Measured cost (one process per network, this machine, seed 777, growth and
+the descriptors timed separately; peak RSS is the worker's resident set,
+which includes numpy's own 70 MB):
+
+| family | R | generations | points | tips | growth | descriptors | archive | peak RSS | clearance violations |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| tree | 2.52 | 7 | 1 364 | 8 | 0.0 s | 0.2 s | 0.04 MB | 75 MB | 0 |
+| tree (no avoidance) | 2.52 | 7 | 1 449 | 8 | 0.0 s | 0.2 s | 0.04 MB | 73 MB | 1 |
+| tumour | 2.52 | 7 | 431 | 3 | 0.1 s | 0.2 s | 0.02 MB | 70 MB | 0 |
+| mesh | 2.52 | 8 | 2 166 | 9 | 1.3 s | 0.2 s | 0.06 MB | 77 MB | 0 |
+| tree | 4 | 12 | 5 678 | 36 | 0.2 s | 0.4 s | 0.17 MB | 95 MB | 0 |
+| tree (no avoidance) | 4 | 12 | 6 420 | 37 | 0.1 s | 0.3 s | 0.20 MB | 92 MB | 11 |
+| tumour | 4 | 12 | 1 078 | 6 | 0.7 s | 0.2 s | 0.04 MB | 72 MB | 0 |
+| mesh | 4 | 12 | 3 511 | 19 | 2.7 s | 0.3 s | 0.10 MB | 82 MB | 0 |
+| tree | 6.3 | 17 | 24 280 | 131 | 0.7 s | 0.9 s | 0.74 MB | 127 MB | 0 |
+| tree (no avoidance) | 6.3 | 17 | 26 302 | 137 | 0.2 s | 0.6 s | 0.79 MB | 123 MB | 13 |
+| tumour | 6.3 | 17 | 1 950 | 6 | 1.2 s | 0.2 s | 0.11 MB | 75 MB | 0 |
+| mesh | 6.3 | 17 | 17 272 | 72 | 14.0 s | 0.6 s | 0.48 MB | 104 MB | 0 |
+| tree | 10 | 20 | 91 527 | 519 | 3.1 s | 2.9 s | 2.76 MB | 165 MB | 0 |
+| tree (no avoidance) | 10 | 20 | 104 846 | 557 | 0.8 s | 2.0 s | 3.13 MB | 153 MB | 1 417 |
+| tumour | 10 | 20 | 8 530 | 30 | 7.7 s | 0.4 s | 0.47 MB | 101 MB | 0 |
+| mesh | 10 | 20 | 47 565 | 179 | 31.2 s | 1.4 s | 1.39 MB | 124 MB | 0 |
+| tree | 16 | 23 | 383 934 | 2 116 | 22.5 s | 12.2 s | 11.50 MB | 314 MB | 0 |
+| tree (no avoidance) | 16 | 23 | 432 769 | 2 257 | 3.6 s | 8.2 s | 12.85 MB | 320 MB | 20 337 |
+| tumour | 16 | 23 | 83 294 | 264 | 75.4 s | 2.6 s | 3.12 MB | 285 MB | 0 |
+| mesh | 16 | 24 | 72 169 | 283 | 67.3 s | 2.0 s | 2.65 MB | 159 MB | 0 |
+| tree | 25 | 28 | 547 328 | 3 110 | 62.6 s | 18.2 s | 18.40 MB | 442 MB | 0 |
+| tree (no avoidance) | 25 | 28 | 1 651 750 | 8 715 | 15.5 s | 36.8 s | 48.42 MB | 1 039 MB | 186 777 |
+| tumour | 25 | 28 | 30 133 | 114 | 43.1 s | 1.1 s | 4.75 MB | 280 MB | 0 |
+| mesh | 25 | 28 | 391 572 | 1 331 | 444.9 s | 11.3 s | 12.85 MB | 449 MB | 0 |
+
+Points grow as about 105 R³ for a plain tree (1.65 million at R = 25); with
+avoidance a tree keeps a third of that at R = 25, since branches that would
+cross are terminated, and the tumour preset, which always avoids collisions
+and bends at low persistence, stays an order of magnitude smaller again (and
+varies a lot between seeds: one seed gives 83 thousand points at R = 16 and
+30 thousand at R = 25). A mesh costs the most: its two trees are grown with
+the walk and avoidance and then anastomosed, 7.4 minutes at R = 25 for
+392 thousand points, within 0.45 GB. The cost of `--avoid-collisions` for
+trees is the collision index: the growth takes 4 to 6 times longer from R =
+10 up (3.1 s against 0.8 s at R = 10, 62.6 s against 15.5 s at R = 25), and
+it buys a network with no pair of vessels inside each other, where a plain
+tree has 1 417 overlapping point pairs at R = 10 and 186 777 at R = 25
+(margin 1). The tumour and mesh networks show no clearance violation at any
+ratio measured, and neither does the avoided tree.
+
+Projection for N = 2000 at the default shares and range, taking the
+log-uniform mean of growth plus descriptors interpolated in (log R, log t)
+between the measured points: about 15 s per tree, 56 s per mesh and 19 s per
+tumour on this machine, 16.7 CPU hours in all, about 2.1 h of wall time at 8
+workers, 5.0 GB of archives, and at most 8 × 0.45 GB = 3.6 GB of memory with
+every worker at the largest peak measured.
+
 ---
 
 ## Grammar
@@ -506,7 +833,24 @@ of branches closer than the margin while plain trees do, anastomosed networks
 have cycles and a lower tip density than the same seed without, arc/chord
 rises as persistence falls, a cycle-containing archive renders through
 `process_network(..., connect=True)`, and `computeVoxel` imports under Python
-3.9 when an interpreter is available.
+3.9 when an interpreter is available. `tests/test_pinned_geometry.py` pins the
+mesh and tumour geometry: the 3.2 modules (`tests/fixtures/reference_code_3_2`)
+and the current ones draw the same `nodes`, `tree` and bridges for two seeds
+per family in the same environment. `tests/test_join.py` checks that two
+facing networks join into one component with no intra-network bridge, that
+bridges keep the margin from every vessel and from each other, that cut ends
+are never used and no bridge leaves the box, that the tip outcomes partition
+the degree-one vertices and agree with the counters, determinism, invariance
+under a change of unit, more than 127 networks, a mesh's two roots, a forest
+losing components and free tips, that any prefix of the bridges is a valid
+result, and, with `VSYSTEM_SLOW_TESTS=1`, the two performance targets.
+`tests/test_library.py` checks the library's determinism, that the presets
+take effect, that no drawn diameter falls below d_min but a stenosis middle,
+the scaling with the unit, equality with the command line's output,
+independence from the volume, the stratification, resume with the refusal of
+a different library or code, the stability of the manifest hash, the weights
+against a power law, the refusal of `aligned` and unknown families, and a
+tiny end-to-end run.
 
 ---
 
@@ -540,6 +884,10 @@ one-voxel paths rather than dotted lines, so its volumes contain vessels that
 reproduces the 3.0 rasterisation. Version 3.2 adds the graph to the archive,
 the walk, collision avoidance, anastomosis, the family presets and
 `describe.py`; the default command line still writes the 3.1 geometry.
+Version 3.3 adds `join.py`, which joins separately grown networks inside a
+field of view, and `vsystem-library`, which grows reproducible network
+libraries in relative units; the default command line and the family presets
+draw what 3.2 drew.
 
 ---
 
