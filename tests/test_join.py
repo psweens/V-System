@@ -455,13 +455,21 @@ class JoinTests(unittest.TestCase):
                 result = join_networks(pair, np.random.default_rng(14), fraction=1.0, collision_margin=0.5,
                                        box=(lo, hi), boundary_margin=0.0, max_bridge_volume=budget * (1 + 1e-12))
                 self.assertEqual(len(result["bridges"]), k)
+                tips = result["tips"]
                 for a, b in zip(result["bridges"], full["bridges"][:k]):
                     self.assertEqual((a["tip"], a["partner"]), (b["tip"], b["partner"]))
                     np.testing.assert_array_equal(a["geometry"], b["geometry"])
+                    # both ends keep their outcome whatever happened to the budget afterwards
+                    source = tips[(tips["network"] == a["tip"][0]) & (tips["column"] == a["tip"][1])]
+                    self.assertEqual(int(source["outcome"][0]), OUTCOME["bridged_source"])
+                    if a["partner_kind"] == "tip":
+                        partner = tips[(tips["network"] == a["partner"][0]) & (tips["column"] == a["partner"][1])]
+                        self.assertEqual(int(partner["outcome"][0]), OUTCOME["bridged_partner"])
                 counts = outcome_counts(result)
                 if k < len(full["bridges"]):
                     self.assertGreater(counts["over_budget"], 0)
                 self.assertEqual(result["events"]["join_over_budget"], counts["over_budget"])
+                self.assertEqual(counts["bridged_source"], k)
 
     def test_policy_any_allows_the_same_network_beyond_the_kin_separation(self):
         tree = grow(4, 6)

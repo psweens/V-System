@@ -795,10 +795,11 @@ class _Forest:
         first = np.searchsorted(poly_of, pair_poly, side="left")
         last = np.searchsorted(poly_of, pair_poly, side="right")
         counts = last - first
-        total = int(counts.sum())
         radius = self.diam / 2.0
-        for start in range(0, pairs.size, max(1, _ZONE_CHUNK // max(1, int(counts.max()) if counts.size else 1))):
-            stop = min(start + max(1, _ZONE_CHUNK // max(1, int(counts.max()) if counts.size else 1)), pairs.size)
+        # pairs in passes of a bounded size, so the temporaries stay small on a large forest
+        per_pass = max(1, _ZONE_CHUNK // max(1, int(counts.max()) if counts.size else 1))
+        for start in range(0, pairs.size, per_pass):
+            stop = min(start + per_pass, pairs.size)
             owner = np.repeat(np.arange(start, stop), counts[start:stop])
             if owner.size == 0:
                 continue
@@ -811,7 +812,6 @@ class _Forest:
             distance = np.linalg.norm(self.xyz[point] - self.xyz[junction], axis=1)
             reach = KIN_REACH * (radius[point] + radius[junction] + self.margin)
             in_zone[point[distance < reach]] = True
-        del total
         return in_zone
 
     def _tip_tangents(self):
@@ -1062,12 +1062,12 @@ def join_networks(networks, rng, *, fraction, collision_margin, box, boundary_ma
         return c
 
     for tip in selected.tolist():
-        if budget_spent:
-            outcome[tip] = _OUTCOME["over_budget"]
-            continue
         if deg[tip] != 1:
             # consumed as a partner since it was drawn; it already has its outcome
             events["join_source_consumed"] += 1
+            continue
+        if budget_spent:
+            outcome[tip] = _OUTCOME["over_budget"]
             continue
         d_tip = float(diam[tip])
         tip_xyz = xyz[tip]
