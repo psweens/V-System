@@ -743,25 +743,29 @@ which includes numpy's own 70 MB):
 | mesh | 16 | 24 | 72 169 | 283 | 67.3 s | 2.0 s | 2.65 MB | 159 MB | 0 |
 | tree | 25 | 28 | 547 328 | 3 110 | 62.6 s | 18.2 s | 18.40 MB | 442 MB | 0 |
 | tree (no avoidance) | 25 | 28 | 1 651 750 | 8 715 | 15.5 s | 36.8 s | 48.42 MB | 1 039 MB | 186 777 |
+| tumour | 25 | 28 | 30 133 | 114 | 43.1 s | 1.1 s | 4.75 MB | 280 MB | 0 |
+| mesh | 25 | 28 | 391 572 | 1 331 | 444.9 s | 11.3 s | 12.85 MB | 449 MB | 0 |
 
 Points grow as about 105 R³ for a plain tree (1.65 million at R = 25); with
 avoidance a tree keeps a third of that at R = 25, since branches that would
-cross are terminated, and the tumour and mesh presets, which always avoid
-collisions and bend at low persistence, stay an order of magnitude smaller
-again. The cost of `--avoid-collisions` for trees is the collision index: the
-growth takes 4 to 6 times longer from R = 10 up (3.1 s against 0.8 s at R =
-10, 62.6 s against 15.5 s at R = 25), and it buys a network with no pair of
-vessels inside each other, where a plain tree has 1 417 overlapping point
-pairs at R = 10 and 186 777 at R = 25 (margin 1). The tumour and mesh
-networks show no clearance violation at any ratio measured, and neither does
-the avoided tree.
+cross are terminated, and the tumour preset, which always avoids collisions
+and bends at low persistence, stays an order of magnitude smaller again (and
+varies a lot between seeds: one seed gives 83 thousand points at R = 16 and
+30 thousand at R = 25). A mesh costs the most: its two trees are grown with
+the walk and avoidance and then anastomosed, 7.4 minutes at R = 25 for
+392 thousand points, within 0.45 GB. The cost of `--avoid-collisions` for
+trees is the collision index: the growth takes 4 to 6 times longer from R =
+10 up (3.1 s against 0.8 s at R = 10, 62.6 s against 15.5 s at R = 25), and
+it buys a network with no pair of vessels inside each other, where a plain
+tree has 1 417 overlapping point pairs at R = 10 and 186 777 at R = 25
+(margin 1). The tumour and mesh networks show no clearance violation at any
+ratio measured, and neither does the avoided tree.
 
 Projection for N = 2000 at the default shares and range, taking the
 log-uniform mean of growth plus descriptors interpolated in (log R, log t)
-between the measured points: about 15 s per tree, 30 s per mesh and 23 s per
-tumour on this machine (tumour and mesh interpolated up to R = 16, their
-largest measured ratio), 12.5 CPU hours in all, about 1.6 h of wall time at 8
-workers, 4.4 GB of archives, and at most 8 × 0.44 GB = 3.5 GB of memory with
+between the measured points: about 15 s per tree, 56 s per mesh and 19 s per
+tumour on this machine, 16.7 CPU hours in all, about 2.1 h of wall time at 8
+workers, 5.0 GB of archives, and at most 8 × 0.45 GB = 3.6 GB of memory with
 every worker at the largest peak measured.
 
 ---
