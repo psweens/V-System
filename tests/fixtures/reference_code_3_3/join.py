@@ -18,8 +18,7 @@ Compared with anastomosis.anastomose, which closes one tree:
 - networks are identified by their position in the input sequence (int32),
   never by the int8 `tree` label, so any number of networks can be joined
   and one network's roots are never mistaken for another's tips;
-- roots and cut ends are never sources or partners, unless `attach_roots`
-  makes the roots inside the box sources (below): a root is the first
+- roots and cut ends are never sources or partners: a root is the first
   column of each tree (or the `roots` given), a cut end is a degree-one
   vertex that the crop made (its input `node_kind` is not TIP) or that lies
   outside the box or within `boundary_margin` of a face;
@@ -60,46 +59,6 @@ same. Draws come from the caller's `numpy.random.Generator` in a fixed order:
 one Bernoulli per eligible tip in (network, column) order, the processing
 permutation, then the bridge walks in processing order.
 
-Root attachment. A forest packed into a field of view has a root inside the
-field for many of its networks, and every such root is a blunt start: real
-vasculature has none, since a vessel's upstream end is a branch off a parent
-vessel. With `attach_roots`, an eligible root (a degree-one root vertex
-inside the box, clear of the faces by `boundary_margin`, and a tip of the
-uncropped network; whether it lies in a junction zone does not matter)
-becomes the source of a bridge to a vessel of another network at least as
-thick, so that the blunt start becomes a side branch, with the machinery of
-the tip bridges. The root's upstream direction is the tip tangent
-_tip_tangents computes for it, the unit vector from the first distinct point
-of its polyline to the root, which points out of the vessel; the bridge
-departs along it and the forward cone is taken about it. A root's partner
-is a vertex of degree one or two that the partner mask allows, on another
-network whatever the policy, not already touching the root, inside the cone,
-within `root_radius` (or `radius`) root diameters, and whose vertex diameter
-is at least `root_partner_min_ratio` times the root's; the start-junction
-zone (a disc around the root itself) and the kin rule (no same-network
-partner is possible) do not apply. Interior points rank before tips, then
-distance, then (network, column), so a root prefers a side branch to a
-tip-to-tip junction. The bridge has the root's diameter, so the vessel
-continues upstream at its own calibre; the step, persistence, redraws,
-collision rule and excusals, bitwise end columns, the junction at an
-attached interior point and the consumed attached tip are those of a tip
-bridge. The root phase comes first: one Bernoulli per eligible root in
-(network, column) order, a permutation of the selected roots, then the root
-bridges, each an obstacle for every later bridge; then the tip sequence
-above, whose draws are made even when the budget was spent during the root
-phase. With no eligible root nothing is drawn, so the bridges, the
-generator state and the summary equal the option off; the tips table then
-differs only where a root inside the box is ineligible, which the option
-reports as cut_end rather than root, and without such a root the result
-equals the option off on every field of 3.3. Root and tip bridges share
-`max_bridge_volume`, and the first k bridges of any result remain a valid
-result. Every bridge record carries `source_kind` ("tip" or "root"), the
-root bridges are counted in the join_root_* counters rather than in
-join_bridges (a tip a root bridge consumed counts in join_source_consumed
-when its turn comes in the tip phase, like one a tip bridge consumed), and
-the summary reports the blunt roots (eligible roots not attached) and the
-free ends (free tips plus blunt roots) before and after.
-
 The per-tip cost is kept low by computing every quantity that is constant
 during a run once, as numpy arrays over the columns of all networks: degree,
 network, polyline, arc position, the root, stub and junction-zone masks, the
@@ -131,37 +90,18 @@ RNG_STREAMS = {"join": 3}
 POLICIES = ("cross", "any")
 
 # What became of each degree-one vertex of the input, coded as its index here.
-# The codes from root_attached on are the outcomes of an eligible root under
-# attach_roots; they are appended so that the earlier codes keep their values.
 TIP_OUTCOMES = ("root", "cut_end", "stub", "not_selected", "bridged_source", "bridged_partner",
-                "no_partner", "collision_failed", "over_budget",
-                "root_attached", "root_not_selected", "root_no_partner", "root_collision_failed",
-                "root_over_budget")
+                "no_partner", "collision_failed", "over_budget")
 
 # Every counter a run reports, so that the zero ones are listed too. The
-# outcome counters (join_roots through join_over_budget and the five from
-# join_root_attached on) partition join_tips. The counters from
-# join_root_eligible on are appended so that the earlier keys keep their
-# positions; they stay zero unless attach_roots is on.
+# outcome counters partition join_tips.
 EVENT_KEYS = ("join_networks", "join_points", "join_isolated", "join_tips",
               "join_roots", "join_cut_ends", "join_stubs", "join_eligible", "join_selected",
               "join_not_selected", "join_bridges", "join_bridged_partners", "join_no_partner",
               "join_collision_failed", "join_over_budget",
               "join_partner_tips", "join_partner_interior", "join_source_consumed",
               "join_redraws", "join_box_redraws", "join_kin_skipped", "join_behind_skipped",
-              "join_components_joined",
-              "join_root_eligible", "join_root_selected", "join_root_attached", "join_root_not_selected",
-              "join_root_no_partner", "join_root_collision_failed", "join_root_over_budget")
-
-# The outcome counter of each outcome code.
-_OUTCOME_COUNTERS = (("root", "join_roots"), ("cut_end", "join_cut_ends"), ("stub", "join_stubs"),
-                     ("not_selected", "join_not_selected"), ("bridged_source", "join_bridges"),
-                     ("bridged_partner", "join_bridged_partners"), ("no_partner", "join_no_partner"),
-                     ("collision_failed", "join_collision_failed"), ("over_budget", "join_over_budget"),
-                     ("root_attached", "join_root_attached"), ("root_not_selected", "join_root_not_selected"),
-                     ("root_no_partner", "join_root_no_partner"),
-                     ("root_collision_failed", "join_root_collision_failed"),
-                     ("root_over_budget", "join_root_over_budget"))
+              "join_components_joined")
 
 # One row per degree-one vertex of the (cropped) input.
 TIP_DTYPE = np.dtype([("network", np.int32), ("column", np.int64), ("outcome", np.int8)])
@@ -681,8 +621,7 @@ class _Forest:
     networks, and every per-column quantity the joining needs.
     """
 
-    def __init__(self, networks, tol, lo, hi, margin, boundary_margin, policy, min_separation,
-                 check_roots=False):
+    def __init__(self, networks, tol, lo, hi, margin, boundary_margin, policy, min_separation):
         self.n_networks = len(networks)
         pieces, kinds, trees, bases = [], [], [], []
         root_columns = []
@@ -776,13 +715,9 @@ class _Forest:
         self.start_junction = self.canon[self.poly_start] if self.n_polylines else np.zeros(0, dtype=np.int64)
 
         self.is_root = np.zeros(self.n, dtype=bool)
-        for k, roots in enumerate(root_columns):
+        for roots in root_columns:
             if roots.size:
-                canonical = self.canon[roots]
-                if check_roots and np.any(canonical < 0):
-                    bad = int(roots[np.flatnonzero(canonical < 0)[0]] - self.base[k])
-                    raise ValueError(f"network {k}: root column {bad} is a NaN separator")
-                self.is_root[canonical] = True
+                self.is_root[self.canon[roots]] = True
         self.lo, self.hi = lo, hi
         self.margin = margin
         inside = np.all((self.xyz >= lo) & (self.xyz <= hi), axis=1)
@@ -802,12 +737,6 @@ class _Forest:
         roots = tips[self.is_root[tips]]
         self.tip_class[roots] = np.where(inside[roots], _OUTCOME["root"], _OUTCOME["cut_end"])
         self.eligible = tips[self.tip_class[tips] == _OUTCOME["not_selected"]]
-        # the degree-one roots, and those that may attach under attach_roots:
-        # inside the box, clear of the faces by the test tips use, and tips of
-        # the uncropped network; whether one lies in a junction zone does not
-        # matter, since the zone is a disc around the root itself
-        self.roots = roots
-        self.root_eligible = roots[inside[roots] & ~near_face[roots] & (self.kind_in[roots] == graph.TIP)]
 
         # partners: vertices of degree one or two, never a root, a cut end, a
         # stub or a point inside a junction zone, and inside the box
@@ -994,13 +923,11 @@ class _Obstacles:
 
 def join_networks(networks, rng, *, fraction, collision_margin, box, boundary_margin, radius=25.0,
                   policy="cross", min_separation=3, persistence=8.0, attempts=10, max_candidates=5,
-                  tol=graph.DEFAULT_TOL, max_bridge_volume=None, merged=False, events=None,
-                  attach_roots=False, root_fraction=1.0, root_partner_min_ratio=1.0, root_radius=None):
+                  tol=graph.DEFAULT_TOL, max_bridge_volume=None, merged=False, events=None):
     """
     Bridges a seeded fraction of the free tips of placed networks to partners
     on other networks (or, under policy "any", anywhere far enough along the
-    graph), inside a box, and optionally attaches the roots inside the box to
-    vessels of other networks at least as thick.
+    graph), inside a box.
 
     Args:
         networks (sequence): placed networks in one common frame and unit,
@@ -1032,31 +959,18 @@ def join_networks(networks, rng, *, fraction, collision_margin, box, boundary_ma
         max_candidates (int): partners tried per tip before giving up.
         tol (float): coincidence tolerance for each network's graph, caller units.
         max_bridge_volume (float or None): budget for the summed bridge
-            volumes pi r^2 x arc, caller units cubed, shared by root and tip
-            bridges; once a bridge would exceed it no bridge starts and the
-            remaining selected roots and tips are reported as
-            root_over_budget and over_budget. None sets no budget.
+            volumes pi r^2 x arc, caller units cubed; once a bridge would
+            exceed it no bridge starts and the remaining selected tips are
+            reported as over_budget. None sets no budget.
         merged (bool): also return the inputs and the bridges as one archive.
         events (dict or None): counters incremented in place (EVENT_KEYS).
-        attach_roots (bool): let each eligible root (a degree-one root
-            vertex inside the box, clear of the faces by `boundary_margin`,
-            whose input node_kind is a tip) become the source of a bridge to
-            a vessel of another network, as a side branch off that vessel.
-            Off by default, in which case roots are never sources.
-        root_fraction (float): share of the eligible roots drawn as sources,
-            in [0, 1].
-        root_partner_min_ratio (float): a root's partner must have a vertex
-            diameter of at least this many root diameters; at least 1.
-        root_radius (float or None): partner search radius for a root in
-            multiples of the root diameter; None uses `radius`.
 
     Returns:
         dict:
             "bridges": one dict per bridge, in the order placed, with "tip"
-                and "partner" as (network, column), "source_kind" ("tip" or
-                "root": the source the "tip" field names), "partner_kind"
-                ("tip" or "interior"), "geometry" a (4, m) float64 array in
-                the caller's frame whose first and last columns are bitwise
+                and "partner" as (network, column), "partner_kind" ("tip" or
+                "interior"), "geometry" a (4, m) float64 array in the
+                caller's frame whose first and last columns are bitwise
                 copies of the joined columns (with the bridge diameter),
                 "chord", "arc", "diameter", "volume" and "redraws" (attempts
                 that failed before this bridge was placed);
@@ -1065,9 +979,8 @@ def join_networks(networks, rng, *, fraction, collision_margin, box, boundary_ma
                 degree-one vertex of the input, its "network", "column" and
                 "outcome" code into TIP_OUTCOMES, in (network, column) order;
             "events": the counters;
-            "summary": components, free in-box tips (neither root nor cut
-                end), blunt roots (eligible roots not attached) and free ends
-                (both together), each per unit length too, before and after;
+            "summary": components and free in-box tips (neither root nor
+                cut end) per unit length, before and after;
             "merged" (when asked for): "nodes" with the bridges appended
                 after NaN separators, "edges", "node_kind", "network" (the
                 network of each column, BRIDGE_NETWORK on bridges, -1 at
@@ -1076,34 +989,6 @@ def join_networks(networks, rng, *, fraction, collision_margin, box, boundary_ma
         The first k bridges of any result are themselves a valid result, so a
         caller may truncate after measuring what it rendered: each bridge was
         checked against the inputs and the bridges before it only.
-
-    Root attachment. With `attach_roots`, the eligible roots are drawn first
-    (one Bernoulli per eligible root in (network, column) order, then a
-    permutation of the selected ones), and each selected root looks for a
-    partner within `root_radius` root diameters on another network, whatever
-    `policy` is: a vertex of degree one or two that the partner mask allows,
-    not already touching the root, within FORWARD_CONE_DEG of the root's
-    upstream direction (the unit vector from the first distinct point of its
-    polyline to the root, which points out of the vessel), and whose vertex
-    diameter is at least `root_partner_min_ratio` times the root's. Interior
-    points rank before tips, then by distance, then by (network, column).
-    The bridge has the root's diameter, so the vessel continues upstream at
-    its own calibre, leaves along the upstream direction and arrives as a
-    tip's bridge does; everything else (step, persistence, redraws, the
-    collision rule and its excusals, the bitwise end columns, the junction
-    or consumed tip at the partner) is the rule for tips. The tip draws
-    follow the root bridges, so a run with the option on and at least one
-    eligible root draws differently from a run with it off; with no eligible
-    root the option draws nothing, so the bridges, the generator state and
-    the summary are those of the option off. An ineligible root (outside the
-    box, near a face, or not a tip of the uncropped network) is reported as
-    cut_end, and an eligible one as exactly one of root_attached,
-    root_not_selected, root_no_partner, root_collision_failed and
-    root_over_budget; the code root never occurs with the option on, so the
-    tips table of a run without an eligible root equals the option off's
-    exactly when no root inside the box is ineligible. A tip consumed by a
-    root bridge counts in join_source_consumed when its turn comes in the
-    tip phase, as one consumed by a tip bridge does.
     """
     if not 0.0 <= fraction <= 1.0:
         raise ValueError(f"fraction must lie in [0, 1], got {fraction!r}")
@@ -1121,28 +1006,19 @@ def join_networks(networks, rng, *, fraction, collision_margin, box, boundary_ma
         raise ValueError("attempts cannot be negative and max_candidates must be at least 1")
     if max_bridge_volume is not None and not max_bridge_volume >= 0.0:
         raise ValueError("max_bridge_volume cannot be negative")
-    if not 0.0 <= root_fraction <= 1.0:
-        raise ValueError(f"root_fraction must lie in [0, 1], got {root_fraction!r}")
-    if not root_partner_min_ratio >= 1.0:
-        raise ValueError(f"root_partner_min_ratio must be at least 1, got {root_partner_min_ratio!r}")
-    if root_radius is not None and not root_radius > 0.0:
-        raise ValueError(f"root_radius must be positive or None, got {root_radius!r}")
     if not isinstance(rng, np.random.Generator):
         raise TypeError("rng must be a numpy.random.Generator")
     lo, hi = _as_box(box)
     margin = float(collision_margin)
     boundary_margin = float(boundary_margin)
     min_separation = int(min_separation)
-    attach_roots = bool(attach_roots)
-    root_search = float(radius if root_radius is None else root_radius)
     if events is None:
         events = {}
     for key in EVENT_KEYS:
         events.setdefault(key, 0)
     cone = math.cos(math.radians(FORWARD_CONE_DEG))
 
-    forest = _Forest(networks, tol, lo, hi, margin, boundary_margin, policy, min_separation,
-                     check_roots=attach_roots)
+    forest = _Forest(networks, tol, lo, hi, margin, boundary_margin, policy, min_separation)
     n_networks = forest.n_networks
     events["join_networks"] += n_networks
     events["join_points"] += int(np.count_nonzero(forest.finite))
@@ -1152,11 +1028,14 @@ def join_networks(networks, rng, *, fraction, collision_margin, box, boundary_ma
     events["join_tips"] += int(tips.size)
     eligible = forest.eligible
     events["join_eligible"] += int(eligible.size)
-    root_eligible = forest.root_eligible
-    if attach_roots:
-        outcome[forest.roots] = _OUTCOME["cut_end"]
-        outcome[root_eligible] = _OUTCOME["root_not_selected"]
-        events["join_root_eligible"] += int(root_eligible.size)
+
+    # the draws: one Bernoulli per eligible tip in (network, column) order,
+    # then the processing permutation
+    picks = rng.random(eligible.size) < fraction
+    selected = eligible[picks]
+    order = rng.permutation(selected.size)
+    selected = selected[order]
+    events["join_selected"] += int(selected.size)
 
     deg = forest.deg
     xyz = forest.xyz
@@ -1182,148 +1061,9 @@ def join_networks(networks, rng, *, fraction, collision_margin, box, boundary_ma
             c = component_parent[c]
         return c
 
-    def place(source, source_kind, v, d_v, chord, rank, step, departure, bridge_diameter, codes):
-        """
-        Tries the candidates `v` in the order of `rank`, then distance, then
-        column, up to max_candidates, drawing up to attempts + 1 bridges to
-        each, and places the first bridge that stays in the box and clear of
-        every obstacle: the source's outcome becomes codes["placed"], a
-        partner tip is consumed, a partner interior point becomes a junction
-        and the components merge. Otherwise the outcome is codes["failed"],
-        or codes["over_budget"] when the bridge found would exceed the budget,
-        which then stops every later bridge.
-        """
-        nonlocal total_volume, budget_spent
-        ranked = np.lexsort((v, chord, rank))[:max_candidates]
-        source_xyz = xyz[source]
-        joined = None
-        failed = 0
-        for at in ranked.tolist():
-            partner = int(v[at])
-            partner_is_tip = deg[partner] == 1
-            d_bridge = bridge_diameter(float(d_v[at]))
-            partner_xyz = xyz[partner]
-            arrival = None
-            if partner_is_tip:
-                outward = forest.tangent[partner]
-                if np.all(np.isfinite(outward)):
-                    arrival = -outward
-            for _ in range(attempts + 1):
-                path = bridge_geometry(source_xyz, partner_xyz, step, rng, persistence, d_bridge,
-                                       start_tangent=departure, end_tangent=arrival)
-                if np.any(path < lo) or np.any(path > hi):
-                    events["join_box_redraws"] += 1
-                    failed += 1
-                    continue
-                if obstacles.collides(path, d_bridge / 2.0, source, partner):
-                    events["join_redraws"] += 1
-                    failed += 1
-                    continue
-                joined = (partner, partner_is_tip, d_bridge, path, float(chord[at]))
-                break
-            if joined is not None:
-                break
-        if joined is None:
-            outcome[source] = codes["failed"]
-            return
-
-        partner, partner_is_tip, d_bridge, path, chord_length = joined
-        arc = float(np.sum(np.linalg.norm(np.diff(path, axis=0), axis=1)))
-        volume = math.pi * (d_bridge / 2.0) ** 2 * arc
-        if max_bridge_volume is not None and total_volume + volume > max_bridge_volume:
-            budget_spent = True
-            outcome[source] = codes["over_budget"]
-            return
-        total_volume += volume
-        rows = np.empty((4, len(path)))
-        rows[:3] = path.T
-        rows[3] = d_bridge
-        rows[:3, 0] = source_xyz                   # bitwise copies, so the graph closes
-        rows[:3, -1] = partner_xyz
-        deg[source] += 1
-        deg[partner] += 1
-        outcome[source] = codes["placed"]
-        if partner_is_tip:
-            outcome[partner] = _OUTCOME["bridged_partner"]
-            events["join_partner_tips"] += 1
-        else:
-            events["join_partner_interior"] += 1
-        a, b = find(int(forest.component[source])), find(int(forest.component[partner]))
-        if a != b:
-            component_parent[max(a, b)] = min(a, b)
-            events["join_components_joined"] += 1
-        obstacles.add_bridge(path, d_bridge / 2.0)
-        source_net, partner_net = int(net[source]), int(net[partner])
-        bridges.append({
-            "tip": (source_net, int(source - forest.base[source_net])),
-            "partner": (partner_net, int(partner - forest.base[partner_net])),
-            "source_kind": source_kind,
-            "partner_kind": "tip" if partner_is_tip else "interior",
-            "geometry": rows, "chord": chord_length, "arc": arc, "diameter": float(d_bridge),
-            "volume": volume, "redraws": int(failed),
-        })
-
-    # the root phase: one Bernoulli per eligible root in (network, column)
-    # order, the permutation, then the root bridges, each an obstacle for
-    # every later bridge; nothing is drawn when no root is eligible
-    if attach_roots and root_eligible.size:
-        root_codes = {"placed": _OUTCOME["root_attached"], "failed": _OUTCOME["root_collision_failed"],
-                      "over_budget": _OUTCOME["root_over_budget"]}
-        root_picks = rng.random(root_eligible.size) < root_fraction
-        selected_roots = root_eligible[root_picks]
-        selected_roots = selected_roots[rng.permutation(selected_roots.size)]
-        events["join_root_selected"] += int(selected_roots.size)
-        for root in selected_roots.tolist():
-            if budget_spent:
-                outcome[root] = _OUTCOME["root_over_budget"]
-                continue
-            d_root = float(diam[root])
-            root_xyz = xyz[root]
-            upstream = forest.tangent[root]
-            has_upstream = bool(np.all(np.isfinite(upstream)))
-
-            # partners on other networks only, whatever the policy; no
-            # start-junction zone (the root is the start of its polyline) and
-            # no kin rule (no same-network partner is possible)
-            found = partners.within(root_xyz, root_search * d_root)
-            v = partners.tags[found]
-            if v.size:
-                keep = ((deg[v] == 1) | (deg[v] == 2)) & (net[v] != net[root])
-                v = v[keep]
-            if v.size:
-                d_v = diam[v]
-                offset = xyz[v] - root_xyz
-                chord = np.linalg.norm(offset, axis=1)
-                keep = chord > (d_root + d_v) / 2.0 + margin                     # already touching
-                keep &= d_v >= root_partner_min_ratio * d_root                   # at least as thick
-                if has_upstream:
-                    behind = (offset @ upstream) < cone * chord
-                    events["join_behind_skipped"] += int(np.count_nonzero(behind & keep))
-                    keep &= ~behind
-                v, d_v, chord = v[keep], d_v[keep], chord[keep]
-            if v.size == 0:
-                outcome[root] = _OUTCOME["root_no_partner"]
-                continue
-            # a side branch off an interior point before a tip-to-tip junction
-            rank = np.where(deg[v] == 2, 0, 1)
-            step = forest.polyline_spacing(root) or 0.2 * d_root
-            place(root, "root", v, d_v, chord, rank, step, upstream if has_upstream else None,
-                  lambda d_partner: d_root, root_codes)
-
-    # the tip phase: one Bernoulli per eligible tip in (network, column)
-    # order, then the processing permutation, then the walks
-    tip_codes = {"placed": _OUTCOME["bridged_source"], "failed": _OUTCOME["collision_failed"],
-                 "over_budget": _OUTCOME["over_budget"]}
-    picks = rng.random(eligible.size) < fraction
-    selected = eligible[picks]
-    order = rng.permutation(selected.size)
-    selected = selected[order]
-    events["join_selected"] += int(selected.size)
-
     for tip in selected.tolist():
         if deg[tip] != 1:
-            # consumed as the partner of an earlier bridge, a root's included;
-            # it already has its outcome
+            # consumed as a partner since it was drawn; it already has its outcome
             events["join_source_consumed"] += 1
             continue
         if budget_spent:
@@ -1372,14 +1112,82 @@ def join_networks(networks, rng, *, fraction, collision_margin, box, boundary_ma
             outcome[tip] = _OUTCOME["no_partner"]
             continue
         rank = np.where(deg[v] == 1, 0, 1)
+        ranked = np.lexsort((v, chord, rank))[:max_candidates]
+
         step = forest.polyline_spacing(tip) or 0.2 * d_tip
-        place(tip, "tip", v, d_v, chord, rank, step, tangent if has_tangent else None,
-              lambda d_partner: min(d_tip, d_partner), tip_codes)
+        joined = None
+        failed = 0
+        for at in ranked.tolist():
+            partner = int(v[at])
+            partner_is_tip = rank[at] == 0
+            d_bridge = min(d_tip, float(d_v[at]))
+            partner_xyz = xyz[partner]
+            arrival = None
+            if partner_is_tip:
+                outward = forest.tangent[partner]
+                if np.all(np.isfinite(outward)):
+                    arrival = -outward
+            for _ in range(attempts + 1):
+                path = bridge_geometry(tip_xyz, partner_xyz, step, rng, persistence, d_bridge,
+                                       start_tangent=tangent if has_tangent else None, end_tangent=arrival)
+                if np.any(path < lo) or np.any(path > hi):
+                    events["join_box_redraws"] += 1
+                    failed += 1
+                    continue
+                if obstacles.collides(path, d_bridge / 2.0, tip, partner):
+                    events["join_redraws"] += 1
+                    failed += 1
+                    continue
+                joined = (partner, partner_is_tip, d_bridge, path, float(chord[at]))
+                break
+            if joined is not None:
+                break
+        if joined is None:
+            outcome[tip] = _OUTCOME["collision_failed"]
+            continue
+
+        partner, partner_is_tip, d_bridge, path, chord_length = joined
+        arc = float(np.sum(np.linalg.norm(np.diff(path, axis=0), axis=1)))
+        volume = math.pi * (d_bridge / 2.0) ** 2 * arc
+        if max_bridge_volume is not None and total_volume + volume > max_bridge_volume:
+            budget_spent = True
+            outcome[tip] = _OUTCOME["over_budget"]
+            continue
+        total_volume += volume
+        rows = np.empty((4, len(path)))
+        rows[:3] = path.T
+        rows[3] = d_bridge
+        rows[:3, 0] = tip_xyz                      # bitwise copies, so the graph closes
+        rows[:3, -1] = partner_xyz
+        deg[tip] += 1
+        deg[partner] += 1
+        outcome[tip] = _OUTCOME["bridged_source"]
+        if partner_is_tip:
+            outcome[partner] = _OUTCOME["bridged_partner"]
+            events["join_partner_tips"] += 1
+        else:
+            events["join_partner_interior"] += 1
+        a, b = find(int(forest.component[tip])), find(int(forest.component[partner]))
+        if a != b:
+            component_parent[max(a, b)] = min(a, b)
+            events["join_components_joined"] += 1
+        obstacles.add_bridge(path, d_bridge / 2.0)
+        tip_net, partner_net = int(net[tip]), int(net[partner])
+        bridges.append({
+            "tip": (tip_net, int(tip - forest.base[tip_net])),
+            "partner": (partner_net, int(partner - forest.base[partner_net])),
+            "partner_kind": "tip" if partner_is_tip else "interior",
+            "geometry": rows, "chord": chord_length, "arc": arc, "diameter": float(d_bridge),
+            "volume": volume, "redraws": int(failed),
+        })
 
     # the outcome counters come from the final table, since a tip that found
     # no partner or failed every bridge may since have received one
     counts = np.bincount(outcome[tips], minlength=len(TIP_OUTCOMES)) if tips.size else np.zeros(len(TIP_OUTCOMES), int)
-    for name, key in _OUTCOME_COUNTERS:
+    for name, key in (("root", "join_roots"), ("cut_end", "join_cut_ends"), ("stub", "join_stubs"),
+                      ("not_selected", "join_not_selected"), ("bridged_source", "join_bridges"),
+                      ("bridged_partner", "join_bridged_partners"), ("no_partner", "join_no_partner"),
+                      ("collision_failed", "join_collision_failed"), ("over_budget", "join_over_budget")):
         events[key] += int(counts[_OUTCOME[name]])
 
     table = np.empty(tips.size, dtype=TIP_DTYPE)
@@ -1390,27 +1198,16 @@ def join_networks(networks, rng, *, fraction, collision_margin, box, boundary_ma
     length_before = float(np.sum(np.linalg.norm(xyz[forest.edges[0]] - xyz[forest.edges[1]], axis=1))) \
         if forest.edges.shape[1] else 0.0
     length_after = length_before + sum(b["arc"] for b in bridges)
-    root_rows = int(sum(counts[_OUTCOME[name]] for name in TIP_OUTCOMES if name == "root" or name.startswith("root_")))
-    free_before = int(tips.size - root_rows - counts[_OUTCOME["cut_end"]])
+    free_before = int(tips.size - counts[_OUTCOME["root"]] - counts[_OUTCOME["cut_end"]])
     free_after = int(free_before - counts[_OUTCOME["bridged_source"]] - counts[_OUTCOME["bridged_partner"]])
-    blunt_before = int(root_eligible.size)
-    blunt_after = int(blunt_before - counts[_OUTCOME["root_attached"]])
-
-    def per_length(before, after):
-        return {"before": before / length_before if length_before > 0.0 else None,
-                "after": after / length_after if length_after > 0.0 else None}
-
     summary = {
         "components": {"before": forest.components_before,
                        "after": forest.components_before - events["join_components_joined"]},
         "length": {"before": length_before, "after": length_after},
         "free_tips": {"before": free_before, "after": free_after},
-        "free_tips_per_length": per_length(free_before, free_after),
+        "free_tips_per_length": {"before": free_before / length_before if length_before > 0.0 else None,
+                                 "after": free_after / length_after if length_after > 0.0 else None},
         "bridge_volume": total_volume,
-        "blunt_roots": {"before": blunt_before, "after": blunt_after},
-        "blunt_roots_per_length": per_length(blunt_before, blunt_after),
-        "free_ends": {"before": free_before + blunt_before, "after": free_after + blunt_after},
-        "free_ends_per_length": per_length(free_before + blunt_before, free_after + blunt_after),
     }
 
     separator = np.full((4, 1), np.nan)

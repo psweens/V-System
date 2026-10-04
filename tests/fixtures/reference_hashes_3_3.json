@@ -1,0 +1,24 @@
+{
+  "_note": "sha256 of the bridges (geometry bytes and the 3.3 fields), the tips table, the 3.3 counters, the 3.3 summary entries and the generator state drawn by the 3.3 join.py (tests/fixtures/reference_code_3_3) for each forest of tests/test_pinned_join.py; equality is exact only where BLAS rounding matches the recording machine",
+  "_recorded_with": {
+    "python": "3.11.15",
+    "numpy": "2.4.6",
+    "platform": "Linux-6.18.44-fc-v64-x86_64-with-glibc2.39"
+  },
+  "pair": {
+    "bridges": 5,
+    "bridges_sha256": "171fa713b3fc06c9172fe57ee4e97c94ca95ece9ea17ff08393ffb15e925b296",
+    "tips_sha256": "9d12bdb5bbaa515e82d29357938a28416cce71d211c6244048d30fa3bc6b79b9",
+    "events_sha256": "9cf47b32d842333c1e1d4536580a1a4d3eddc4942d0ef323c16eecbd11c47c5a",
+    "summary_sha256": "ff8a10ed0d2fcb143bff5a8268f158798d8235a65f345781ebee29c3de0256a7",
+    "rng_state_sha256": "ea3d177d1b86f1ab2dd260b5b2cc3a4a69b51768b2e32ccb40edcd1280d65cac"
+  },
+  "cropped": {
+    "bridges": 10,
+    "bridges_sha256": "d318d4687b71406989e08712f96fbdb93cbc4848298a6299b57b7d55a56f09b2",
+    "tips_sha256": "ff9bacdc902fc00eacb33541310f55b1a57cf5d7e3dd85212c0712e600c68fe4",
+    "events_sha256": "93b89cfe929a1833fe9c46a05cb128993f28921899693fb1a055ca9acfccd4d0",
+    "summary_sha256": "1990ba02817dfcfb359ddc10eac22e5a2e36326d9ef025d5f1578769b6b5374a",
+    "rng_state_sha256": "0117e29ce0de4cb3e5f018b4d8af800b954c6c166f589fee952aafaf82e2d94e"
+  }
+}
