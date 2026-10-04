@@ -1,5 +1,86 @@
 # Changelog
 
+## 3.4.0
+
+Version 3.4 adds one opt-in option to `join.join_networks`: with
+`attach_roots`, a network's root inside the field of view may attach, as a
+side branch, to a nearby vessel of another network that is at least as
+thick. With the option off (the default) the joining draws what 3.3 drew,
+which the tests check by running the 3.3 `join.py`, kept under
+`tests/fixtures/reference_code_3_3`, alongside the current one.
+
+### Geometry
+
+- In a forest packed into a field of view, every network whose root falls
+  inside the field starts with a blunt end, which real vasculature has none
+  of: a vessel's upstream end is a branch off a parent vessel. With
+  `attach_roots`, an eligible root (a degree-one root vertex inside the
+  box, clear of the faces by `boundary_margin`, whose input `node_kind` is
+  a tip) becomes the source of a bridge with the machinery of the tip
+  bridges: its upstream direction is the tip tangent of the root, the
+  partner is a vertex of degree one or two on another network, whatever the
+  policy, inside the forward cone, within `root_radius` (default `radius`)
+  root diameters, not already touching, and at least `root_partner_min_ratio`
+  root diameters across at the vertex; interior points rank before tips, so
+  a root prefers a side branch; the bridge has the root's diameter, so the
+  vessel continues upstream at its own calibre; and the step, persistence,
+  redraws, collision rule and excusals, bitwise end columns, the junction at
+  an attached interior point and the consumed attached tip are as for tips.
+- The root phase comes first: one Bernoulli per eligible root in (network,
+  column) order (`root_fraction`), a permutation of the selected roots, then
+  the root bridges, each an obstacle for every later bridge; the tip draws
+  follow and are made even when the budget was spent during the root phase.
+  Root and tip bridges share `max_bridge_volume`, and the first k bridges of
+  any result remain a valid result. With no eligible root nothing is drawn
+  and the result equals the option off on the fields of 3.3.
+- With the option on, an ineligible root (outside the box, near a face or
+  not a tip of the uncropped network) is reported as `cut_end` and an
+  eligible one as exactly one of `root_attached`, `root_not_selected`,
+  `root_no_partner`, `root_collision_failed` and `root_over_budget`, codes
+  appended to `TIP_OUTCOMES`; the code `root` never occurs. A root column
+  given as a NaN separator is refused with the option on.
+
+### Measurement
+
+- Every bridge record carries `source_kind` (`tip` or `root`); a root
+  bridge's `tip` field holds the root's (network, column), so existing
+  readers work unchanged.
+- The counters `join_root_eligible`, `join_root_selected`,
+  `join_root_attached`, `join_root_not_selected`, `join_root_no_partner`,
+  `join_root_collision_failed` and `join_root_over_budget` are appended to
+  `EVENT_KEYS`; the last five are read from the final table, so the outcome
+  counters still partition `join_tips`. Root bridges count in the redraw,
+  behind-skipped, partner and components counters but never in
+  `join_eligible`, `join_selected`, `join_bridges` or
+  `join_source_consumed`, so `len(bridges) == join_bridges +
+  join_root_attached`.
+- The summary always reports `blunt_roots` (the eligible roots, less those
+  attached), `free_ends` (free tips plus blunt roots) and both per unit
+  length, before and after, beside the entries of 3.3; `free_tips` keeps
+  its meaning, tips that are neither roots nor cut ends.
+- Measured on the typical benchmark forest (330 networks of five-generation
+  trees with root diameters spread log-uniformly over [2, 8] at d_min = 1,
+  235 thousand points, boundary margin 2, fraction 0.9, one process): the
+  joining takes 15.5 s with the option off and 26.2 s with it on; of 266
+  eligible roots 220 attach, 30 find no partner and 16 fail every redraw;
+  the root bridges have a median chord of 14.7 and a median arc of 16.8
+  root diameters at the default `root_radius`, and 4.1 and 4.3 at
+  `root_radius` 5, where 9 roots attach; a root bridge holds 1 773 units
+  cubed on average against 106 for a tip bridge; the free ends per unit
+  length go from 0.0289 to 0.0067 with the option off and to 0.0053 with it
+  on, the blunt roots per unit length from 0.0021 to 0.0002.
+
+### Compatibility
+
+- `main.py`, every module it imports and `library.py` are unchanged;
+  library archives keep `"library_version": "3.3.0"`, and `join.RNG_STREAMS`
+  is as in 3.3, so no new random stream is needed.
+- With `attach_roots` off, `join_networks` returns what 3.3 returned on the
+  3.3 fields and draws nothing more; the new keyword arguments are
+  validated whether or not the option is on. New outcome codes and counters
+  are appended, so existing codes and keys keep their values.
+- `pyproject` version 3.4.0. Python 3.9 syntax, numpy and tifffile only.
+
 ## 3.3.0
 
 Version 3.3 adds two opt-in tools built around forests of many independently

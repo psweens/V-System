@@ -502,11 +502,16 @@ Keyword arguments, all required unless a default is shown:
 | `max_bridge_volume=None` | budget for the summed bridge volumes, caller units cubed |
 | `merged=False` | also return inputs and bridges as one archive with its graph |
 | `events=None` | counters incremented in place (`join.EVENT_KEYS`) |
+| `attach_roots=False` | let each eligible root attach, as a side branch, to a vessel of another network at least as thick (below) |
+| `root_fraction=1.0` | share of the eligible roots drawn as sources |
+| `root_partner_min_ratio=1.0` | a root's partner must be at least this many root diameters across, measured at the vertex; at least 1 |
+| `root_radius=None` | partner search radius for a root in root diameters; `None` uses `radius` |
 
 Roots come from `roots` when given; otherwise the first finite column of each
 `tree` label other than the bridge label (so both trees of an arteriovenous
 mesh are roots), or the first finite column when `tree` is absent, a default
-valid only for uncropped networks. A root is never a source or a partner and
+valid only for uncropped networks. A root is never a source or a partner,
+unless `attach_roots` makes the roots inside the box sources (below), and
 is reported as `root` inside the box, `cut_end` outside it. A degree-one
 vertex is a `cut_end` when the crop made it (its input `node_kind` is not a
 tip) or when it lies outside the box or within `boundary_margin` of a face;
@@ -538,39 +543,102 @@ bulk, one array of each per bridge, where `tortuosity.bridge_path`
 interleaves them step by step, so the same generator state gives a different
 (equally distributed) bridge here.
 
+In a forest packed into a field of view, many networks have their root
+inside the field, and each such root is a blunt start; real vasculature has
+none, since a vessel's upstream end is a branch off a parent vessel. With
+`attach_roots`, an *eligible* root (a degree-one root vertex inside the box,
+clear of the faces by `boundary_margin`, whose input `node_kind` is a tip;
+whether it lies in a junction zone does not matter) becomes the source of a
+bridge to a vessel of another network at least as thick, so that the blunt
+start becomes a side branch, with the machinery of the tip bridges. The
+root's upstream direction is the unit vector from the first distinct point
+of its polyline to the root, which points out of the vessel; the bridge
+departs along it and the 120° cone is taken about it (a root with no such
+point gets no cone and a chord departure, as a tip without a tangent does).
+A root's partner is a vertex of degree one or two that the partner rules
+above allow, on another network whatever `policy` is, not already touching
+the root, inside the cone, within `root_radius` root diameters, and whose
+vertex diameter (the largest over the columns it gathers, so an aneurysm
+point counts at its bulged diameter) is at least `root_partner_min_ratio`
+times the root's; the zone of the junction the polyline leaves (a disc
+around the root itself) and the kin rule (no same-network partner is
+possible) do not apply. Interior points rank before tips, then distance,
+then (network, column), so a root prefers a side branch to a tip-to-tip
+junction; as for tips, a tip already bridged has degree two and counts as an
+interior partner. The bridge has the root's diameter, not the smaller of
+the two, so the vessel continues upstream at its own calibre; its step,
+persistence, redraws, collision rule and excusals, bitwise end columns, the
+junction at an attached interior point and the consumed attached tip are
+those of a tip bridge. An ineligible root (outside the box, within
+`boundary_margin` of a face, or not a tip of the uncropped network) is
+reported as `cut_end`, and an eligible one as exactly one of
+`root_attached`, `root_not_selected`, `root_no_partner`,
+`root_collision_failed` and `root_over_budget`; the code `root` never occurs
+with the option on. With the option on, a root column given as a NaN
+separator is refused.
+
 Draws come from `rng` in a fixed order: one Bernoulli per eligible tip in
 (network, column) order, the processing permutation, then the bridge walks in
-processing order; identical inputs, parameters and generator state give
-identical output. The result is also invariant under a change of unit:
-scaling the nodes, `collision_margin`, `box`, `boundary_margin` and `tol` by
-λ (and `max_bridge_volume` by λ³) gives the same topology and outcomes and
-bridges equal to λ times the original. To keep a library's clearance when
-joining library networks rescaled by λ, pass λ times the library margin, and
-work in a frame where one library unit maps to at least one caller unit, or
-scale `tol` by λ as well.
+processing order. With `attach_roots` and at least one eligible root, a root
+phase comes first: one Bernoulli per eligible root in (network, column)
+order (`root_fraction`), a permutation of the selected roots, then the root
+bridges in that order, each an obstacle for every later bridge; the tip
+draws follow, and are made even when the budget was spent during the root
+phase, in which case the remaining selected roots are `root_over_budget` and
+the selected tips `over_budget`. With no eligible root nothing is drawn and
+the result equals the option off on the fields of 3.3; with `root_fraction`
+0 the root Bernoulli draws are still made. Identical inputs, parameters and
+generator state give identical output. The result is also invariant under a
+change of unit: scaling the nodes, `collision_margin`, `box`,
+`boundary_margin` and `tol` by λ (and `max_bridge_volume` by λ³) gives the
+same topology and outcomes and bridges equal to λ times the original
+(`root_radius` is in root diameters and is not scaled). To keep a library's
+clearance when joining library networks rescaled by λ, pass λ times the
+library margin, and work in a frame where one library unit maps to at least
+one caller unit, or scale `tol` by λ as well.
 
 With `max_bridge_volume` set (π r² × arc per bridge, caller units cubed), no
 new bridge starts once the sum would exceed it; the remaining selected tips
-are reported as `over_budget`. Each bridge reports its `volume`, and the
-first k bridges of any result are themselves a valid result (each was checked
-against the inputs and the bridges before it only), so a caller may truncate
-after measuring what it rendered: a run with `max_bridge_volume` equal to the
-volume of the first k bridges reproduces exactly those k.
+are reported as `over_budget` (and the remaining selected roots as
+`root_over_budget`: root and tip bridges share the budget). Each bridge
+reports its `volume`, and the first k bridges of any result are themselves a
+valid result (each was checked against the inputs and the bridges before it
+only), so a caller may truncate after measuring what it rendered: a run with
+`max_bridge_volume` equal to the volume of the first k bridges reproduces
+exactly those k.
 
 The result holds `bridges` (per bridge: `tip` and `partner` as (network,
-column), `partner_kind`, `geometry` as a (4, m) float64 array in the caller's
-frame whose first and last columns are bitwise copies of the joined columns,
+column), `source_kind` (`tip` or `root`: a root bridge's `tip` field holds
+the root's (network, column), so readers of the record work unchanged),
+`partner_kind`, `geometry` as a (4, m) float64 array in the caller's frame
+whose first and last columns are bitwise copies of the joined columns,
 `chord`, `arc`, `diameter`, `volume` and `redraws`), `bridge_nodes` (the
 bridges concatenated with NaN separators), `tips` (a structured array with
 one row per degree-one vertex of the input: `network`, `column` and an
 `outcome` code into `join.TIP_OUTCOMES`, exactly one of `root`, `cut_end`,
 `stub`, `not_selected`, `bridged_source`, `bridged_partner`, `no_partner`,
-`collision_failed`, `over_budget`; degree-zero columns are counted in
-`events["join_isolated"]` and are not tips), `events` and `summary`
-(components and free in-box tips per unit length before and after). With
-`merged=True` it also holds `merged`: `nodes` with the bridges appended after
-NaN separators, `edges`, `node_kind`, a `network` id per column (-2 on
-bridges) and `tree`.
+`collision_failed`, `over_budget`, `root_attached`, `root_not_selected`,
+`root_no_partner`, `root_collision_failed`, `root_over_budget`; degree-zero
+columns are counted in `events["join_isolated"]` and are not tips), `events`
+and `summary`. The counters `join_root_eligible`, `join_root_selected`,
+`join_root_attached`, `join_root_not_selected`, `join_root_no_partner`,
+`join_root_collision_failed` and `join_root_over_budget` are appended to
+`join.EVENT_KEYS` after those of 3.3 (as the root codes are to
+`TIP_OUTCOMES`), so existing codes and keys keep their values; the last five
+are read from the final table like the other outcome counters, so the
+outcome counters still partition `join_tips`. Root bridges also count in
+`join_redraws`, `join_box_redraws`, `join_behind_skipped`,
+`join_partner_tips` or `join_partner_interior` and `join_components_joined`,
+never in `join_eligible`, `join_selected`, `join_bridges` or
+`join_source_consumed`, so `len(bridges) == join_bridges +
+join_root_attached`. The summary holds, before and after, the components,
+the length, `free_tips` (tips that are neither roots, under any root code,
+nor cut ends), `blunt_roots` (the eligible roots, less those attached),
+`free_ends` (both together) and each of the three per unit length, plus the
+bridge volume; with the option off `blunt_roots` is the same before and
+after. With `merged=True` it also holds `merged`: `nodes` with the bridges
+appended after NaN separators, `edges`, `node_kind`, a `network` id per
+column (-2 on bridges) and `tree`.
 
 To render placed geometry, map it to voxels yourself and call the rasteriser
 directly; `process_network` re-centres the network and must not be used here.
@@ -613,6 +681,20 @@ about 1.3 s per 0.35 million points. The cost per tip splits roughly into the
 collision checks (half, through one grid per octave of vessel radius and a
 growing grid of the earlier bridges), the bridge walk (a quarter) and the
 partner search with its vectorised filtering.
+
+Root attachment, measured on the typical forest grown with root diameters
+spread log-uniformly over [2, 8] at d_min = 1 (330 networks, 235 thousand
+points, `VSYSTEM_SLOW_TESTS=1 python -m unittest tests.test_join_roots`),
+on a machine where the option off takes 15.5 s: the option on takes 26.2 s;
+of 266 eligible roots 220 attach, 30 find no partner (nothing as thick
+within reach and the cone) and 16 fail every redraw; the root bridges have
+a median chord of 14.7 and a median arc of 16.8 root diameters at the
+default `root_radius` (4.1 and 4.3 at `root_radius` 5, where 9 roots
+attach), all to interior points; a root bridge holds 1 773 units cubed on
+average against 106 for a tip bridge, since it is as thick as the root and
+long; the free ends per unit length go from 0.0289 to 0.0067 with the option
+off and to 0.0053 with it on, the blunt roots per unit length from 0.0021
+to 0.0002. The attachment rate is 74 to 93 % in every root-diameter bin.
 
 ---
 
@@ -844,6 +926,20 @@ the degree-one vertices and agree with the counters, determinism, invariance
 under a change of unit, more than 127 networks, a mesh's two roots, a forest
 losing components and free tips, that any prefix of the bridges is a valid
 result, and, with `VSYSTEM_SLOW_TESTS=1`, the two performance targets.
+`tests/test_pinned_join.py` pins the joining of 3.3: the 3.3 `join.py`
+(`tests/fixtures/reference_code_3_3`) and the current one draw the same
+bridges, tips table, counters, summary and generator state for two small
+forests in the same environment, and with root attachment off nothing added
+since is live. `tests/test_join_roots.py` checks root attachment: a root near
+a thicker vessel attaches as a side branch at the root's own diameter and
+makes a junction, a root never attaches to a thinner vessel, root bridges
+depart upstream, cut-end roots never attach, root partners lie on other
+networks whatever the policy, the outcomes partition the degree-one vertices
+(a mesh pair's four roots included) and agree with the counters, determinism
+and invariance under a change of unit with root bridges present, the shared
+budget with roots first, the prefix property, that the option draws nothing
+without an eligible root, and, with `VSYSTEM_SLOW_TESTS=1`, the typical
+forest with root attachment off and on.
 `tests/test_library.py` checks the library's determinism, that the presets
 take effect, that no drawn diameter falls below d_min but a stenosis middle,
 the scaling with the unit, equality with the command line's output,
@@ -887,7 +983,8 @@ the walk, collision avoidance, anastomosis, the family presets and
 Version 3.3 adds `join.py`, which joins separately grown networks inside a
 field of view, and `vsystem-library`, which grows reproducible network
 libraries in relative units; the default command line and the family presets
-draw what 3.2 drew.
+draw what 3.2 drew. Version 3.4 adds root attachment to `join_networks`, an
+option off by default; with it off the joining draws what 3.3 drew.
 
 ---
 
