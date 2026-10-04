@@ -87,13 +87,18 @@ bridge. The root phase comes first: one Bernoulli per eligible root in
 (network, column) order, a permutation of the selected roots, then the root
 bridges, each an obstacle for every later bridge; then the tip sequence
 above, whose draws are made even when the budget was spent during the root
-phase. With no eligible root nothing is drawn and the result equals the
-option off on the fields of 3.3. Root and tip bridges share
+phase. With no eligible root nothing is drawn, so the bridges, the
+generator state and the summary equal the option off; the tips table then
+differs only where a root inside the box is ineligible, which the option
+reports as cut_end rather than root, and without such a root the result
+equals the option off on every field of 3.3. Root and tip bridges share
 `max_bridge_volume`, and the first k bridges of any result remain a valid
 result. Every bridge record carries `source_kind` ("tip" or "root"), the
 root bridges are counted in the join_root_* counters rather than in
-join_bridges, and the summary reports the blunt roots (eligible roots not
-attached) and the free ends (free tips plus blunt roots) before and after.
+join_bridges (a tip a root bridge consumed counts in join_source_consumed
+when its turn comes in the tip phase, like one a tip bridge consumed), and
+the summary reports the blunt roots (eligible roots not attached) and the
+free ends (free tips plus blunt roots) before and after.
 
 The per-tip cost is kept low by computing every quantity that is constant
 during a run once, as numpy arrays over the columns of all networks: degree,
@@ -1089,12 +1094,16 @@ def join_networks(networks, rng, *, fraction, collision_margin, box, boundary_ma
     or consumed tip at the partner) is the rule for tips. The tip draws
     follow the root bridges, so a run with the option on and at least one
     eligible root draws differently from a run with it off; with no eligible
-    root the option draws nothing and the result is the same on the fields
-    of 3.3. An ineligible root (outside the box, near a face, or not a tip
-    of the uncropped network) is reported as cut_end, and an eligible one as
-    exactly one of root_attached, root_not_selected, root_no_partner,
-    root_collision_failed and root_over_budget; the code root never occurs
-    with the option on.
+    root the option draws nothing, so the bridges, the generator state and
+    the summary are those of the option off. An ineligible root (outside the
+    box, near a face, or not a tip of the uncropped network) is reported as
+    cut_end, and an eligible one as exactly one of root_attached,
+    root_not_selected, root_no_partner, root_collision_failed and
+    root_over_budget; the code root never occurs with the option on, so the
+    tips table of a run without an eligible root equals the option off's
+    exactly when no root inside the box is ineligible. A tip consumed by a
+    root bridge counts in join_source_consumed when its turn comes in the
+    tip phase, as one consumed by a tip bridge does.
     """
     if not 0.0 <= fraction <= 1.0:
         raise ValueError(f"fraction must lie in [0, 1], got {fraction!r}")
@@ -1313,7 +1322,8 @@ def join_networks(networks, rng, *, fraction, collision_margin, box, boundary_ma
 
     for tip in selected.tolist():
         if deg[tip] != 1:
-            # consumed as a partner since it was drawn; it already has its outcome
+            # consumed as the partner of an earlier bridge, a root's included;
+            # it already has its outcome
             events["join_source_consumed"] += 1
             continue
         if budget_spent:

@@ -585,9 +585,13 @@ order (`root_fraction`), a permutation of the selected roots, then the root
 bridges in that order, each an obstacle for every later bridge; the tip
 draws follow, and are made even when the budget was spent during the root
 phase, in which case the remaining selected roots are `root_over_budget` and
-the selected tips `over_budget`. With no eligible root nothing is drawn and
-the result equals the option off on the fields of 3.3; with `root_fraction`
-0 the root Bernoulli draws are still made. Identical inputs, parameters and
+the selected tips `over_budget`. With no eligible root nothing is drawn, so
+the bridges, the generator state and the summary equal the option off (the
+tips table then differs only where a root inside the box is ineligible,
+reported as `cut_end` rather than `root`); with `root_fraction` 0 the root
+Bernoulli draws are still made. A tip consumed by a root bridge counts in
+`join_source_consumed` when its turn comes in the tip phase, as one
+consumed by a tip bridge does. Identical inputs, parameters and
 generator state give identical output. The result is also invariant under a
 change of unit: scaling the nodes, `collision_margin`, `box`,
 `boundary_margin` and `tol` by λ (and `max_bridge_volume` by λ³) gives the
@@ -933,11 +937,15 @@ forests in the same environment, and with root attachment off nothing added
 since is live. `tests/test_join_roots.py` checks root attachment: a root near
 a thicker vessel attaches as a side branch at the root's own diameter and
 makes a junction, a root never attaches to a thinner vessel, root bridges
-depart upstream, cut-end roots never attach, root partners lie on other
-networks whatever the policy, the outcomes partition the degree-one vertices
-(a mesh pair's four roots included) and agree with the counters, determinism
-and invariance under a change of unit with root bridges present, the shared
-budget with roots first, the prefix property, that the option draws nothing
+depart upstream, the cone is taken about the upstream direction and the
+search radius limits it, interior points rank before tips and an attached
+tip is consumed, a root in a junction zone or without a tangent still
+attaches, cut-end roots never attach, root partners lie on other networks
+whatever the policy, the outcomes partition the degree-one vertices (a mesh
+pair's four roots included) and agree with the counters, determinism and
+invariance under a change of unit with root bridges present, the shared
+budget with roots first, the prefix property, that in-box roots that are
+ineligible change only their own rows and that the option draws nothing
 without an eligible root, and, with `VSYSTEM_SLOW_TESTS=1`, the typical
 forest with root attachment off and on.
 `tests/test_library.py` checks the library's determinism, that the presets

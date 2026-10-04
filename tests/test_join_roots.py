@@ -10,8 +10,8 @@ timings, the root outcome mix, the attachment rate per root diameter, the
 root bridges' chord and arc, their volume against the tip bridges' and the
 free ends per unit length.
 """
+import math
 import os
-import resource
 import sys
 import time
 import unittest
@@ -115,16 +115,34 @@ def upstream_unit(nodes, column):
     """
     n = nodes.shape[1]
     here = nodes[:3, column]
-    for other in list(range(column + 1, n)) + list(range(column - 1, -1, -1)):
-        if not np.isfinite(nodes[0, other]):
-            if other > column:
-                continue                                    # past the end: try the earlier side
-            break
-        delta = nodes[:3, other] - here
-        length = float(np.linalg.norm(delta))
-        if length > 0.0:
-            return delta / length
+    for side in (range(column + 1, n), range(column - 1, -1, -1)):
+        for other in side:
+            if not np.isfinite(nodes[0, other]):
+                break                                       # the polyline ends here
+            delta = nodes[:3, other] - here
+            length = float(np.linalg.norm(delta))
+            if length > 0.0:
+                return delta / length
     return None
+
+
+def straight_vessel(diameter=4.0, z=-14.0):
+    """A straight vessel along x at height z, not a root: an interior partner at every column but its ends."""
+    x = np.arange(-30.0, 31.0, 1.0)
+    nodes = np.vstack([x, np.zeros(x.size), np.full(x.size, z), np.full(x.size, diameter)])
+    return {"nodes": nodes, "roots": np.zeros(0, dtype=np.int64)}
+
+
+def short_polyline(points, diameter):
+    nodes = np.vstack([np.asarray(points, dtype=float).T, np.full(len(points), diameter)])
+    return {"nodes": nodes, "roots": np.zeros(0, dtype=np.int64)}
+
+
+def settings_for(networks, **overrides):
+    lo, hi = bounding_box(networks, 20.0)
+    settings = dict(fraction=0.0, collision_margin=0.5, box=(lo, hi), boundary_margin=0.0, attach_roots=True)
+    settings.update(overrides)
+    return settings
 
 
 def fields_3_3(result):
@@ -159,9 +177,10 @@ class RegistryTests(unittest.TestCase):
                 with self.subTest(attach_roots=attach, **bad):
                     with self.assertRaises(ValueError):
                         join_networks([thin, thick], np.random.default_rng(0), attach_roots=attach, **base, **bad)
-        for good in (dict(root_fraction=0.0), dict(root_fraction=1.0), dict(root_partner_min_ratio=1.0),
-                     dict(root_radius=None), dict(root_radius=3.0)):
-            join_networks([thin, thick], np.random.default_rng(0), attach_roots=False, **base, **good)
+        for attach in (False, True):
+            for good in (dict(root_fraction=0.0), dict(root_fraction=1.0), dict(root_partner_min_ratio=1.0),
+                         dict(root_radius=None), dict(root_radius=3.0)):
+                join_networks([thin, thick], np.random.default_rng(0), attach_roots=attach, **base, **good)
 
     def test_a_separator_root_is_refused_with_the_option_on(self):
         thin, thick = thin_beside_thick()
@@ -264,8 +283,102 @@ class SideBranchTests(unittest.TestCase):
                 continue
             first = bridge["geometry"][:3, 1] - bridge["geometry"][:3, 0]
             self.assertLess(float(first @ w), 0.0)
+            # and within 45 degrees of the upstream direction -w, as a tip bridge's first segment is of its tangent
+            self.assertGreater(float(first @ -w) / float(np.linalg.norm(first)), math.cos(math.radians(45.0)))
             checked += 1
         self.assertGreater(checked, 2)
+
+    def test_the_cone_is_taken_about_the_upstream_direction_and_the_search_radius_limits_it(self):
+        thin, thick = thin_beside_thick()
+        settings = settings_for([thin, thick])
+        # the search radius is in root diameters: the nearest allowed trunk point lies 8.72 units from a root of diameter 2
+        results = {}
+        for root_radius, expected in ((4.0, "root_no_partner"), (4.5, "root_attached")):
+            results[root_radius] = join_networks([thin, thick], np.random.default_rng(1), root_radius=root_radius, **settings)
+            self.assertEqual(outcome_of(results[root_radius], 0, 0), expected, root_radius)
+        nearest = results[4.5]["bridges"][0]
+        self.assertLessEqual(nearest["chord"], 4.5 * float(thin["nodes"][3, 0]))
+        root_xyz = thin["nodes"][:3, 0]
+        ahead = thick["nodes"][:3, nearest["partner"][1]] - root_xyz
+        ahead /= np.linalg.norm(ahead)
+
+        def frame(axis):
+            """A rotation taking +y, the direction a grown tree leaves its root in, to `axis`."""
+            a = np.cross(axis, [0.0, 0.0, 1.0])
+            a /= np.linalg.norm(a)
+            return np.stack([a, axis, np.cross(a, axis)], axis=1)
+
+        # the body laid along the direction to that point puts it 180 degrees from the upstream
+        # direction, which points out of the vessel: behind, so no partner within reach;
+        # the body laid the other way puts it straight ahead
+        toward = place_root_at(grow(1, 3, d0=2.0), frame(ahead), root_xyz)
+        away = place_root_at(grow(1, 3, d0=2.0), frame(-ahead), root_xyz)
+        np.testing.assert_allclose(upstream_unit(toward["nodes"], 0), ahead, atol=1e-9)
+        np.testing.assert_allclose(upstream_unit(away["nodes"], 0), -ahead, atol=1e-9)
+        behind = join_networks([toward, thick], np.random.default_rng(1), root_radius=4.5, **settings)
+        self.assertEqual(outcome_of(behind, 0, 0), "root_no_partner")
+        self.assertGreater(behind["events"]["join_behind_skipped"], 0)
+        in_front = join_networks([away, thick], np.random.default_rng(1), root_radius=4.5, **settings)
+        self.assertEqual(outcome_of(in_front, 0, 0), "root_attached")
+        self.assertEqual(in_front["bridges"][0]["partner"][0], 1)
+        self.assertEqual(in_front["events"]["join_behind_skipped"], 0)
+
+    def test_interior_points_rank_before_tips_and_an_attached_tip_is_consumed(self):
+        thin = place_root_at(grow(1, 3, d0=2.0), np.eye(3), np.zeros(3))        # root at the origin, u = -y
+        straight = straight_vessel()                                             # z = -14: fourteen units ahead
+        straight["nodes"][1:3] = straight["nodes"][2:0:-1]                       # turn it: y = -14, z = 0
+        stub = short_polyline([(4.0, -6.0, 0.0), (4.0, -7.0, 0.0), (4.0, -8.0, 0.0)], 4.0)   # its tip 7.2 away
+        both = join_networks([thin, straight, stub], np.random.default_rng(1), **settings_for([thin, straight, stub]))
+        self.assertEqual(outcome_of(both, 0, 0), "root_attached")
+        bridge = both["bridges"][0]
+        self.assertEqual((bridge["partner"][0], bridge["partner_kind"]), (1, "interior"))     # not the nearer tip
+        self.assertAlmostEqual(bridge["chord"], 14.0)
+        self.assertEqual(outcome_of(both, 2, 0), "not_selected")
+        only_tip = join_networks([thin, stub], np.random.default_rng(1), **settings_for([thin, stub]))
+        self.assertEqual(outcome_of(only_tip, 0, 0), "root_attached")
+        bridge = only_tip["bridges"][0]
+        self.assertEqual((bridge["partner"], bridge["partner_kind"], bridge["diameter"]), ((1, 0), "tip", 2.0))
+        self.assertEqual(outcome_of(only_tip, 1, 0), "bridged_partner")
+        events = only_tip["events"]
+        self.assertEqual((events["join_partner_tips"], events["join_bridged_partners"], events["join_partner_interior"]),
+                         (1, 1, 0))
+        self.assertEqual(only_tip["summary"]["free_tips"]["after"], only_tip["summary"]["free_tips"]["before"] - 1)
+        # a thinner tip, nearer still, is never used
+        thinner = short_polyline([(3.0, -5.0, 0.0), (3.0, -6.0, 0.0), (3.0, -7.0, 0.0)], 1.5)
+        result = join_networks([thin, thinner], np.random.default_rng(1), **settings_for([thin, thinner]))
+        self.assertEqual(outcome_of(result, 0, 0), "root_no_partner")
+
+    def test_a_root_in_a_junction_zone_or_without_a_tangent_still_attaches(self):
+        separator = np.full((4, 1), np.nan)
+        straight = straight_vessel()
+        # a Y whose first junction lies within the overlap zone of its root: a stub as a tip, a root all the same
+        stem = short_polyline([(0, 0, 0), (0, 0, 1), (0, 0, 2), (0, 0, 3), (-1, 0, 4), (-2, 0, 5), (-3, 0, 6)], 2.0)
+        branch = short_polyline([(0, 0, 3), (1, 0, 4), (2, 0, 5), (3, 0, 6)], 2.0)
+        y = {"nodes": np.concatenate([stem["nodes"], separator, branch["nodes"]], axis=1), "roots": np.array([0])}
+        built = graph.build(y["nodes"])
+        self.assertEqual(int(built["degree"][3]), 3)
+        networks = [y, straight]
+        off = join_networks(networks, np.random.default_rng(1), **settings_for(networks, attach_roots=False))
+        self.assertEqual(outcome_of(off, 0, 0), "root")
+        on = join_networks(networks, np.random.default_rng(1), **settings_for(networks))
+        self.assertEqual(outcome_of(on, 0, 0), "root_attached")
+        self.assertEqual(on["bridges"][0]["partner"][0], 1)
+        # a root whose own polyline holds no other distinct point has no tangent: no cone, a chord departure
+        lone = short_polyline([(0, 0, 0), (0, 0, 0)], 2.0)
+        body = short_polyline([(0, 0, 0), (0, 0, 3), (0, 0, 6), (0, 0, 9)], 2.0)
+        network = {"nodes": np.concatenate([lone["nodes"], separator, body["nodes"]], axis=1), "roots": np.array([0])}
+        built = graph.build(network["nodes"])
+        self.assertEqual(int(built["degree"][0]), 1)
+        self.assertIsNone(upstream_unit(network["nodes"], 0))
+        networks = [network, straight]
+        result = join_networks(networks, np.random.default_rng(1), **settings_for(networks))
+        self.assertEqual(outcome_of(result, 0, 0), "root_attached")
+        bridge = result["bridges"][0]
+        self.assertEqual((bridge["partner"][0], bridge["partner_kind"]), (1, "interior"))
+        first = bridge["geometry"][:3, 1] - bridge["geometry"][:3, 0]
+        chord = bridge["geometry"][:3, -1] - bridge["geometry"][:3, 0]
+        self.assertGreater(float(first @ chord) / (np.linalg.norm(first) * np.linalg.norm(chord)),
+                           math.cos(math.radians(45.0)))
 
     def test_cut_end_roots_never_attach(self):
         thick = place_root_at(grow(2, 4, d0=8.0), np.eye(3), np.zeros(3))
@@ -527,6 +640,38 @@ class AccountingTests(unittest.TestCase):
                 self.assertEqual(result["events"]["join_root_over_budget"], counts["root_over_budget"])
                 self.assertEqual(counts["root_attached"] + counts["bridged_source"], k)
 
+    def test_in_box_roots_that_are_ineligible_change_only_their_own_rows(self):
+        thick = place_root_at(grow(2, 4, d0=8.0), np.eye(3), np.zeros(3))
+        thick["roots"] = np.zeros(0, dtype=np.int64)
+        thin = grow(1, 3, d0=2.0)
+        beside = np.array([12.0, 0.0, 0.0])
+        not_a_tip = place_root_at(thin, np.eye(3), trunk_point(thick, 0.7) + beside)
+        not_a_tip["node_kind"] = not_a_tip["node_kind"].copy()
+        not_a_tip["node_kind"][0] = graph.INTERIOR
+        near_face = place_root_at(thin, np.eye(3), trunk_point(thick, 0.1) + beside)
+        networks = [thick, not_a_tip, near_face]
+        lo, hi = bounding_box(networks, 20.0)
+        hi[0] = float(near_face["nodes"][0, 0]) + 1.0
+        settings = dict(fraction=1.0, collision_margin=0.5, box=(lo, hi), boundary_margin=3.0)
+        rngs = [np.random.default_rng(16) for _ in range(2)]
+        off = join_networks(networks, rngs[0], attach_roots=False, **settings)
+        on = join_networks(networks, rngs[1], attach_roots=True, **settings)
+        self.assertGreater(len(off["bridges"]), 0)
+        self.assertEqual(on["events"]["join_root_eligible"], 0)
+        self.assertEqual([outcome_of(off, k, 0) for k in (1, 2)], ["root", "root"])
+        self.assertEqual([outcome_of(on, k, 0) for k in (1, 2)], ["cut_end", "cut_end"])
+        bridges_on, geometry_on, tips_on, events_on, summary_on = fields_3_3(on)
+        bridges_off, geometry_off, tips_off, events_off, summary_off = fields_3_3(off)
+        self.assertEqual((bridges_on, geometry_on, summary_on), (bridges_off, geometry_off, summary_off))
+        self.assertEqual(rngs[0].bit_generator.state, rngs[1].bit_generator.state)
+        self.assertEqual({k: v for k, v in events_on.items() if k not in ("join_roots", "join_cut_ends")},
+                         {k: v for k, v in events_off.items() if k not in ("join_roots", "join_cut_ends")})
+        self.assertEqual((events_on["join_roots"], events_on["join_cut_ends"]),
+                         (0, events_off["join_cut_ends"] + events_off["join_roots"]))
+        other_rows = (on["tips"]["column"] != 0) | (on["tips"]["network"] == 0)
+        np.testing.assert_array_equal(on["tips"][other_rows], off["tips"][other_rows])
+        self.assertEqual(on["summary"]["blunt_roots"], {"before": 0, "after": 0})
+
     def test_with_no_eligible_root_the_option_draws_nothing(self):
         cropped, lo, hi = mixed_forest()
         rootless = [dict(network, roots=np.zeros(0, dtype=np.int64)) for network in cropped]
@@ -571,6 +716,7 @@ class BenchmarkTests(unittest.TestCase):
         margin = 1.0
         r_max = max(float(np.nanmax(n["nodes"][3])) for n in forest) / 2.0
         cropped = [crop_network(with_roots(n), lo, hi, r_max + margin) for n in forest]
+        import resource
         settings = dict(fraction=0.9, collision_margin=margin, box=(lo, hi), boundary_margin=2.0)
         runs = {}
         for label, extra in (("off", {}), ("on", dict(attach_roots=True)),

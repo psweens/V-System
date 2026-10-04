@@ -31,8 +31,10 @@ which the tests check by running the 3.3 `join.py`, kept under
   the root bridges, each an obstacle for every later bridge; the tip draws
   follow and are made even when the budget was spent during the root phase.
   Root and tip bridges share `max_bridge_volume`, and the first k bridges of
-  any result remain a valid result. With no eligible root nothing is drawn
-  and the result equals the option off on the fields of 3.3.
+  any result remain a valid result. With no eligible root nothing is drawn,
+  so the bridges, the generator state and the summary equal the option
+  off; the tips table then differs only where a root inside the box is
+  ineligible, reported as `cut_end` rather than `root`.
 - With the option on, an ineligible root (outside the box, near a face or
   not a tip of the uncropped network) is reported as `cut_end` and an
   eligible one as exactly one of `root_attached`, `root_not_selected`,
