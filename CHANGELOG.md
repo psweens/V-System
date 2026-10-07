@@ -1,5 +1,143 @@
 # Changelog
 
+## 3.5.0
+
+Version 3.5 lets the walk be steered. `--guidance` turns each step's heading
+deterministically towards an axis or a plane under a rule chosen per calibre
+class, `--root-offsets` moves the roots of a network grown in the volume,
+and the `aligned` family, an arteriovenous pair whose capillaries run from
+one feeder sheet to the other, is offered. Every network records its frame,
+`frames.py` places archives by it and `describe.py` measures against it.
+With the new options off, tree, mesh and tumour draw what 3.4 drew, which
+the tests check by running the 3.4 modules, kept under
+`tests/fixtures/reference_code_3_4`, alongside the current ones.
+
+### Geometry
+
+- `guidance.py` (new, in main's import closure) steers the walk: before
+  each step's draw the heading is turned towards the target by
+  ω = min(θ, r sin θ cos θ) for a nematic axis or a plane and
+  ω = min(θ, r sin θ) for a polar axis, with r = min(1, step / (G d)). The
+  drift draws nothing and the walk still draws two numbers per attempt. On a
+  long stem the heading settles into a Watson law with K = 2P / G (nematic),
+  a Fisher law with κ = 4P / G (polar) or a girdle law with K = 2P / G
+  (plane); at G 3 and P 10 one stem of 2000 sub-segments measures, over
+  seeds 1 to 4, ⟨cos²θ⟩ 0.821, ⟨cos θ⟩ 0.922 and ⟨sin²β⟩ 0.078 against
+  0.830, 0.925 and 0.0747 from the laws: the laws' moments at 0.96 of
+  their concentrations, at step / (G d) = 0.058.
+- A rule has a class bound `below` in d_min (None for no bound), a `field`
+  (`axis`, `plane` or None for an unguided class), an `axis` or `normal`, a
+  `length` G in diameters, an `onset` (2 diameters) before which a stem is
+  not steered, and for an axis a `sense` (`nematic`, `polar`) and a
+  `polarity` (`root`, `fixed`, `partner`), for a plane a `bank` that turns
+  the frame's perpendicular towards the normal so that branching turns stay
+  in the plane. `guidance.parse_rules` validates and normalises the rules;
+  every malformed specification is refused, from `parse_rules`,
+  `grow_network` and the command line, before anything is written (a root
+  offset outside a box that comes from the grown tree is refused when that
+  network grows). The rule of a walked polyline is chosen once, from the
+  diameter of its first move.
+- `main.grow_network(..., guidance=None, root_offsets=None)` and
+  `analyseGrammar.WalkSettings(..., guidance=None)`; the command line takes
+  `--guidance` and `--root-offsets` as inline JSON, and `shaping_options`
+  carries both to the presets, the sidecar and the library's `kwargs`. Root
+  offsets are one vector per tree in units of d_min, added to the roots'
+  default positions on the faces of the growth box before the second root
+  is cleared of the first tree; they need `grow_in_volume` and d_min, and a
+  root moved outside the box is refused. A `partner` polarity needs a second
+  tree and root offsets that differ along its axis.
+- The `aligned` preset: the mesh layout with roots offset ±15 d_min along x,
+  anastomosis arteriovenous at 0.8, vessels below 2 d_min steered along x
+  towards the other root (polar, `partner`, G 4.9, onset 2) and the larger
+  vessels kept in planes perpendicular to x (G 5). Over seeds 1 to 10 at
+  R 5 its capillary-class order S_x is 0.141 against −0.002 for the same
+  seeds unguided, its capillary polar order 0.485 against 0.063, and its
+  larger-class S_x −0.165 against −0.043. A preset listed as None is a
+  family this version does not offer and is refused with a generic message.
+- Every run counts `guided_steps`, `guidance_onset_steps`,
+  `unguided_steps`, `guidance_undefined_steps`, `guidance_sense_flips` and
+  `guidance_bank_steps`, appended to `main.EVENT_KEYS` after the
+  anastomosis counters and at zero with guidance off.
+- `grow_network` returns `frame`, which the sidecar and the library metadata
+  store: `frame_version` 1, the `kind` (`none`, `axis` or `plane`) of the
+  field rule with the smallest bound, its `axis` or `normal`, the `sense`,
+  the `tree_senses` of a polar rule, the `origin` (the growth-box centre,
+  else the first root), `grow_direction`, `grow_perpendicular` and every
+  rule, in the coordinates and unit of `nodes`.
+- `frames.py` (new, caller-side, outside main's import closure and
+  `library.CODE_MODULES`): `rotation_about`, `rotation_between`,
+  `rotation_of_frames`, `random_rotation`, `align`, `transform_nodes` and
+  `transform_frame`, which move an archive and its frame together so that a
+  descriptor measured about the frame's axis is unchanged by the move.
+
+### Measurement
+
+- `describe(..., frame=None, d_ref=None, class_bound=2.0)` and
+  `describe_archive` likewise. `frame` defaults to the metadata's record and
+  `d_ref` to the metadata's `d_min` (top level, else `grow_kwargs`); it never
+  falls back to the smallest vertex diameter. The appended keys are `frame`,
+  `classes`, `frame_orientation` (S, ⟨|t·a|⟩, the crossing ratio, the mean
+  angle, the fractions within 20° and 45°, Watson K and `fisher_axial_K`
+  per class about an axis; the in-plane fraction and S_n about a plane),
+  `polar_order`, `orientation_by_class` (with S_max and the planarity
+  1 − 3λ₃), `calibre_shares` (length and volume below 1.5, 2 and 3 d_ref),
+  `segments_by_class` and `transverse_spacing` (nearest-neighbour distance
+  between the crossings of capillary edges on nine planes across the axis,
+  and the crossing density per unit area). Lengths come in the archive's
+  unit and in d_ref. Every pre-3.5 key is byte-identical.
+- The library index gains `frame_kind`, `capillary_order`, `larger_order`,
+  `capillary_polar_order`, `capillary_length_share`,
+  `capillary_volume_share`, `capillary_segment_median` and
+  `transverse_spacing_median`, appended after the 3.4 columns; archive
+  metadata gains `frame` and a top-level `d_min`.
+- `tests/test_topology_benchmark.py` (slow) grows every family at R 4, 8
+  and 16 over three seeds and the aligned preset over its guidance length
+  and onset, prints the descriptors and the cost, and projects a
+  2000-network library. On an Intel Xeon Gold 5220 workstation (Linux,
+  Python 3.12, numpy 2.5) the aligned preset grows in 8.8, 49 and 185 s at
+  R 4, 8 and 16 (means over seeds 1 to 3) and 600 s at R 25, about what a
+  mesh takes (6.7, 29, 199 and 818 s); guidance adds about 90 µs per guided
+  step and a bank about 45 µs more, 7% more time per point for the preset at
+  R 8; `describe_archive` takes 21 s on the largest network grown, a tree
+  of 1.08 million points at R 25; and a 2000-network library of tree,
+  mesh, tumour and aligned in equal shares over the default range projects
+  to 39 CPU hours, 7.0 GB of archives and a peak of 0.8 GB per worker.
+
+### Tools
+
+- `vsystem-library` grows `tree`, `mesh` and `tumour` by default
+  (`library.DEFAULT_FAMILIES`); `aligned` is grown when listed, in a cube of
+  side `library.BOX_C["aligned"]` = 15 R like a mesh. `--box-c FAMILY C`
+  sets the cube side of any box family, is refused for a family that grows
+  free and together with `--mesh-box-c` for mesh, and a member whose root
+  offset leaves its cube is recorded as a failure; the manifest records
+  `growth.box_c` only when a box family other than mesh is listed, so a
+  default library's manifest content differs from 3.4's in `code_sha256`
+  and `library_version` only.
+  `library_version` is now the release version.
+
+### Compatibility
+
+- With the new options off, tree, mesh and tumour reproduce 3.4 exactly:
+  nodes, programs, tree, edges, node_kind, bridges, the 3.4 counters, the
+  global and per-stage generator states, the command line's archives,
+  sidecars and TIFFs, the library's members, index rows, manifest content
+  and archives, description and joining. `tests/test_pinned_release_3_4.py`
+  runs the 3.4 modules beside the current ones, restricts every record to
+  the keys 3.4 wrote, and checks that every appended counter is zero, the
+  frame is of kind `none` and the new kwargs are None; it takes about 30 s
+  on a laptop (Apple M4) and 95 s on an Intel Xeon Gold 5220 workstation.
+- Additions only: the return key `frame`, the sidecar and metadata keys
+  `frame`, `guidance` and `root_offsets` (and `d_min` in library metadata),
+  the describe keys above, the six counters and the eight index columns.
+  `main.RNG_STREAMS` is unchanged; guidance draws nothing. `CODE_MODULES`
+  gains `guidance`, so libraries grown with 3.4 refuse to resume under 3.5,
+  as any change of the generator does; they load and describe as before,
+  with `frame` and the frame-relative keys None and the class keys computed
+  with d_ref from `grow_kwargs`.
+- pyproject version 3.5.0; `py-modules` gains `guidance` and `frames`.
+  Python 3.9 syntax, numpy and tifffile only.
+
 ## 3.4.0
 
 Version 3.4 adds one opt-in option to `join.join_networks`: with
