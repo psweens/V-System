@@ -461,8 +461,9 @@ step 0.175 d and measures, over seeds 1 to 4 at G 3, ⟨cos²θ⟩ = 0.821,
 the laws: the laws' moments at 0.96 of their concentrations, at
 step / (G d) = 0.058. The nematic law is
 Watson, not Fisher-axial: Fisher-axial is exp(K |cos θ|), whose ⟨|cos θ|⟩ is
-coth K − 1 / K, the polar law's ⟨cos θ⟩ at κ = K up to the polar law's
-backward mass.
+1 / (1 − e^−K) − 1 / K, which approaches the polar law's ⟨cos θ⟩ at κ = K,
+coth K − 1 / K, as K grows, the two differing by the polar law's backward
+mass.
 
 Every run counts its steering: `guided_steps`, `guidance_onset_steps`,
 `unguided_steps` and `guidance_undefined_steps` partition the walk's steps,
@@ -555,7 +556,10 @@ network the generator wrote. The appended keys are `frame` (a copy), `classes`
 (the bound, d_ref and where it came from), `frame_orientation` (per class
 about an axis: the order parameter S = ⟨(3 (t·a)² − 1) / 2⟩, ⟨|t·a|⟩ and its
 reciprocal the crossing ratio, the mean angle, the fractions within 20° and
-45°, and the Watson K and `fisher_axial_K` that invert ⟨(t·a)²⟩ and ⟨|t·a|⟩;
+45°, the Watson K and `fisher_axial_K` that invert ⟨(t·a)²⟩ and ⟨|t·a|⟩,
+and from 3.6 `fisher_axial_K_exact`, the K of the Fisher-axial law
+exp(K |t·a|) itself, whose ⟨|t·a|⟩ is 1 / (1 − e^−K) − 1 / K, so that
+isotropic tangents read 0 where `fisher_axial_K` reads about 1.8;
 about a plane: the in-plane fraction ⟨1 − (t·n)²⟩ and S_n), `polar_order`
 (polar axis frames with tree labels: ⟨s_k t·a⟩ with each tree's sense s_k,
 bridges excluded), `orientation_by_class` (the tangent covariance per class

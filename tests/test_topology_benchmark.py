@@ -77,7 +77,8 @@ def capillary_summary(report):
         for cls in ("capillary", "larger"):
             entry = orientation[cls]
             if entry:
-                for key in ("S", "mean_abs_cos", "crossing_ratio", "watson_K", "fisher_axial_K", "within_45_deg"):
+                for key in ("S", "mean_abs_cos", "crossing_ratio", "watson_K", "fisher_axial_K",
+                            "fisher_axial_K_exact", "within_45_deg"):
                     out[f"{cls}_{key}"] = entry.get(key)
     polar = report["polar_order"]
     if polar:

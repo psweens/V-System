@@ -2,6 +2,16 @@
 
 ## 3.6.0 (in progress)
 
+### Measurement
+
+- `frame_orientation` gains `fisher_axial_K_exact` per class about an
+  axis: the K of the Fisher-axial law exp(K |t·a|) whose ⟨|t·a|⟩,
+  1 / (1 − e^−K) − 1 / K, equals the measured one, by bisection on
+  [−200, 200]. It reads 0 for isotropic tangents and is negative for
+  tangents gathered across the axis. `fisher_axial_K` keeps its 3.5
+  definition, coth K − 1 / K = ⟨|t·a|⟩, which reads about 1.8 for isotropic
+  tangents and agrees with the exact value only as K grows.
+
 ### Geometry
 
 - The `aligned_tight` family: `aligned` with its capillaries steered harder

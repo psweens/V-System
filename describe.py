@@ -537,6 +537,18 @@ def _bisect_increasing(function, target, low, high):
     return (low + high) / 2.0
 
 
+def _axial_mean(concentration):
+    """<|u|> of the Fisher-axial law exp(K |u|), 1 / (1 - e^-K) - 1 / K, from its series near K = 0."""
+    if abs(concentration) < 1e-2:
+        return 0.5 + concentration / 12.0 - concentration ** 3 / 720.0 + concentration ** 5 / 30240.0
+    return -1.0 / math.expm1(-concentration) - 1.0 / concentration
+
+
+def _fisher_axial_exact_concentration(mean_abs):
+    """The K of exp(K |u|) whose <|u|> is `mean_abs`, or None outside [-_CONCENTRATION_MAX, _CONCENTRATION_MAX]."""
+    return _bisect_increasing(_axial_mean, mean_abs, -_CONCENTRATION_MAX, _CONCENTRATION_MAX)
+
+
 def _watson_concentration(mean_square):
     """The Watson concentration whose <u^2> is `mean_square`, or None outside the searched range."""
     return _bisect_increasing(_watson_moment, mean_square, -_CONCENTRATION_MAX, _CONCENTRATION_MAX)
@@ -568,7 +580,8 @@ def _axis_entry(cosine, weight, d_ref):
             "watson_K": _watson_concentration(float(weight @ square) / total),
             "fisher_axial_K": _fisher_axial_concentration(mean_abs),
             "length": total,
-            "length_d": total / d_ref if d_ref is not None else None}
+            "length_d": total / d_ref if d_ref is not None else None,
+            "fisher_axial_K_exact": _fisher_axial_exact_concentration(mean_abs)}
 
 
 def _plane_entry(cosine, weight, d_ref):
@@ -1266,8 +1279,16 @@ def describe(nodes, edges=None, metadata=None, volume=None, margin=None, tol=DEF
     point Gauss-Legendre rule), None when <u^2> lies outside
     [W(-200), W(200)]; "fisher_axial_K" the K solving coth K - 1 / K = <|u|>
     by bisection on (0, 200], None when <|u|> lies outside the range of
-    that function there, 0 to about 0.995; "length" the class's total edge
-    length and "length_d" the same in d_ref. For a plane frame, with
+    that function there, 0 to about 0.995 (an isotropic <|u|> of 1/2
+    reads about 1.80: it is the polar Fisher law's <cos theta>, which the
+    Fisher-axial law's <|cos theta|> approaches only as K grows); "length"
+    the class's total edge length and "length_d" the same in d_ref;
+    "fisher_axial_K_exact" the K of the Fisher-axial law itself, density
+    proportional to exp(K |u|), whose <|u|> = 1 / (1 - e^-K) - 1 / K equals
+    the measured one, solved by bisection on [-200, 200] (0 for isotropic
+    tangents, negative when they gather across a), None when <|u|> lies
+    outside the range of that function there, about 0.005 to 0.995. For a
+    plane frame, with
     v = t_e . n: "in_plane_fraction" = <1 - v^2>, "S_n" = <(3 v^2 - 1) / 2>,
     and "length" and "length_d" as above.
 

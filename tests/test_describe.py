@@ -764,6 +764,7 @@ class FrameOrientationTests(unittest.TestCase):
         # a single direction lies beyond the range of both concentrations
         self.assertIsNone(entry["watson_K"])
         self.assertIsNone(entry["fisher_axial_K"])
+        self.assertIsNone(entry["fisher_axial_K_exact"])
 
         across = describe(archive(straight(axis=1)), frame=frame_record(axis=(1, 0, 0)))["frame_orientation"]["all"]
         self.assertEqual((across["S"], across["mean_abs_cos"]), (-0.5, 0.0))
@@ -772,6 +773,7 @@ class FrameOrientationTests(unittest.TestCase):
         self.assertEqual((across["within_20_deg"], across["within_45_deg"]), (0.0, 0.0))
         self.assertIsNone(across["watson_K"])
         self.assertIsNone(across["fisher_axial_K"])
+        self.assertIsNone(across["fisher_axial_K_exact"])
 
         # equal lengths along x and along y: every average is halfway
         both = archive(straight(), straight(axis=1, offset=(0.0, 10.0, 0.0)))
@@ -785,6 +787,9 @@ class FrameOrientationTests(unittest.TestCase):
         # each concentration inverts its defining moment
         self.assertAlmostEqual(watson_mean_square(entry["watson_K"]), 0.5, places=6)
         self.assertAlmostEqual(langevin(entry["fisher_axial_K"]), 0.5, places=9)
+        # the Fisher-axial law's own <|u|> is 1/2 at K = 0, where the polar law's needs K of about 1.8
+        self.assertAlmostEqual(entry["fisher_axial_K_exact"], 0.0, places=9)
+        self.assertAlmostEqual(entry["fisher_axial_K"], 1.7968, places=3)
         # at d_ref 1 both vessels (diameter 4) are larger-class, so that entry is
         # the whole network and the capillary one has no length
         self.assertEqual(mixed["larger"], dict(entry, length_d=90.0))
@@ -832,6 +837,32 @@ class FrameOrientationTests(unittest.TestCase):
         entry = describe(nodes, frame=frame_record(axis=(0, 0, 1)))["frame_orientation"]["all"]
         self.assertLess(abs(entry["fisher_axial_K"] - 5.0) / 5.0, 0.1)
         self.assertAlmostEqual(entry["mean_abs_cos"], langevin(5.0), delta=0.03)
+        # the exact inversion recovers the law's own concentration more closely
+        self.assertLess(abs(entry["fisher_axial_K_exact"] - 5.0) / 5.0, 0.05)
+        self.assertLess(abs(entry["fisher_axial_K_exact"] - 5.0), abs(entry["fisher_axial_K"] - 5.0))
+
+    def test_the_exact_fisher_axial_concentration_inverts_its_moment_and_reads_zero_for_isotropic_tangents(self):
+        from describe import _axial_mean, _fisher_axial_exact_concentration
+        for k in (-150.0, -20.0, -1.0, -1e-5, 0.0, 3e-5, 1e-2, 0.5, 5.0, 40.0, 150.0):
+            with self.subTest(k=k):
+                # the moment by quadrature, against its closed form and series
+                u = (np.arange(200000) + 0.5) / 200000
+                weights = np.exp(k * (u - 1.0))
+                self.assertAlmostEqual(_axial_mean(k), float(u @ weights / weights.sum()), places=8)
+                self.assertAlmostEqual(_fisher_axial_exact_concentration(_axial_mean(k)), k, delta=1e-9 * max(1.0, abs(k)))
+        # the series and the closed form meet at the switch
+        for k in (-1e-2, 1e-2):
+            self.assertAlmostEqual(_axial_mean(k * (1 - 1e-12)), _axial_mean(k * (1 + 1e-12)), places=13)
+        rng = np.random.default_rng(7)
+        nodes = unit_polylines(directions_about_z(rng, rng.uniform(-1.0, 1.0, 10000)), rng)
+        entry = describe(nodes, frame=frame_record(axis=(0, 0, 1)))["frame_orientation"]["all"]
+        self.assertLess(abs(entry["fisher_axial_K_exact"]), 0.1)
+        self.assertGreater(entry["fisher_axial_K"], 1.6)
+        # tangents gathered across the axis give a negative concentration
+        cosines = rejection_cosines(rng, 10000, lambda u: -5.0 * np.abs(u))
+        across = describe(unit_polylines(directions_about_z(rng, cosines), rng),
+                          frame=frame_record(axis=(0, 0, 1)))["frame_orientation"]["all"]
+        self.assertLess(abs(across["fisher_axial_K_exact"] + 5.0) / 5.0, 0.1)
 
     def test_polar_order_follows_the_tree_senses_and_the_column_order(self):
         nodes = archive(straight())                       # root at x = 0, tip at x = 45

@@ -46,8 +46,9 @@ with small-angle rms angles of sqrt(G / (2 P)) to an axis and sqrt(G / (4 P))
 out of a plane. G follows from a target K. The steps are finite, so the
 measured concentration carries a discretisation bias of order step / (G d).
 The nematic law is Watson, not Fisher-axial: Fisher-axial is exp(K |cos
-theta|), with <|cos theta|> = coth K - 1 / K, which is the polar law's
-<cos theta> at kappa = K up to the polar law's backward mass.
+theta|), with <|cos theta|> = 1 / (1 - e^-K) - 1 / K, which approaches the
+polar law's <cos theta> at kappa = K, coth K - 1 / K, as K grows, the two
+differing by the polar law's backward mass.
 
 Rules. A guidance specification is a list of JSON-ready rule dicts, each
 governing the stems whose diameter at the first move lies below `below`
