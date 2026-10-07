@@ -138,13 +138,17 @@ class RegistryTests(unittest.TestCase):
         self.assertEqual(result["bridges"], [])
         self.assertEqual(result["tips"].shape, (0,))
 
-    def test_main_does_not_import_join_or_library(self):
+    def test_main_does_not_import_frames_join_or_library(self):
         for name in ("main", "vSystem", "libGenerator", "analyseGrammar", "utils", "computeVoxel",
-                     "tortuosity", "collisions", "anastomosis", "graph", "spatial"):
+                     "tortuosity", "collisions", "anastomosis", "graph", "spatial", "guidance"):
             with open(os.path.join(ROOT, name + ".py")) as handle:
                 source = handle.read()
-            self.assertNotIn("import join", source, name)
-            self.assertNotIn("import library", source, name)
+            for other in ("frames", "join", "library"):
+                self.assertNotIn(f"import {other}", source, name)
+                self.assertNotIn(f"from {other} ", source, name)
+
+    def test_the_stream_tags_of_the_generator_are_what_they_were(self):
+        self.assertEqual(main.RNG_STREAMS, {"walk": 1, "anastomosis": 2})
 
 
 class CropTests(unittest.TestCase):

@@ -64,18 +64,24 @@ fine tail of the diameter distribution is wrong.
 
 ## 3. Whether `aligned` is worth building now
 
-`--family aligned` is refused. Parallel capillaries (muscle, myocardium) are
-not reachable by bundling parameters: the Zamir angles put daughters 37° off
-the parent whatever the stem angle, and the roll of 70° spreads bifurcation
-planes. Two ways to build it, both small: (a) a drift term in the walk that
-rotates the tangent towards a preferred unit vector by an angle proportional
-to the step (a persistent walk in a field), applied only under
-`--tortuosity walk`; (b) a bias on the turtle's roll so that bifurcation planes
-stay near the plane containing the preferred direction, which also affects
-`stems` mode. Option (a) is about forty lines and reuses the walk's own
-stream and counters; it would be measured by the tangent covariance
-eigenvalues and fractional anisotropy that `describe.py` already reports.
-Deferred pending a decision.
+*Resolved in 3.5: option (a) was built as `guidance.py`, a deterministic
+drift of the walk towards an axis or a plane per calibre class, with a
+bank on the roll for plane fields in place of option (b); `aligned` is
+offered as a preset and every network records its frame. The README
+section "Directional guidance" states the rules and the stationary laws.*
+
+The question as it stood: `--family aligned` is refused. Parallel capillaries
+(muscle, myocardium) are not reachable by bundling parameters: the Zamir
+angles put daughters 37° off the parent whatever the stem angle, and the roll
+of 70° spreads bifurcation planes. Two ways to build it, both small: (a) a
+drift term in the walk that rotates the tangent towards a preferred unit
+vector by an angle proportional to the step (a persistent walk in a field),
+applied only under `--tortuosity walk`; (b) a bias on the turtle's roll so
+that bifurcation planes stay near the plane containing the preferred
+direction, which also affects `stems` mode. Option (a) is about forty lines
+and reuses the walk's own stream and counters; it would be measured by the
+tangent covariance eigenvalues and fractional anisotropy that `describe.py`
+already reports. Deferred pending a decision.
 
 ## 4. Anastomosis radius and the arteriovenous design
 

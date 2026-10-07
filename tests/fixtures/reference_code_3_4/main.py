@@ -12,10 +12,7 @@ capsule rasterisation into the volume (computeVoxel). Three optional stages
 shape the geometry without changing what the grammar decides: a persistent
 random walk that bends each stem smoothly (--tortuosity walk), collision
 avoidance between branches (--avoid-collisions), and anastomosis, which joins
-a fraction of the tips into loops (--anastomose). The walk can be guided
-towards an axis or a plane per calibre class (--guidance), and the roots of a
-network grown in the volume can be moved (--root-offsets). --family bundles
-them.
+a fraction of the tips into loops (--anastomose). --family bundles them.
 
 The centreline archive is the source of truth for the geometry and the TIFF one
 rasterisation of it. Because computeVoxel maps grammar units to voxels at
@@ -50,7 +47,6 @@ from analyseGrammar import WalkSettings, branching_turtle_to_coords
 from anastomosis import BRIDGE_PERSISTENCE, EVENT_KEYS as ANASTOMOSIS_EVENTS, anastomose as bridge_tips
 from collisions import CollisionAvoider
 from computeVoxel import AXES, FITS, process_network
-from guidance import EVENT_KEYS as GUIDANCE_EVENTS, Guidance, _is_number as _finite_number, unguided_frame
 from spatial import make_index
 from utils import interpolate_segments
 from vSystem import F
@@ -69,10 +65,9 @@ TORTUOSITIES = ("stems", "walk")
 ANASTOMOSE_MODES = ("any", "arteriovenous")
 
 # Every counter a run can report, so that a sidecar lists the zero ones too.
-# Append-only: the guidance counters come after the anastomosis ones.
 EVENT_KEYS = ("bound_terminations", "walk_bound_redraws", "walk_bound_terminations",
               "collision_redraws", "collision_terminations", "collision_truncated_stems",
-              "root_relocations", "root_collisions") + ANASTOMOSIS_EVENTS + GUIDANCE_EVENTS
+              "root_relocations", "root_collisions") + ANASTOMOSIS_EVENTS
 
 # Independent random streams for the stages after the grammar, each seeded
 # from the run seed together with a fixed tag, so that enabling a stage never
@@ -83,15 +78,10 @@ RNG_STREAMS = {"walk": 1, "anastomosis": 2}
 # `mesh` is a capillary-bed-like network: two trees grown into the volume from
 # opposite faces, bent by the walk, kept apart by collision avoidance and
 # joined arterial-to-venous; `tumour` is tortuous, heavily looped and irregular
-# in calibre; `aligned` is an arteriovenous pair in the mesh layout whose roots
-# are moved by -15 and +15 d_min along x, 30 d_min apart, and whose vessels
-# below 2 d_min are steered along x towards the other tree's root (a polar
-# axis, G 4.9, after an onset of 2 diameters) while the larger vessels are
-# kept in planes perpendicular to x (G 5), so that each tree feeds one sheet
-# and the capillaries run from sheet to sheet, as in muscle; it needs d_min,
-# and 80% of its tips seek an arteriovenous partner. The persistence values, and the guidance values of
-# `aligned`, are provisional calibrations (see docs/geometry and the README).
-# A preset listed as None is a family this version does not offer.
+# in calibre. The persistence values are provisional calibrations, chosen from
+# the arc/chord ratios they produce (see docs/geometry). `aligned` -- growth
+# along a preferred direction, as in muscle -- needs a directional bias in the
+# turtle, which parameter bundling cannot express, and is not offered yet.
 FAMILIES = {
     "tree": {},
     "mesh": {"tortuosity": "walk", "persistence": 10.0, "avoid_collisions": True,
@@ -100,24 +90,11 @@ FAMILIES = {
     "tumour": {"tortuosity": "walk", "persistence": 3.0, "avoid_collisions": True,
                "anastomose": True, "anastomose_mode": "any", "anastomosis_fraction": 0.8,
                "d0": (20.0, 10.0), "aneurysm_prob": 0.1, "stenosis_prob": 0.1},
-    "aligned": {"tortuosity": "walk", "persistence": 10.0, "avoid_collisions": True, "anastomose": True,
-                "anastomose_mode": "arteriovenous", "anastomosis_fraction": 0.8, "grow_in_volume": True,
-                "root_offsets": [[-15.0, 0.0, 0.0], [15.0, 0.0, 0.0]],
-                "guidance": [{"below": 2.0, "field": "axis", "axis": [1, 0, 0], "sense": "polar",
-                              "polarity": "partner", "length": 4.9, "onset": 2.0},
-                             {"below": None, "field": "plane", "normal": [1, 0, 0], "length": 5.0}]},
+    "aligned": None,
 }
 
-# The default turtle frame of the first tree; the second tree of a pair heads back.
-DEFAULT_DIRECTION = (0.0, 1.0, 0.0)
-DEFAULT_PERPENDICULAR = (0.0, 0.0, 1.0)
 
-
-class RootOutsideBox(ValueError):
-    """A root offset puts a root outside the growth box."""
-
-
-def _walk_settings(tortuosity, persistence, seed, guidance=None):
+def _walk_settings(tortuosity, persistence, seed):
     if tortuosity == "stems":
         return None
     if tortuosity != "walk":
@@ -126,50 +103,7 @@ def _walk_settings(tortuosity, persistence, seed, guidance=None):
         raise ValueError("the walk needs a positive persistence, in multiples of the vessel diameter")
     if seed is None:
         raise ValueError("the walk needs a seed so that the network is reproducible")
-    return WalkSettings(persistence, np.random.default_rng([int(seed), RNG_STREAMS["walk"]]), guidance=guidance)
-
-
-def _root_offsets(root_offsets, trees, grow_in_volume, d_min):
-    """The root offsets as a (trees, 3) array in d_min units, or None; ValueError when malformed."""
-    if root_offsets is None:
-        return None
-    if isinstance(root_offsets, np.ndarray):
-        root_offsets = root_offsets.tolist()
-    if isinstance(root_offsets, (list, tuple)):
-        root_offsets = [offset.tolist() if isinstance(offset, np.ndarray) else offset for offset in root_offsets]
-    well_formed = (isinstance(root_offsets, (list, tuple)) and len(root_offsets) == trees
-                   and all(isinstance(offset, (list, tuple)) and len(offset) == 3
-                           and all(_finite_number(v) for v in offset)
-                           for offset in root_offsets))
-    if not well_formed:
-        raise ValueError(f"root_offsets must be a list of one finite 3-vector per tree ({trees})")
-    offsets = np.asarray(root_offsets, dtype=float)
-    if not grow_in_volume or d_min is None:
-        raise ValueError("root_offsets are in units of d_min and are added to the roots' default positions on "
-                         "the faces of the growth box, so they need grow_in_volume and d_min")
-    return offsets
-
-
-def _bind_guidance(guidance, trees, direction, offsets, d_min, tortuosity):
-    """
-    The guidance of a network parsed and bound per tree: (guidance, [per-tree
-    copies]) or (None, None). For tree k of a pair the partner offset is the
-    other root's offset minus its own. ValueError for guidance without the
-    walk and for everything parse_rules and bind refuse.
-    """
-    if guidance is None:
-        return None, None
-    if tortuosity != "walk":
-        raise ValueError("guidance steers the walk, so it needs tortuosity 'walk'")
-    guide = Guidance(guidance, d_min)
-    direction = np.asarray(direction, dtype=float)
-    bound = []
-    for k in range(trees):
-        partner = None
-        if trees == 2 and offsets is not None:
-            partner = offsets[1 - k] - offsets[k]
-        bound.append(guide.bind(direction if k == 0 else -direction, partner))
-    return guide, bound
+    return WalkSettings(persistence, np.random.default_rng([int(seed), RNG_STREAMS["walk"]]))
 
 
 def _free_extent(program, d0, direction, perpendicular, walk):
@@ -220,12 +154,12 @@ def _clear_root(avoider, position, direction, box, radius, events):
 
 
 def grow_network(niter, d0, properties, tVol, fit="isotropic", clip_axes=(2,), voxel_size=None,
-                 subdivisions=3, direction=DEFAULT_DIRECTION, perpendicular=DEFAULT_PERPENDICULAR,
+                 subdivisions=3, direction=(0.0, 1.0, 0.0), perpendicular=(0.0, 0.0, 1.0),
                  d_min=None, grow_in_volume=False, tortuosity="stems", persistence=None,
                  avoid_collisions=False, collision_margin=1.0, collision_attempts=10,
                  collision_index="auto", anastomose=False, anastomosis_radius=25.0,
                  anastomosis_fraction=0.5, anastomose_mode="any", anastomosis_min_separation=3,
-                 seed=None, guidance=None, root_offsets=None):
+                 seed=None):
     """
     Grows one network and returns its geometry and graph, without rendering it.
 
@@ -260,13 +194,6 @@ def grow_network(niter, d0, properties, tVol, fit="isotropic", clip_axes=(2,), v
             and sister stems, 2 allows sister tips to join.
         seed (int or None): the run seed; required whenever the walk or
             anastomosis is on, since their random streams derive from it.
-        guidance (list or None): guidance rules (see guidance.py) that steer
-            every walk step towards an axis or a plane per calibre class;
-            needs the walk. None steers nothing.
-        root_offsets (list or None): one 3-vector per tree, in units of
-            d_min, added to the default root positions on the faces of the
-            growth box; needs grow_in_volume and d_min, and every root must
-            stay inside the box. None leaves the roots where they are.
 
     Returns:
         dict: "nodes" the (4, N) centreline; "program" the grammar string (of
@@ -274,18 +201,7 @@ def grow_network(niter, d0, properties, tVol, fit="isotropic", clip_axes=(2,), v
         graph; "node_kind" and "tree" per-column labels; "events" the counters
         of everything terminated, redrawn or skipped; "growth_box_um" the
         confining box or None; "clip_axes" the axes the rasteriser should clip;
-        "bridges" the joins made; "collision_index" the index kind used;
-        "frame" the frame record (see guidance.Guidance.frame_record): the
-        axis or plane the finest guided class was steered towards, with the
-        rules, the growth frame and the origin (the box centre, else the first
-        root) in the coordinates of "nodes"; kind "none" without guidance.
-
-    Raises:
-        ValueError: for guidance without the walk, a malformed guidance or
-        root_offsets, root_offsets without grow_in_volume or d_min, a
-        "partner" polarity without a second tree or root offsets that differ
-        along its axis, and (RootOutsideBox) an offset that puts a root
-        outside the growth box.
+        "bridges" the joins made; "collision_index" the index kind used.
     """
     libGenerator.setProperties(properties)
     if anastomose_mode not in ANASTOMOSE_MODES:
@@ -295,8 +211,6 @@ def grow_network(niter, d0, properties, tVol, fit="isotropic", clip_axes=(2,), v
     if anastomose and not 0.0 <= anastomosis_fraction <= 1.0:
         raise ValueError("the anastomosis fraction must lie in [0, 1]")
     trees = 2 if anastomose and anastomose_mode == "arteriovenous" else 1
-    offsets = _root_offsets(root_offsets, trees, grow_in_volume, d_min)
-    guide, bound = _bind_guidance(guidance, trees, direction, offsets, d_min, tortuosity)
     programs = [F(niter, d0, d_min) for _ in range(trees)]
     events = {key: 0 for key in EVENT_KEYS}
     direction = np.asarray(direction, dtype=float)
@@ -314,8 +228,7 @@ def grow_network(niter, d0, properties, tVol, fit="isotropic", clip_axes=(2,), v
         # carries its operands -- and the walk's stream is re-seeded below, so
         # measuring the free extent first changes nothing about the drawn tree.
         extent, along = _free_extent(programs[0], d0, direction, perpendicular,
-                                     _walk_settings(tortuosity, persistence, seed,
-                                                    None if bound is None else bound[0]))
+                                     _walk_settings(tortuosity, persistence, seed))
     if grow_in_volume:
         shape = np.asarray(tVol, dtype=float)
         if fit == "voxel_size":
@@ -333,14 +246,6 @@ def grow_network(niter, d0, properties, tVol, fit="isotropic", clip_axes=(2,), v
         if trees == 2:
             positions.append(np.array([box[0] / 2.0, box[1], box[2] / 2.0]))
             directions.append(-direction)
-        if offsets is not None:
-            # the offsets, in d_min, are added to the roots' default positions on
-            # their faces before the second root is cleared of the first tree
-            positions = [position + offset * d_min for position, offset in zip(positions, offsets)]
-            for k, position in enumerate(positions):
-                if np.any(position < 0.0) or np.any(position > box):
-                    raise RootOutsideBox(f"root offset {k} puts the root at {position.tolist()}, outside the "
-                                         f"growth box {box.tolist()}")
     elif trees == 2:
         # the second tree starts where the first one reaches and grows back towards it
         positions.append(along * direction)
@@ -364,8 +269,6 @@ def grow_network(niter, d0, properties, tVol, fit="isotropic", clip_axes=(2,), v
         if index and box is not None:
             position = _clear_root(avoider, position, heading, box, d0 / 2.0, events)
             positions[index] = position
-        if bound is not None:
-            walk.guidance = bound[index]       # each tree steers by its own senses, on the one walk stream
         rows = branching_turtle_to_coords(program, d0, position=position, direction=heading,
                                           perpendicular=perpendicular, bounds=bounds, walk=walk,
                                           avoid=avoider, events=events, subdivisions=subdivisions)
@@ -388,24 +291,18 @@ def grow_network(niter, d0, properties, tVol, fit="isotropic", clip_axes=(2,), v
                                            index_kind=resolved_index,
                                            min_separation=anastomosis_min_separation)
     built = graph.build(nodes)
-    origin = box / 2.0 if box is not None else positions[0]
-    if guide is not None:
-        frame = guide.frame_record(direction, perpendicular, origin, bound)
-    else:
-        frame = unguided_frame(direction, perpendicular, origin)
     return {
         "nodes": nodes, "program": programs[0], "programs": programs,
         "edges": built["edges"], "node_kind": built["node_kind"], "tree": tree,
         "events": events, "growth_box_um": None if box is None else [float(v) for v in box],
         "root_positions_um": [[float(v) for v in p] for p in positions],
         "clip_axes": clip, "bridges": bridges, "collision_index": index_kind,
-        "frame": frame,
     }
 
 
 def generate_network(niter, d0, properties, tVol, fit="isotropic", clip_axes=(2,),
                      voxel_size=None, subdivisions=3,
-                     direction=DEFAULT_DIRECTION, perpendicular=DEFAULT_PERPENDICULAR,
+                     direction=(0.0, 1.0, 0.0), perpendicular=(0.0, 0.0, 1.0),
                      d_min=None, connect=True, grow_in_volume=False, **shaping):
     """
     Generates one network and renders it into a volume.
@@ -439,9 +336,8 @@ def generate_network(niter, d0, properties, tVol, fit="isotropic", clip_axes=(2,
         **shaping: the geometry options of grow_network (tortuosity,
             persistence, avoid_collisions, collision_margin, collision_attempts,
             collision_index, anastomose, anastomosis_radius,
-            anastomosis_fraction, anastomose_mode, anastomosis_min_separation,
-            seed, guidance, root_offsets). Left out, the network is the plain
-            grammar's.
+            anastomosis_fraction, anastomose_mode, seed). Left out, the network
+            is the plain grammar's.
 
     Returns:
         tuple: (volume, program, nodes) with volume a uint8 array of 0 and 1,
@@ -603,16 +499,7 @@ def shaping_options(args):
         "anastomose": args.anastomose, "anastomosis_radius": args.anastomosis_radius,
         "anastomosis_fraction": args.anastomosis_fraction, "anastomose_mode": args.anastomose_mode,
         "anastomosis_min_separation": args.anastomosis_min_separation,
-        "guidance": args.guidance, "root_offsets": args.root_offsets,
     }
-
-
-def parse_json_option(text):
-    """An option given as an inline JSON string."""
-    try:
-        return json.loads(text)
-    except ValueError as error:
-        raise argparse.ArgumentTypeError(f"not JSON ({error})")
 
 
 def build_parser(family="tree"):
@@ -683,10 +570,8 @@ def build_parser(family="tree"):
                        help="preset bundle of the options below (default tree, the plain grammar): "
                             "mesh = walk + collision avoidance + arteriovenous anastomosis grown in "
                             "the volume; tumour = low persistence, dense anastomosis, wide --d0 and "
-                            "raised anomaly probabilities; aligned = the mesh layout with the roots "
-                            "offset along x and the vessels below 2 d_min steered along x towards the "
-                            "other root, the larger ones kept in planes across it (needs --d-min). "
-                            "Options given explicitly override the preset")
+                            "raised anomaly probabilities; aligned is not available yet. Options "
+                            "given explicitly override the preset")
     shape.add_argument("--tortuosity", choices=TORTUOSITIES, default="stems",
                        help="stems: each stem is the grammar's five sub-segments smoothed by a "
                             "B-spline (default); walk: each stem is a persistent random walk of the "
@@ -726,17 +611,6 @@ def build_parser(family="tree"):
                        help="any: partners anywhere in the network (default); arteriovenous: grow "
                             "a second tree from the opposite face and join arterial tips to "
                             "venous partners first")
-    shape.add_argument("--guidance", type=parse_json_option, default=None, metavar="JSON",
-                       help="steer the walk per calibre class: a JSON list of rules, each with a "
-                            "class bound 'below' (in --d-min, null for no bound), a 'field' (axis, "
-                            "plane or null), its 'axis' or 'normal', 'length' (the guidance length G "
-                            "in diameters), 'onset' (diameters walked before steering, default 2), "
-                            "and for an axis a 'sense' (nematic, polar) and 'polarity' (root, fixed, "
-                            "partner), for a plane 'bank'; needs --tortuosity walk (default: none)")
-    shape.add_argument("--root-offsets", type=parse_json_option, default=None, metavar="JSON",
-                       help="move the roots from their default positions on the faces of the growth "
-                            "box, staying inside it: a JSON list of one [x, y, z] per tree in units of "
-                            "--d-min; needs --grow-in-volume and --d-min (default: none)")
     preset = FAMILIES.get(family)
     if preset:
         parser.set_defaults(**preset)
@@ -757,22 +631,6 @@ def validate_shaping(args):
         raise SystemExit("--anastomosis-fraction must lie between 0 and 1")
     if not args.anastomosis_radius > 0.0:
         raise SystemExit("--anastomosis-radius must be positive")
-    trees = 2 if args.anastomose and args.anastomose_mode == "arteriovenous" else 1
-    try:
-        offsets = _root_offsets(args.root_offsets, trees, args.grow_in_volume, args.d_min)
-        _bind_guidance(args.guidance, trees, DEFAULT_DIRECTION, offsets, args.d_min, args.tortuosity)
-    except ValueError as error:
-        option = "--root-offsets" if args.guidance is None or "root_offsets" in str(error) else "--guidance"
-        raise SystemExit(f"{option}: {error}")
-    if offsets is not None and args.fit == "voxel_size" and args.voxel_size is not None:
-        # the box is known here only at a fixed voxel size; otherwise it is the tree's
-        box = np.asarray(args.volume, dtype=float) * float(args.voxel_size)
-        faces = [np.array([box[0] / 2.0, 0.0, box[2] / 2.0]), np.array([box[0] / 2.0, box[1], box[2] / 2.0])]
-        for k, offset in enumerate(offsets):
-            position = faces[k] + offset * args.d_min
-            if np.any(position < 0.0) or np.any(position > box):
-                raise SystemExit(f"--root-offsets: offset {k} puts the root at {position.tolist()}, outside "
-                                 f"the growth box {box.tolist()}")
 
 
 def main(argv=None):
@@ -780,8 +638,10 @@ def main(argv=None):
     peel.add_argument("--family", choices=sorted(FAMILIES), default="tree")
     chosen, _ = peel.parse_known_args(argv)
     if FAMILIES[chosen.family] is None:
-        raise SystemExit(f"--family {chosen.family} is not available: the preset is listed but this "
-                         "version does not offer it; see the README")
+        raise SystemExit(
+            f"--family {chosen.family} is not available: growth along a preferred direction needs "
+            "a directional bias in the turtle, which no combination of the existing options "
+            "expresses; see the README")
     args = build_parser(chosen.family).parse_args(argv)
     if args.fit == "voxel_size" and args.voxel_size is None:
         raise SystemExit("--fit voxel_size requires --voxel-size")
@@ -802,13 +662,10 @@ def main(argv=None):
             raise SystemExit(
                 f"--d-min {args.d_min:g} exceeds the root diameter {d0:.3g} sampled for seed "
                 f"{seed}, so the network would be empty; lower --d-min or raise --d0")
-        try:
-            grown = grow_network(niter, d0, properties, tVol, fit=args.fit, clip_axes=args.clip_axes,
-                                 voxel_size=args.voxel_size, subdivisions=args.subdivisions,
-                                 d_min=args.d_min, grow_in_volume=args.grow_in_volume, seed=seed,
-                                 **shaping)
-        except RootOutsideBox as error:
-            raise SystemExit(f"--root-offsets: {error} (seed {seed})")
+        grown = grow_network(niter, d0, properties, tVol, fit=args.fit, clip_axes=args.clip_axes,
+                             voxel_size=args.voxel_size, subdivisions=args.subdivisions,
+                             d_min=args.d_min, grow_in_volume=args.grow_in_volume, seed=seed,
+                             **shaping)
         nodes = grown["nodes"]
         volume = process_network(nodes, tVol, fit=args.fit, voxel_size=args.voxel_size,
                                  clip_axes=grown["clip_axes"], connect=args.connect)
@@ -842,7 +699,6 @@ def main(argv=None):
         }
         record.update(shaping)
         record["collision_index"] = grown["collision_index"]      # the kind used, not "auto"
-        record["frame"] = grown["frame"]
         with open(os.path.join(args.out, stem + ".json"), "w") as handle:
             json.dump(record, handle, indent=2)
         save_network(os.path.join(args.out, stem + ".npz"), nodes, program=grown["program"],

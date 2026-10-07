@@ -31,24 +31,15 @@ R = R_LO (R_HI / R_LO) ** ((perm[k] + u[k]) / n_f): one network per bin of
 equal width in log R, in a random order. The bins depend on n_f, so a
 library of a different size or share is a new library, not an extension.
 
-Families. Only the presets of main.FAMILIES that exist are accepted; a
-family listed without a preset, or an unknown name, is refused before
-anything is grown. The default library holds DEFAULT_FAMILIES (tree, mesh
-and tumour), so a family added later does not change what `--families`
-grows by default. `--avoid-collisions` (the default) affects the tree family
-only, the mesh, tumour and aligned presets avoiding collisions already;
-plain trees cross themselves from about R = 10, and the setting is recorded
-per network.
+Families. Only the presets of main.FAMILIES that exist are accepted;
+`aligned`, which is listed but not available, is refused before anything is
+grown. `--avoid-collisions` (the default) affects the tree family only, the
+mesh and tumour presets avoiding collisions already; plain trees cross
+themselves from about R = 10, and the setting is recorded per network.
 
-Mesh and aligned networks grow in a cube of side c times R, with c from
-BOX_C (`--mesh-box-c` for mesh, `--box-c FAMILY C` for any family), which
-keeps the two trees within reach of each other; tree and tumour networks
-grow freely, and the volume the parser is given is unused by their growth.
-
-Every archive carries the network's frame record (see guidance.py) and its
-d_min, and the index gives the orientation, polar order, capillary shares,
-capillary segment length and transverse spacing that describe.py measures
-against that frame.
+Mesh networks grow in a cube of side `--mesh-box-c` times R, which keeps the
+two trees within reach of each other; tree and tumour networks grow freely,
+and the volume the parser is given is unused by their growth.
 
 Resuming. A run into a directory that holds a manifest refuses a different
 parameter set or a different code hash, records a different Python or numpy
@@ -96,22 +87,12 @@ from describe import describe
 # Tag of the ratio stream; it shares no tag with main.RNG_STREAMS.
 RNG_STREAMS = {"ratio": 4}
 
-# The version of the library format and generator, the release it belongs to.
-LIBRARY_VERSION = "3.5.0"
-
 RATIO_LAW = "log-uniform"
 UNITS = "d_min"
 DEFAULT_RATIO_RANGE = (2.52, 25.0)      # 2 ** (4 / 3) gives at least about four generations
 DEFAULT_MESH_BOX_C = 15.0
 DEFAULT_ITERATION_CAP = 64
 DEFAULT_COLLISION_MARGIN = 1.0
-
-# The families a library holds unless --families says otherwise.
-DEFAULT_FAMILIES = ("tree", "mesh", "tumour")
-
-# The families grown in a cube, with the side of the cube in root diameters:
-# c R keeps the two trees of a pair within reach of each other.
-BOX_C = {"mesh": DEFAULT_MESH_BOX_C, "aligned": 15.0}
 
 # The parser is given this volume: tree and tumour growth never read it, and
 # a mesh grows in a cube of side 3 x voxel_size, the voxel size being set to
@@ -123,22 +104,16 @@ VOLUME = (3, 3, 3)
 # Modules whose source bytes make up the code hash: this one and main's
 # import closure.
 CODE_MODULES = ("library", "main", "vSystem", "libGenerator", "analyseGrammar", "utils", "computeVoxel",
-                "tortuosity", "collisions", "anastomosis", "graph", "spatial", "guidance")
+                "tortuosity", "collisions", "anastomosis", "graph", "spatial")
 
-# Columns of index.csv, in order. Append-only: the columns from frame_kind on
-# were added in 3.5 (orientation about the frame axis, the polar order and
-# the capillary shares, segment length and spacing, in d_min; empty where a
-# network has no frame axis or no polar sense).
+# Columns of index.csv, in order.
 INDEX_COLUMNS = ("id", "family", "ratio", "bin", "u", "seed", "file", "generations", "points", "polylines",
                  "tips", "junctions", "cycles", "components", "total_length",
                  "diameter_p50", "diameter_p90", "diameter_p99",
                  "diameter_v50", "diameter_v90", "diameter_v99", "diameter_min", "diameter_max",
                  "min_point_diameter", "clearance_min", "clearance_violations", "bridges", "events",
                  "avoid_collisions", "ratio_law", "ratio_lo", "ratio_hi", "seconds", "peak_rss_mb",
-                 "nodes_sha256", "program_sha256",
-                 "frame_kind", "capillary_order", "larger_order", "capillary_polar_order",
-                 "capillary_length_share", "capillary_volume_share", "capillary_segment_median",
-                 "transverse_spacing_median")
+                 "nodes_sha256", "program_sha256")
 
 THREAD_VARIABLES = ("OMP_NUM_THREADS", "OPENBLAS_NUM_THREADS", "MKL_NUM_THREADS")
 
@@ -221,42 +196,11 @@ def plan_library(seed, count, families, shares, ratio_range):
     return members
 
 
-def box_constants(mesh_box_c=None, box_c=None):
-    """
-    The side of each box family's cube in root diameters: BOX_C, with
-    `mesh_box_c` for mesh and the entries of `box_c` over that.
-
-    Raises:
-        ValueError: for a mesh entry in `box_c` given together with
-        `mesh_box_c`, a family in `box_c` that is not a box family (not in
-        BOX_C), or a constant that is not positive.
-    """
-    boxes = dict(BOX_C)
-    for family in box_c or {}:
-        if family not in BOX_C:
-            raise ValueError(f"{family!r} is not a box family; the box families are {sorted(BOX_C)}")
-    if mesh_box_c is not None:
-        if box_c and "mesh" in box_c:
-            raise ValueError("the mesh box is given twice, as mesh_box_c and in box_c")
-        boxes["mesh"] = float(mesh_box_c)
-    for family, c in (box_c or {}).items():
-        boxes[family] = float(c)
-    for family, c in boxes.items():
-        if not c > 0.0:
-            raise ValueError(f"the box constant of {family} must be positive, got {c!r}")
-    return boxes
-
-
 def member_argv(family, ratio, *, d_min=1.0, collision_margin=DEFAULT_COLLISION_MARGIN,
-                mesh_box_c=None, iteration_cap=DEFAULT_ITERATION_CAP, avoid_collisions=True, box_c=None):
-    """
-    The `vsystem` command line that grows one library network (without
-    --count, --seed or --out). A family in BOX_C grows in a cube of side c R:
-    the voxel size is set to c d0 / 3 over the three-voxel volume.
-    """
+                mesh_box_c=DEFAULT_MESH_BOX_C, iteration_cap=DEFAULT_ITERATION_CAP, avoid_collisions=True):
+    """The `vsystem` command line that grows one library network (without --count, --seed or --out)."""
     d0 = ratio * d_min
-    boxes = box_constants(mesh_box_c, box_c)
-    voxel_size = boxes[family] * d0 / VOLUME[0] if family in boxes else 1.0
+    voxel_size = mesh_box_c * d0 / VOLUME[0] if family == "mesh" else 1.0
     argv = ["--family", family, "--d0", repr(float(d0)), "0", "--d0-min", repr(float(d0)),
             "--d-min", repr(float(d_min)), "--iterations", str(int(iteration_cap)), str(int(iteration_cap)),
             "--collision-margin", repr(float(collision_margin)),
@@ -267,7 +211,7 @@ def member_argv(family, ratio, *, d_min=1.0, collision_margin=DEFAULT_COLLISION_
 
 
 def grow_member(family, ratio, seed, *, d_min=1.0, collision_margin=DEFAULT_COLLISION_MARGIN,
-                mesh_box_c=None, iteration_cap=DEFAULT_ITERATION_CAP, avoid_collisions=True, box_c=None):
+                mesh_box_c=DEFAULT_MESH_BOX_C, iteration_cap=DEFAULT_ITERATION_CAP, avoid_collisions=True):
     """
     Grows one library network exactly as `vsystem` would from the same
     arguments and seed: main's parser with the family preset, its parameter
@@ -279,14 +223,9 @@ def grow_member(family, ratio, seed, *, d_min=1.0, collision_margin=DEFAULT_COLL
         "properties".
     """
     argv = member_argv(family, ratio, d_min=d_min, collision_margin=collision_margin, mesh_box_c=mesh_box_c,
-                       iteration_cap=iteration_cap, avoid_collisions=avoid_collisions, box_c=box_c)
+                       iteration_cap=iteration_cap, avoid_collisions=avoid_collisions)
     args = cli.build_parser(family).parse_args(argv)
-    try:
-        cli.validate_shaping(args)
-    except SystemExit as exc:
-        # a refusal of the command line, such as a root offset outside the
-        # member's box, is an error of this member, which the library records
-        raise ValueError(str(exc)) from None
+    cli.validate_shaping(args)
     random.seed(seed)
     np.random.seed(seed % (2 ** 32))
     properties, d0, niter = cli.sample_parameters(args)
@@ -313,43 +252,16 @@ def _weighted_percentile(values, weights, fraction):
     return float(values[order][min(slot, values.size - 1)])
 
 
-def _frame_columns(report):
-    """The index columns measured against the network's frame, None where there is none."""
-    frame = report["frame"]
-    orientation = report["frame_orientation"]
-    polar = report["polar_order"]
-    shares = report["calibre_shares"]
-    segments = report["segments_by_class"]
-    spacing = report["transverse_spacing"]
-
-    def order(entry):
-        return entry["S"] if entry and "S" in entry else None
-
-    return {
-        "frame_kind": frame["kind"] if frame else None,
-        "capillary_order": order(orientation["capillary"]) if orientation else None,
-        "larger_order": order(orientation["larger"]) if orientation else None,
-        "capillary_polar_order": polar["capillary"] if polar else None,
-        "capillary_length_share": shares["length"]["below_2"] if shares else None,
-        "capillary_volume_share": shares["volume"]["below_2"] if shares else None,
-        "capillary_segment_median": segments["capillary"]["median"] if segments else None,
-        "transverse_spacing_median": spacing["median"] if spacing else None,
-    }
-
-
-def describe_member(grown, collision_margin, d_min=1.0):
+def describe_member(grown, collision_margin):
     """
     The index row of a grown network: counts, lengths and diameter
     percentiles in units of d_min (describe's _um and _mm names refer to
-    micrometres, so its quantities are renamed and the length un-scaled),
-    and the frame-relative and calibre-class quantities measured with the
-    network's frame record and d_min as the reference diameter.
+    micrometres, so its quantities are renamed and the length un-scaled).
     "generations" is filled in by the caller from the program.
     """
     nodes = grown["nodes"]
     edges = grown["edges"]
-    report = describe(nodes, edges, margin=collision_margin, tree=grown["tree"], frame=grown.get("frame"),
-                      d_ref=d_min)
+    report = describe(nodes, edges, margin=collision_margin, tree=grown["tree"])
     canonical = graph.canonical_columns(nodes)
     vertex_diameter = graph.vertex_diameter(nodes, canonical)
     edge_diameter = (vertex_diameter[edges[0]] + vertex_diameter[edges[1]]) / 2.0 if edges.shape[1] else np.zeros(0)
@@ -376,7 +288,6 @@ def describe_member(grown, collision_margin, d_min=1.0):
         "bridges": len(grown["bridges"]),
         "events": {k: v for k, v in grown["events"].items() if v},
     }
-    row.update(_frame_columns(report))
     return row
 
 
@@ -442,23 +353,11 @@ def code_hash(root=None):
     return digest.hexdigest()
 
 
-def growth_settings(args, box_c=None):
-    """
-    The growth parameters of a library, as the manifest records them. The
-    mesh box constant is recorded as before; the constants of the other box
-    families listed in `--families` are recorded under "box_c", which is
-    absent when none is listed, so that a library of the default families
-    records what it always did.
-    """
-    boxes = box_constants(args.mesh_box_c, box_c)
-    families = args.families if args.families else list(DEFAULT_FAMILIES)
-    settings = {"collision_margin": float(args.collision_margin), "mesh_box_c": boxes["mesh"],
-                "iteration_cap": int(args.iteration_cap), "avoid_collisions": bool(args.avoid_collisions),
-                "d_min": 1.0}
-    listed = {family: boxes[family] for family in families if family in boxes and family != "mesh"}
-    if listed:
-        settings["box_c"] = listed
-    return settings
+def growth_settings(args):
+    """The growth parameters of a library, as the manifest records them."""
+    return {"collision_margin": float(args.collision_margin), "mesh_box_c": float(args.mesh_box_c),
+            "iteration_cap": int(args.iteration_cap), "avoid_collisions": bool(args.avoid_collisions),
+            "d_min": 1.0}
 
 
 def grow_and_write(task):
@@ -473,10 +372,9 @@ def grow_and_write(task):
     try:
         result = grow_member(member["family"], member["ratio"], member["seed"], d_min=settings["d_min"],
                              collision_margin=settings["collision_margin"], mesh_box_c=settings["mesh_box_c"],
-                             iteration_cap=settings["iteration_cap"], avoid_collisions=settings["avoid_collisions"],
-                             box_c=settings.get("box_c"))
+                             iteration_cap=settings["iteration_cap"], avoid_collisions=settings["avoid_collisions"])
         grown = result["grown"]
-        row = describe_member(grown, settings["collision_margin"], settings["d_min"])
+        row = describe_member(grown, settings["collision_margin"])
         row["generations"] = max(drawn_generations(p) for p in grown["programs"])
         hashes = member_hashes(grown)
         seconds = time.perf_counter() - started
@@ -493,7 +391,6 @@ def grow_and_write(task):
             "bridges": grown["bridges"], "min_point_diameter": row["min_point_diameter"],
             "programs": grown["programs"], "archive_version": cli.ARCHIVE_VERSION,
             "seconds": seconds, "peak_rss_mb": peak_rss_mb,
-            "frame": grown["frame"], "d_min": settings["d_min"],
         }
         metadata.update(hashes)
         save_member_archive(os.path.join(directory, member["file"]), grown, metadata)
@@ -531,8 +428,7 @@ def validate_existing(path, member, settings):
             return None, f"{key} is {record.get(key)!r}, planned {value!r}"
     argv = member_argv(member["family"], member["ratio"], d_min=settings["d_min"],
                        collision_margin=settings["collision_margin"], mesh_box_c=settings["mesh_box_c"],
-                       iteration_cap=settings["iteration_cap"], avoid_collisions=settings["avoid_collisions"],
-                       box_c=settings.get("box_c"))
+                       iteration_cap=settings["iteration_cap"], avoid_collisions=settings["avoid_collisions"])
     if record.get("argv") != argv:
         return None, f"grown from {record.get('argv')!r}, planned {argv!r}"
     if "nodes_sha256" not in record or record["nodes_sha256"] != sha256_bytes(np.ascontiguousarray(network["nodes"]).tobytes()):
@@ -545,7 +441,7 @@ def manifest_content(seed, count, families, shares, ratio_range, settings, worke
     """The reproducible part of the manifest; its canonical JSON is hashed."""
     counts = family_counts(count, families, shares)
     return {
-        "version": cli.ARCHIVE_VERSION, "library_version": LIBRARY_VERSION, "units": UNITS,
+        "version": cli.ARCHIVE_VERSION, "library_version": "3.3.0", "units": UNITS,
         "seed": int(seed), "count": int(count), "families": list(families),
         "family_shares": [float(s) for s in shares], "family_counts": dict(zip(families, counts)),
         "ratio_law": RATIO_LAW, "ratio_range": [float(v) for v in ratio_range],
@@ -642,7 +538,7 @@ def build_parser():
                         "directory holding a manifest resumes it")
     parser.add_argument("--count", type=int, required=True, metavar="N", help="number of networks")
     parser.add_argument("--families", nargs="+", default=None, metavar="FAMILY",
-                        help=f"families to grow, in id order (default: {' '.join(DEFAULT_FAMILIES)})")
+                        help="families to grow, in id order (default: every available preset)")
     parser.add_argument("--family-shares", type=float, nargs="+", default=None, metavar="SHARE",
                         help="relative share of each family (default: equal)")
     parser.add_argument("--ratio-range", type=float, nargs=2, default=DEFAULT_RATIO_RANGE, metavar=("R_LO", "R_HI"),
@@ -652,12 +548,8 @@ def build_parser():
     parser.add_argument("--workers", type=int, default=1, help="worker processes (default 1)")
     parser.add_argument("--collision-margin", type=float, default=DEFAULT_COLLISION_MARGIN,
                         help=f"clearance between vessel surfaces, in units of d_min (default {DEFAULT_COLLISION_MARGIN})")
-    parser.add_argument("--mesh-box-c", type=float, default=None,
+    parser.add_argument("--mesh-box-c", type=float, default=DEFAULT_MESH_BOX_C,
                         help=f"a mesh grows in a cube of side this many times its root diameter (default {DEFAULT_MESH_BOX_C})")
-    parser.add_argument("--box-c", nargs=2, action="append", default=None, metavar=("FAMILY", "C"),
-                        help="the side of the cube a family grows in, in root diameters, for any family grown in a "
-                             "box (repeatable; defaults: " + ", ".join(f"{f} {c:g}" for f, c in BOX_C.items())
-                             + "; not together with --mesh-box-c for mesh)")
     parser.add_argument("--iteration-cap", type=int, default=DEFAULT_ITERATION_CAP,
                         help=f"generations allowed; d_min stops growth first (default {DEFAULT_ITERATION_CAP})")
     parser.add_argument("--avoid-collisions", dest="avoid_collisions", action="store_true", default=True,
@@ -673,19 +565,7 @@ def _warn(message):
 
 def main(argv=None):
     args = build_parser().parse_args(argv)
-    families = check_families(args.families if args.families else list(DEFAULT_FAMILIES))
-    box_c = {}
-    for family, c in args.box_c or ():
-        if family not in BOX_C:
-            raise SystemExit(f"--box-c {family}: not a box family; choose from {' '.join(sorted(BOX_C))}")
-        try:
-            box_c[family] = float(c)
-        except ValueError:
-            raise SystemExit(f"--box-c {family} {c}: the constant must be a number")
-        if not box_c[family] > 0.0:
-            raise SystemExit(f"--box-c {family} {c}: the constant must be positive")
-    if args.mesh_box_c is not None and "mesh" in box_c:
-        raise SystemExit("the mesh box is given twice: use --mesh-box-c or --box-c mesh, not both")
+    families = check_families(args.families if args.families else available_families())
     shares = args.family_shares if args.family_shares else [1.0] * len(families)
     if len(shares) != len(families):
         raise SystemExit("--family-shares needs one share per family")
@@ -698,14 +578,14 @@ def main(argv=None):
         raise SystemExit("--workers must be at least 1")
     if args.collision_margin < 0.0:
         raise SystemExit("--collision-margin cannot be negative")
-    if (args.mesh_box_c is not None and args.mesh_box_c <= 0.0) or args.iteration_cap < 1:
+    if args.mesh_box_c <= 0.0 or args.iteration_cap < 1:
         raise SystemExit("--mesh-box-c must be positive and --iteration-cap at least 1")
 
-    settings = growth_settings(args, box_c)
+    settings = growth_settings(args)
     settings.update({"ratio_lo": float(lo), "ratio_hi": float(hi)})
     members = plan_library(args.seed, args.count, families, shares, (lo, hi))
     code = code_hash()
-    content_now = manifest_content(args.seed, args.count, families, shares, (lo, hi), growth_settings(args, box_c),
+    content_now = manifest_content(args.seed, args.count, families, shares, (lo, hi), growth_settings(args),
                                    None, members, {}, [], code)
     os.makedirs(args.out, exist_ok=True)
     manifest_path = os.path.join(args.out, "manifest.json")
@@ -749,8 +629,8 @@ def main(argv=None):
                 network = cli.load_network(path)
                 grown = {"nodes": network["nodes"], "edges": network["edges"], "tree": network["tree"],
                          "bridges": record.get("bridges", []), "events": record.get("events", {}),
-                         "program": network["program"], "frame": record.get("frame")}
-                row = describe_member(grown, settings["collision_margin"], settings["d_min"])
+                         "program": network["program"]}
+                row = describe_member(grown, settings["collision_margin"])
                 row.update({"id": member["id"], "family": member["family"], "ratio": member["ratio"],
                             "bin": member["bin"], "u": member["u"], "seed": member["seed"], "file": member["file"],
                             "generations": record.get("generations"), "avoid_collisions": record.get("avoid_collisions"),
@@ -786,8 +666,8 @@ def main(argv=None):
                       f"peak RSS {row['peak_rss_mb']:.0f} MB", flush=True)
     elapsed = time.perf_counter() - started
 
-    content = manifest_content(args.seed, args.count, families, shares, (lo, hi), growth_settings(args, box_c),
-                               None, members, rows, failures, code)
+    content = manifest_content(args.seed, args.count, families, shares, (lo, hi), growth_settings(args), None,
+                               members, rows, failures, code)
     run_record["runs"].append({"started": run_record.pop("started"),
                                "finished": datetime.datetime.now(datetime.timezone.utc).isoformat(),
                                "workers": args.workers, "grown": len(pending) - len(failures),

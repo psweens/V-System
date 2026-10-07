@@ -133,11 +133,13 @@ Useful options (`python main.py --help` lists them all):
 | `--grow-in-volume` | off | confine growth to the volume's proportions so no vessel is cut |
 | `--no-connect` | off | rasterise bare capsules, leaving sub-voxel vessels dotted |
 | `--units` | `um` | the unit one grammar unit stands for, recorded in the sidecar |
-| `--family` | `tree` | preset bundle of the geometry options: `tree`, `mesh`, `tumour` (`aligned` is not available yet) |
+| `--family` | `tree` | preset bundle of the geometry options: `tree`, `mesh`, `tumour`, `aligned` (which needs `--d-min`) |
 | `--tortuosity` | `stems` | `stems`: five sub-segments smoothed by a B-spline; `walk`: a persistent random walk of the same arc length |
 | `--persistence` | none | persistence length of the walk in vessel diameters; required by `walk` |
 | `--avoid-collisions` | off | keep branches apart by at least `--collision-margin` (default 1 µm), redrawing or shortening, and count what could not be placed |
 | `--anastomose` | off | join `--anastomosis-fraction` (0.5) of the tips to partners within `--anastomosis-radius` (25) tip diameters, never closer kin than `--anastomosis-min-separation` (3) segments, by bridges routed clear of the network at `--collision-margin`; `--anastomose-mode arteriovenous` grows a second tree from the opposite face |
+| `--guidance JSON` | none | steer the walk towards an axis or a plane per calibre class: a list of rules, each with a bound `below` in d_min (null for none), a `field` (`axis`, `plane` or null), its `axis` or `normal`, a `length` G in diameters, an `onset` (2) and, for an axis, a `sense` and `polarity`, for a plane `bank`; needs `--tortuosity walk` |
+| `--root-offsets JSON` | none | move the roots from their default positions on the faces of the growth box, staying inside it: one `[x, y, z]` per tree in units of d_min; needs `--grow-in-volume` and `--d-min` |
 
 `--d-min` and `--iterations` are both stopping criteria and whichever comes first
 wins. `--d-min` is the one a modality states directly, as its smallest resolvable
@@ -399,17 +401,113 @@ clear of the first tree, and both root positions are recorded in the sidecar. Ti
 are counted. The rasteriser draws polylines independently, so cycles need no
 special handling.
 
+### Directional guidance: `--guidance` and `--root-offsets`
+
+The walk can be steered. Before every step's random turn, the heading h is
+turned deterministically towards a target t by
+
+    ω = min(θ, r sin θ cos θ)   for a nematic axis or a plane,
+    ω = min(θ, r sin θ)         for a polar axis,
+
+where θ is the angle from h to t and r = min(1, step / (G d)) with G the
+guidance length in local diameters d. The drift draws nothing: with guidance
+off the walk draws exactly what it drew before, and with guidance on it still
+draws two numbers per attempt, each redraw turning about the steered frame.
+The target depends on the field of the rule that governs the stem: for a
+nematic axis a it is the nearer of a and −a; for a polar axis it is s a with
+a sense s fixed per tree, +1 (`fixed`), the sign of the tree's root heading
+along a (`root`), or the sign along a of the partner tree's root offset
+minus this tree's (`partner`, from the `--root-offsets` entries, so it
+points towards the partner root when the axis lies in the roots' faces, as
+in `aligned`); for a plane with normal n it is the
+projection of h onto the plane, undefined when h lies along n. A plane rule
+may also `bank`: after the turn the frame's perpendicular is turned towards
+the normal by the same rule, so that the branching turns the grammar writes
+about the perpendicular stay in the plane despite the roll of 70° before
+every daughter.
+
+The rules are a JSON list, each governing the stems whose diameter at the
+first move lies below `below` × d_min and above the bound of the rule before
+it, so the rules partition the calibres from the finest upwards; the last
+rule may have `below` null and a rule with field null leaves its class
+unguided. A stem is not steered while the arc walked along it is below
+`onset` × its diameter, so that daughters clear their sisters before being
+pulled into line; the rule is chosen once per walked polyline, from the
+diameter of its first move, and held, so a local anomaly does not switch
+class part way along. Bare moves and spline stems are never steered, so
+`--guidance` needs `--tortuosity walk`, and a finite bound needs `--d-min`.
+`--root-offsets` adds one vector per tree, in units of d_min, to the roots'
+default positions on the faces of the growth box before the second root is
+cleared of the first tree; a component along a face's normal moves its root
+into the box. It needs `--grow-in-volume` and `--d-min`, and a root moved
+outside the box is refused. Every refusal fires before the network it
+concerns is written; a malformed rule or offset is refused before anything
+is written, but without `--fit voxel_size` the box comes from each grown
+tree, so a root outside it is refused when that network grows, after the
+earlier networks of a `--count` run have been written.
+
+The law. The walk diffuses the heading with D = 1 / (4 P d) per unit length
+and the drift descends Φ = −cos²θ / 2 (nematic), −cos θ (polar) or
+sin²β / 2 (plane, β the angle out of the plane), so on a stem much longer
+than G d the heading settles into a stationary law: Watson exp(K cos²θ) with
+K = 2P / G for a nematic axis, Fisher exp(κ cos θ) with κ = 4P / G for a
+polar axis, and the girdle exp(−K sin²β) with K = 2P / G for a plane; the
+small-angle rms angles are √(G / 2P) to an axis and √(G / 4P) out of a plane.
+G follows from a target K. The steps are finite, so the measured
+concentration carries a discretisation bias of order step / (G d):
+`tests/test_guidance.py` grows one stem of 2000 sub-segments at P 10 and
+step 0.175 d and measures, over seeds 1 to 4 at G 3, ⟨cos²θ⟩ = 0.821,
+⟨cos θ⟩ = 0.922 and ⟨sin²β⟩ = 0.078 against 0.830, 0.925 and 0.0747 from
+the laws: the laws' moments at 0.96 of their concentrations, at
+step / (G d) = 0.058. The nematic law is
+Watson, not Fisher-axial: Fisher-axial is exp(K |cos θ|), whose ⟨|cos θ|⟩ is
+coth K − 1 / K, the polar law's ⟨cos θ⟩ at κ = K up to the polar law's
+backward mass.
+
+Every run counts its steering: `guided_steps`, `guidance_onset_steps`,
+`unguided_steps` and `guidance_undefined_steps` partition the walk's steps,
+`guidance_sense_flips` counts the changes of the nearer end of a nematic axis
+between consecutive guided steps of one polyline, and `guidance_bank_steps`
+counts bank rotations. Guidance costs about 90 µs per guided step on an
+Intel Xeon Gold 5220 workstation (Linux, Python 3.12, numpy 2.5), and a bank
+about 45 µs more (`tests/test_topology_benchmark.py`): that doubles the cost
+of a bare walk step (89 µs there), but adds about 7% to a network grown with
+avoidance and anastomosis, the `aligned` preset taking 1.38 ms per point at
+R 8 against 1.29 ms with guidance None (seeds 1 to 3, 87 thousand points in
+all either way).
+
+Every network grown from 3.5 records its **frame** in the sidecar and in the
+archive's metadata: the kind of the field rule with the smallest bound
+(`none`, `axis` or `plane`), its axis or normal, the sense and, for a polar
+rule, the +1 or −1 of each tree, every rule normalised, the growth frame
+(`grow_direction`, `grow_perpendicular`) and an origin (the centre of the
+growth box, else the first root), all in the coordinates and unit of `nodes`.
+With guidance off the kind is `none` and the rules are empty. `frames.py`
+places networks by their frame (below), and `describe.py` measures against
+it.
+
 ### Families: `--family`
 
 `tree` is the plain grammar. `mesh` is walk (P = 10) + collision avoidance +
 arteriovenous anastomosis of half the tips, grown in the volume. `tumour` is a
 low-persistence walk (P = 3), avoidance, anastomosis of 80% of the tips within
 one tree, a root calibre of 20 ± 10 µm and aneurysm and stenosis probabilities
-of 0.1. Options given explicitly override the preset. `aligned` — capillaries
-running in parallel as in muscle — is listed but refused: it needs a
-directional bias in the turtle, which no bundle of the existing options
-expresses. The persistence values of the presets are provisional calibrations
-from the sweep in `docs/geometry`.
+of 0.1. `aligned` is an arteriovenous pair in the mesh layout whose roots are
+moved by −15 and +15 d_min along x, 30 d_min apart (`root_offsets`), and whose
+vessels below 2 d_min are steered along x towards the other tree's root (a
+polar axis with polarity `partner`, G 4.9, so κ = 4P / G ≈ 8.2, after an onset
+of 2 diameters) while the larger vessels are kept in planes perpendicular to x
+(a plane with normal x, G 5, girdle K = 4): each tree feeds one sheet and the
+capillaries run from sheet to sheet, with 80% of the tips seeking an
+arteriovenous partner. It imitates capillaries running along muscle fibres
+from terminal arterioles to collecting venules with cross-connections (Skalak
+and Schmid-Schönbein 1986; Sarelius 1986; Emerson and Segal 1997), whose
+orientation has been fitted with a Fisher-axial law (Mathieu et al. 1983;
+Mathieu-Costello 1987). It needs `--d-min`, and its guidance values are
+provisional. Options given explicitly override the preset. The persistence
+values of the presets are provisional calibrations from the sweep in
+`docs/geometry`. A preset listed as None in `main.FAMILIES` is a family this
+version does not offer, and is refused.
 
 ### Cost
 
@@ -419,7 +517,12 @@ core), the difference being the graph built for the archive; shallow trees
 take the same 1.5 s as before. The opt-in stages are Python loops over walk
 steps: at twelve generations the walk adds a quarter, stems-mode avoidance a
 half, walk with avoidance takes 2.5×, with anastomosis 4×, and the two-tree
-`mesh` preset 7× (146 s). `docs/geometry/audit.md` has the table.
+`mesh` preset 7× (146 s). `docs/geometry/audit.md` has the table. The
+`aligned` preset of 3.5 costs about what a mesh costs: grown as the library
+grows it on an Intel Xeon Gold 5220 workstation, it takes 8.8, 49 and 185 s
+at R 4, 8 and 16 (means over seeds 1 to 3, 6.6, 28 and 87 thousand points)
+and 600 s at R 25 (298 thousand points, peak RSS 356 MB), where a mesh takes
+6.7, 29, 199 and 818 s (`tests/test_topology_benchmark.py`).
 
 ### Measuring: `describe.py`
 
@@ -436,6 +539,56 @@ minimum surface clearance between branches with the number of pairs closer
 than the margin, and every counted event from the sidecar. The docstring of
 `describe.describe` is the definition of each quantity, so that the same
 descriptors can be computed from voxel skeletons of real images and compared.
+
+From 3.5, `describe(nodes, edges, ..., frame=None, d_ref=None,
+class_bound=2.0)` also measures against the network's frame and by calibre
+class. `frame` defaults to the metadata's frame record and `d_ref` to the
+metadata's `d_min` (top level, else `grow_kwargs`); an edge is capillary-class
+when its diameter is below `class_bound` × d_ref, and the tangent of an edge
+runs from its lower to its higher column, the direction of growth for a
+network the generator wrote. The appended keys are `frame` (a copy), `classes`
+(the bound, d_ref and where it came from), `frame_orientation` (per class
+about an axis: the order parameter S = ⟨(3 (t·a)² − 1) / 2⟩, ⟨|t·a|⟩ and its
+reciprocal the crossing ratio, the mean angle, the fractions within 20° and
+45°, and the Watson K and `fisher_axial_K` that invert ⟨(t·a)²⟩ and ⟨|t·a|⟩;
+about a plane: the in-plane fraction ⟨1 − (t·n)²⟩ and S_n), `polar_order`
+(polar axis frames with tree labels: ⟨s_k t·a⟩ with each tree's sense s_k,
+bridges excluded), `orientation_by_class` (the tangent covariance per class
+with S_max and the planarity 1 − 3λ₃), `calibre_shares` (of length and of
+volume below 1.5, 2 and 3 d_ref), `segments_by_class` (segment lengths
+between junctions and tips, split by their mean diameter) and
+`transverse_spacing` (axis frames: on nine planes perpendicular to the axis
+over the central 80% of the capillary extent, the nearest-neighbour distance
+between the crossings of capillary edges and the crossings per unit area of
+plane inside the growth box, else inside the capillary bounding rectangle).
+Lengths come in the archive's unit and in d_ref (suffix `_d`). An archive
+without a frame reports `frame` None and every frame-relative key None; one
+without a d_ref reports every class-dependent key None. The pre-3.5 keys are
+unchanged. `describe_archive` with every new key takes 21 s on the largest
+network `tests/test_topology_benchmark.py` grows, a tree of 1.08 million
+points at R 25, and 1.9 s on an aligned network of 139 thousand points at
+R 16, on an Intel Xeon Gold 5220 workstation.
+
+### Placing networks by their frame: `frames.py`
+
+`frames.py` is a caller-side module, outside the generator's import closure
+and importing nothing but numpy, that moves an archive and its frame record
+together: `transform_nodes(nodes, Q, t, scale)` gives xyz' = scale Q xyz + t
+with diameters scaled, and `transform_frame(frame, Q, t, scale)` rotates
+every vector of the record, the rules' included, and scales the origin, so
+that a descriptor measured about the frame's axis is the same before and
+after the move. `rotation_about(axis, angle)`, `rotation_between(u, w,
+nematic=False)` (a proper rotation taking u to w, with w flipped first when
+nematic and u·w < 0, in a form that does not lose precision near antiparallel
+pairs), `rotation_of_frames(u1, u2, w1, w2)` and `random_rotation(rng)` (Haar)
+build the rotations, and `align(frame, axis=A, spin=φ)` (or `normal=N`) takes
+the frame's axis (or normal) to the given one and spins about it. Two recipes:
+a bank of networks along one shared axis A takes Q_i = align(frame_i, axis=A,
+spin=U(0, 2π)); random placement takes Q_i = random_rotation(rng). Rescaling
+is a transform with Q the identity and the same scale for nodes and frame.
+A missing record (every archive before 3.5), a frame of kind `none`, an axis
+asked of a plane frame or a normal of an axis frame, and any Q that is not a
+proper rotation to 10⁻⁹ are refused. `join.py` needs nothing of this.
 `docs/geometry/sweep.py` regenerates the descriptor tables in `docs/geometry`,
 and `docs/geometry/mips.py` renders one seed under each option as
 maximum-intensity projections (`docs/geometry/mips`), so the effect of every
@@ -719,13 +872,14 @@ vsystem-library --out lib --count 2000 --seed 1 --workers 8
 | --- | --- | --- |
 | `--out DIR` | required | output directory; a run into a directory holding a manifest resumes it |
 | `--count N` | required | number of networks |
-| `--families` | `tree mesh tumour` | families to grow, in id order; only presets that exist are accepted, so `aligned` and unknown names are refused before anything is grown |
+| `--families` | `tree mesh tumour` | families to grow, in id order (`aligned` when listed); only presets that exist are accepted, so a family without one and unknown names are refused before anything is grown |
 | `--family-shares` | `1 1 1` | relative share of each family, by largest remainder with ties to the family listed first (2000 at `1 1 1` gives 667 667 666) |
 | `--ratio-range R_LO R_HI` | `2.52 25` | range of R, log-uniform and stratified; 2^(4/3) gives at least about four generations |
 | `--seed S` | required | library seed |
 | `--workers W` | `1` | worker processes |
 | `--collision-margin` | `1.0` | clearance between vessel surfaces, units of d_min |
 | `--mesh-box-c` | `15` | a mesh grows in a cube of side this many times its root diameter, which keeps its two trees within reach of each other |
+| `--box-c FAMILY C` | `mesh 15`, `aligned 15` | the cube side of a box family (mesh, aligned) in root diameters (repeatable); refused for a family that grows free, and with `--mesh-box-c` for mesh; an aligned member whose root offsets leave a small cube is recorded as a failure |
 | `--iteration-cap` | `64` | generations allowed; d_min stops growth first |
 | `--avoid-collisions` / `--no-avoid-collisions` | on | collision avoidance for the tree family; the mesh and tumour presets avoid collisions already |
 
@@ -744,7 +898,7 @@ Each network is grown exactly as `vsystem` would grow it from
 
 ```
 --family f --d0 R 0 --d0-min R --d-min 1.0 --iterations 64 64 --collision-margin 1.0
---volume 3 3 3 --fit voxel_size --voxel-size (15 R / 3 for mesh, 1.0 otherwise) [--avoid-collisions]
+--volume 3 3 3 --fit voxel_size --voxel-size (c R / 3 for a box family, c from library.BOX_C, 1.0 otherwise) [--avoid-collisions]
 ```
 
 with the global generators seeded from the network's seed, through
@@ -753,10 +907,20 @@ network's `nodes` and `program` equal what `vsystem` writes for the same
 arguments and seed on the same machine (the tests check this). The tumour
 preset's root calibre is replaced by R; its aneurysm and stenosis
 probabilities reach the properties through the parser's defaults as on the
-command line. Tree and tumour growth never read the volume; a mesh grows in a
-cube of side 3 × voxel size = 15 R. A library in another unit is the same
+command line. Tree and tumour growth never read the volume; a mesh and an
+aligned network grow in a cube of side 3 × voxel size = c R, with c from
+`library.BOX_C` (15 for both; `--mesh-box-c` for mesh, `--box-c FAMILY C`
+for any box family, not both for mesh). A library in another unit is the same
 library rescaled: growth at (2R, d_min 2, margin 2, box 2 × 15 R) equals
-twice the library network to float rounding.
+twice the library network to float rounding. The default library holds
+`tree`, `mesh` and `tumour` (`library.DEFAULT_FAMILIES`); `aligned` is grown
+when listed, its box constant then recorded under `growth.box_c` in the
+manifest, and every archive's metadata carries the network's `frame` and its
+`d_min`. The index holds the 3.4 columns, then `frame_kind`,
+`capillary_order` and `larger_order` (S about the frame axis), `capillary_polar_order`,
+`capillary_length_share`, `capillary_volume_share`, `capillary_segment_median`
+and `transverse_spacing_median` (in d_min), empty where a network has no frame
+axis or no polar sense.
 
 Every archive is written atomically (`save_network` to a temporary file,
 then renamed) with metadata recording `"units": "d_min"`, the family, R, bin,
@@ -953,8 +1117,37 @@ take effect, that no drawn diameter falls below d_min but a stenosis middle,
 the scaling with the unit, equality with the command line's output,
 independence from the volume, the stratification, resume with the refusal of
 a different library or code, the stability of the manifest hash, the weights
-against a power law, the refusal of `aligned` and unknown families, and a
-tiny end-to-end run.
+against a power law, the refusal of a family without a preset and of unknown
+families, a tiny end-to-end run, and from 3.5 the aligned family's box, frame
+and index columns, the box constants and their refusals, and a tiny aligned
+library described and resumed with every new column.
+`tests/test_pinned_release_3_4.py` pins what 3.4 drew, wrote, measured and
+joined: the 3.4 modules (`tests/fixtures/reference_code_3_4`) and the
+current ones run one driver side by side in the same environment over
+growth, library members and plans, description, the command line, cropping
+and joining, and a three-network library, every record restricted to the keys
+3.4 wrote, so that a later version may append keys but must keep what 3.4
+wrote, with every appended counter at zero and the frame of kind `none` while
+the new options are off; it takes about 30 s on a laptop (Apple M4) and
+95 s on an Intel Xeon Gold 5220 workstation. `tests/test_guidance.py`
+checks the guidance rules and their refusals, the turn and the bank of one
+step, the draw count, that the walk without guidance is what it was, the
+stationary laws on a long stem, the counters, the choice of rule, the polar
+senses, the free extent, root offsets, scale invariance, the frame record in
+the return, sidecar and archive, and the aligned family end to end, and, with
+`VSYSTEM_SLOW_TESTS=1`, the capillary order, polar order and feeder planarity
+of `aligned` against the same seeds unguided, the bank's gain in planarity
+and the onset's effect on collision redraws over ten seeds, and the fall of
+the order with the guidance length over four seeds. `tests/test_frames.py`
+checks the rotations, `align` and the transforms, and that a random transform
+leaves the order about the carried axis unchanged. `tests/test_describe.py`
+checks the frame descriptors on exact constructions (S of 1 and −0.5, the
+Watson and Fisher-axial inversions on 10⁴ samples, exact calibre shares and
+transverse spacing of a square array, each d_ref source) and their unit
+invariance. `tests/test_topology_benchmark.py`, with `VSYSTEM_SLOW_TESTS=1`,
+grows every family at three root ratios and the aligned preset over its
+guidance length and onset, prints the Phase 1 descriptors and the cost, and
+projects a 2000-network library.
 
 ---
 

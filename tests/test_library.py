@@ -15,6 +15,7 @@ import subprocess
 import sys
 import tempfile
 import unittest
+from unittest import mock
 
 import numpy as np
 
@@ -327,13 +328,13 @@ class CommandLineTests(unittest.TestCase):
             with open(path, "wb") as handle:
                 handle.write(original)
 
-    def test_aligned_and_unknown_families_are_refused_before_growth(self):
-        with tempfile.TemporaryDirectory() as out:
-            for families in (["aligned"], ["tree", "aligned"], ["capillary"]):
+    def test_unoffered_and_unknown_families_are_refused_before_growth(self):
+        with mock.patch.dict(main.FAMILIES, {"unoffered": None}), tempfile.TemporaryDirectory() as out:
+            for families in (["unoffered"], ["tree", "unoffered"], ["capillary"], ["tree", "tree"]):
                 with self.subTest(families=families):
                     status, _, stderr = run_cli(["--out", out, "--count", "1", "--seed", "1", "--families"] + families)
                     self.assertNotEqual(status, 0)
-                    self.assertIn(families[-1], stderr)
+                    self.assertIn("twice" if families == ["tree", "tree"] else families[-1], stderr)
                     self.assertEqual(os.listdir(out), [])
 
     def test_the_console_script_entry_point_runs(self):
@@ -341,6 +342,198 @@ class CommandLineTests(unittest.TestCase):
                                 capture_output=True, text=True, cwd=ROOT)
         self.assertEqual(result.returncode, 0, result.stderr)
         self.assertIn("--ratio-range", result.stdout)
+
+
+class AlignedMemberTests(unittest.TestCase):
+    """The aligned family in the library: its box, its frame, its index columns and its scaling."""
+
+    @classmethod
+    def setUpClass(cls):
+        cls.member = grow_member("aligned", 4.0, 3)
+
+    def test_the_aligned_member_grows_in_its_box_with_its_frame(self):
+        grown = self.member["grown"]
+        side = library.BOX_C["aligned"] * 4.0
+        np.testing.assert_allclose(grown["growth_box_um"], [side, side, side], rtol=1e-12)
+        self.assertEqual(self.member["kwargs"]["guidance"], main.FAMILIES["aligned"]["guidance"])
+        self.assertEqual(self.member["kwargs"]["root_offsets"], main.FAMILIES["aligned"]["root_offsets"])
+        self.assertEqual(grown["frame"]["kind"], "axis")
+        self.assertEqual(grown["frame"]["tree_senses"], [1, -1])
+        self.assertEqual(len(grown["programs"]), 2)
+        self.assertGreater(grown["events"]["guided_steps"], 0)
+        self.assertIn("--voxel-size", self.member["argv"])
+        self.assertEqual(self.member["argv"][self.member["argv"].index("--voxel-size") + 1], repr(side / 3.0))
+
+    def test_the_index_row_carries_what_describe_measures_against_the_frame(self):
+        from describe import describe
+        grown = self.member["grown"]
+        row = library.describe_member(grown, 1.0, 1.0)
+        report = describe(grown["nodes"], grown["edges"], frame=grown["frame"], d_ref=1.0, tree=grown["tree"])
+        self.assertEqual(row["frame_kind"], "axis")
+        self.assertEqual(row["capillary_order"], report["frame_orientation"]["capillary"]["S"])
+        self.assertEqual(row["larger_order"], report["frame_orientation"]["larger"]["S"])
+        self.assertEqual(row["capillary_polar_order"], report["polar_order"]["capillary"])
+        self.assertEqual(row["capillary_length_share"], report["calibre_shares"]["length"]["below_2"])
+        self.assertEqual(row["capillary_volume_share"], report["calibre_shares"]["volume"]["below_2"])
+        self.assertEqual(row["capillary_segment_median"], report["segments_by_class"]["capillary"]["median"])
+        self.assertEqual(row["transverse_spacing_median"], report["transverse_spacing"]["median"])
+        self.assertGreater(row["capillary_polar_order"], 0.0)
+        self.assertGreater(row["transverse_spacing_median"], 0.0)
+        self.assertEqual(list(row)[-8:], list(library.INDEX_COLUMNS[-8:]))
+        # the new columns by name and in order, appended after the 3.4 ones (which the 3.4 pin checks)
+        self.assertEqual(list(library.INDEX_COLUMNS[-8:]),
+                         ["frame_kind", "capillary_order", "larger_order", "capillary_polar_order",
+                          "capillary_length_share", "capillary_volume_share", "capillary_segment_median",
+                          "transverse_spacing_median"])
+        # a tree has a frame of kind "none": the frame columns are empty, the class columns are not
+        plain = library.describe_member(grow_member("tree", 3.0, 3)["grown"], 1.0)
+        self.assertEqual(plain["frame_kind"], "none")
+        for column in ("capillary_order", "larger_order", "capillary_polar_order", "transverse_spacing_median"):
+            self.assertIsNone(plain[column])
+        self.assertGreater(plain["capillary_length_share"], 0.0)
+        self.assertGreater(plain["capillary_segment_median"], 0.0)
+
+    def test_growth_scales_with_the_unit(self):
+        one = self.member["grown"]
+        two = grow_member("aligned", 4.0, 3, d_min=2.0, collision_margin=2.0)["grown"]
+        self.assertEqual(one["nodes"].shape, two["nodes"].shape)
+        # rounding beside a face shows as a large relative error (up to 9e-11 over the seeds
+        # below), so the comparison has an absolute floor. Over seeds 1-10 at R 4 the largest
+        # difference is 3.8e-15 of twice the box side; the floor is 1e-14
+        floor = 1e-14 * max(one["growth_box_um"])
+        np.testing.assert_allclose(two["nodes"], 2.0 * one["nodes"], rtol=1e-12, atol=2.0 * floor)
+        self.assertEqual(one["events"], two["events"])
+        self.assertEqual(two["frame"]["rules"], one["frame"]["rules"])
+        np.testing.assert_allclose(two["frame"]["origin"], 2.0 * np.asarray(one["frame"]["origin"]), rtol=1e-12)
+
+
+class BoxConstantTests(unittest.TestCase):
+    def test_the_box_constants_merge_over_the_defaults_and_refuse_a_mesh_given_twice(self):
+        self.assertEqual(library.box_constants(), library.BOX_C)
+        self.assertEqual(library.box_constants(12.0), dict(library.BOX_C, mesh=12.0))
+        self.assertEqual(library.box_constants(None, {"aligned": 20.0, "mesh": 11.0}),
+                         {"mesh": 11.0, "aligned": 20.0})
+        with self.assertRaises(ValueError):
+            library.box_constants(12.0, {"mesh": 11.0})
+        with self.assertRaises(ValueError):
+            library.box_constants(None, {"aligned": 0.0})
+        # a family that grows free has no box to size
+        for family in ("tree", "tumour", "capillary"):
+            with self.assertRaises(ValueError):
+                library.box_constants(None, {family: 5.0})
+        argv = library.member_argv("aligned", 4.0, box_c={"aligned": 10.0})
+        self.assertEqual(argv[argv.index("--voxel-size") + 1], repr(10.0 * 4.0 / 3.0))
+        argv = library.member_argv("mesh", 4.0, mesh_box_c=12.0)
+        self.assertEqual(argv[argv.index("--voxel-size") + 1], repr(12.0 * 4.0 / 3.0))
+        self.assertEqual(library.member_argv("tree", 4.0, box_c={"aligned": 10.0}),
+                         library.member_argv("tree", 4.0))
+
+    def test_the_command_line_refuses_a_mesh_box_given_twice_and_records_other_boxes(self):
+        with tempfile.TemporaryDirectory() as out:
+            status, _, stderr = run_cli(["--out", out, "--count", "1", "--seed", "1", "--mesh-box-c", "12",
+                                         "--box-c", "mesh", "11"] + TINY)
+            self.assertNotEqual(status, 0)
+            self.assertIn("twice", stderr)
+            status, _, stderr = run_cli(["--out", out, "--count", "1", "--seed", "1", "--box-c", "capillary", "11"] + TINY)
+            self.assertNotEqual(status, 0)
+            self.assertIn("capillary", stderr)
+            status, _, stderr = run_cli(["--out", out, "--count", "1", "--seed", "1", "--box-c", "tree", "5"] + TINY)
+            self.assertNotEqual(status, 0)
+            self.assertIn("not a box family", stderr)
+            status, _, stderr = run_cli(["--out", out, "--count", "1", "--seed", "1", "--box-c", "aligned", "-3"] + TINY)
+            self.assertNotEqual(status, 0)
+            self.assertEqual(os.listdir(out), [])
+        # a default library records no box_c; one listing aligned records aligned's constant only
+        args = library.build_parser().parse_args(["--out", "x", "--count", "1", "--seed", "1"])
+        self.assertEqual(library.growth_settings(args),
+                         {"collision_margin": 1.0, "mesh_box_c": 15.0, "iteration_cap": 64, "avoid_collisions": True,
+                          "d_min": 1.0})
+        args = library.build_parser().parse_args(["--out", "x", "--count", "1", "--seed", "1", "--families", "aligned",
+                                                  "mesh", "--box-c", "aligned", "12", "--box-c", "mesh", "9"])
+        box_c = {family: float(c) for family, c in args.box_c}
+        self.assertEqual(library.growth_settings(args, box_c)["box_c"], {"aligned": 12.0})
+        self.assertEqual(library.growth_settings(args, box_c)["mesh_box_c"], 9.0)
+        args = library.build_parser().parse_args(["--out", "x", "--count", "1", "--seed", "1", "--families", "tree",
+                                                  "--box-c", "aligned", "12"])
+        self.assertNotIn("box_c", library.growth_settings(args, {"aligned": 12.0}))
+
+
+class AlignedFailureTests(unittest.TestCase):
+    def test_a_member_whose_root_offset_leaves_its_box_is_recorded_as_a_failure(self):
+        # at c 10 and R below 3 the cube is narrower than the roots' 30 d_min
+        # separation, so the command line's refusal of the offset is this
+        # member's failure, listed in the manifest, and the run ends
+        with self.assertRaises(ValueError):
+            library.grow_member("aligned", 2.6, 1, box_c={"aligned": 10.0})
+        with tempfile.TemporaryDirectory() as out:
+            status, _, stderr = run_cli(["--out", out, "--count", "1", "--seed", "1", "--families", "aligned",
+                                         "--box-c", "aligned", "10", "--ratio-range", "2.52", "3.0", "--workers", "1"])
+            self.assertEqual(status, 1)
+            with open(os.path.join(out, "manifest.json")) as handle:
+                failures = json.load(handle)["content"]["failures"]
+            self.assertEqual(len(failures), 1)
+            self.assertIn("outside the growth box", failures[0]["reason"])
+
+
+class AlignedLibraryTests(unittest.TestCase):
+    """A tiny library of aligned networks: written, described and resumed with its frame."""
+
+    @classmethod
+    def setUpClass(cls):
+        cls.out = tempfile.mkdtemp()
+        cls.argv = ["--out", cls.out, "--count", "2", "--seed", "3", "--families", "aligned", "--box-c", "aligned", "12",
+                    "--ratio-range", "2.52", "3.0"]
+        cls.status, cls.stdout, cls.stderr = run_cli(cls.argv)
+
+    @classmethod
+    def tearDownClass(cls):
+        shutil.rmtree(cls.out, ignore_errors=True)
+
+    def test_the_archives_carry_the_frame_and_describe_reads_d_ref_from_them(self):
+        from describe import describe_archive
+        self.assertEqual(self.status, 0, self.stderr)
+        with open(os.path.join(self.out, "manifest.json")) as handle:
+            content = json.load(handle)["content"]
+        self.assertEqual(content["growth"]["box_c"], {"aligned": 12.0})
+        self.assertEqual(content["library_version"], library.LIBRARY_VERSION)
+        with open(os.path.join(self.out, "index.json")) as handle:
+            rows = json.load(handle)["networks"]
+        for row in rows:
+            network = main.load_network(os.path.join(self.out, row["file"]))
+            record = network["metadata"]
+            self.assertEqual(record["frame"]["kind"], "axis")
+            self.assertEqual(record["d_min"], 1.0)
+            self.assertEqual(row["frame_kind"], "axis")
+            report = describe_archive(os.path.join(self.out, row["file"]))
+            self.assertEqual(report["classes"], {"bound": 2.0, "d_ref": 1.0, "d_ref_source": "d_min"})
+            self.assertEqual(report["frame"], record["frame"])
+            self.assertEqual(row["capillary_order"], report["frame_orientation"]["capillary"]["S"])
+            self.assertEqual(row["capillary_polar_order"], report["polar_order"]["capillary"])
+        with open(os.path.join(self.out, "index.csv")) as handle:
+            header = handle.readline().strip().split(",")
+        self.assertEqual(header, list(library.INDEX_COLUMNS))
+
+    def test_a_resumed_row_is_rebuilt_with_every_new_column(self):
+        index_path = os.path.join(self.out, "index.json")
+        with open(index_path) as handle:
+            index = json.load(handle)
+        before = {row["id"]: row for row in index["networks"]}
+        try:
+            index["networks"] = [row for row in index["networks"] if row["id"] != 0]
+            with open(index_path, "w") as handle:
+                json.dump(index, handle)
+            status, stdout, stderr = run_cli(self.argv)
+            self.assertEqual(status, 0, stderr)
+            self.assertNotIn(".npz:", stdout)                                    # nothing was grown again
+            with open(index_path) as handle:
+                after = {row["id"]: row for row in json.load(handle)["networks"]}
+            for column in library.INDEX_COLUMNS:
+                if column not in ("seconds", "peak_rss_mb"):
+                    self.assertEqual(after[0][column], before[0][column], column)
+        finally:
+            with open(index_path, "w") as handle:
+                json.dump({"units": index["units"], "ratio_law": index["ratio_law"],
+                           "networks": [before[k] for k in sorted(before)]}, handle)
 
 
 if __name__ == "__main__":

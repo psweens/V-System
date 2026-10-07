@@ -37,19 +37,8 @@ reach, never with every point within the largest radius in the network. The
 search then widens geometrically from the margin until it has checked a pair,
 so the minimum is exact whenever it can be found at bounded cost and is
 otherwise reported as a lower bound.
-
-A network grown along a preferred direction, or within a plane, records the
-frame it was steered by in its metadata, and the descriptors after
-"per_tree" measure the network against that frame and against the calibre
-class of its edges: how well the vessels follow the axis, whether the trees
-run along it in the sense the generator chose, how the capillaries are
-spaced across it and how length and volume divide between capillaries and
-larger vessels. The frame-relative quantities are None for an archive
-without a frame, and the class-dependent ones None without a reference
-diameter; the older keys read as they always did.
 """
 import argparse
-import copy
 import json
 import math
 import sys
@@ -96,35 +85,6 @@ _MAX_RADIUS_CLASSES = 12
 # network be searched out to its diagonal.
 _STAGE_PAIRS_PER_POINT = 64
 _STAGE_PAIRS_FLOOR = 4_000_000
-
-# Calibre classes: an edge thinner than DEFAULT_CLASS_BOUND reference
-# diameters is capillary-class, a thicker one larger-class, and the calibre
-# shares are reported below each of CALIBRE_MULTIPLES reference diameters.
-DEFAULT_CLASS_BOUND = 2.0
-CALIBRE_MULTIPLES = (1.5, 2.0, 3.0)
-
-# Transverse spacing is measured on planes perpendicular to the frame axis
-# spread over the central part of the capillaries' extent along it, so that
-# the planes stay clear of the ends, where vessels are still arriving.
-TRANSVERSE_PLANES = 9
-_TRANSVERSE_FIRST, _TRANSVERSE_STEP = 0.1, 0.1
-
-# The concentration of a Watson or an axial Fisher distribution is found by
-# bisection. Beyond this concentration both are a single direction at any
-# precision the mean cosines reach, and the mean is reported as outside the
-# range rather than as a number that no longer means anything.
-_CONCENTRATION_MAX = 200.0
-_BISECTION_STEPS = 200
-
-# Gauss-Legendre rule on [0, 1] for the Watson moment; 256 points resolve
-# the integrand's peak at the largest concentration searched.
-_GAUSS_NODES, _GAUSS_WEIGHTS = np.polynomial.legendre.leggauss(256)
-_WATSON_U = (_GAUSS_NODES + 1.0) / 2.0
-_WATSON_WEIGHT = _GAUSS_WEIGHTS / 2.0
-
-# Pairs measured per pass of the nearest-neighbour search on a plane, which
-# bounds the memory a pass needs.
-_NEIGHBOUR_PAIRS = 2_000_000
 
 
 def _as_nodes(nodes):
@@ -432,378 +392,6 @@ def _orientation(tangent, length):
             "fractional_anisotropy": float(anisotropy),
             "polar_histogram_deg": [float(v) for v in polar_hist / total],
             "azimuth_histogram_deg": azimuth_fraction}
-
-
-def _positive_number(value):
-    """True for a finite, positive int or float; a bool is not a number here."""
-    if isinstance(value, (bool, np.bool_)) or not isinstance(value, (int, float, np.integer, np.floating)):
-        return False
-    return bool(math.isfinite(value) and value > 0.0)
-
-
-def _reference_diameter(d_ref, metadata):
-    """
-    The reference diameter the calibre classes are judged against, with the
-    name of where it came from; (None, None) when nothing defines one.
-
-    The generator's d_min is the smallest diameter it draws, so a network
-    grown with one has its capillaries at one to two d_min, which is what the
-    classes are built on. A record without a usable d_min (growth stopped on
-    the iteration count instead) leaves the classes undefined rather than
-    taking the thinnest vertex, whose diameter says nothing about where the
-    capillaries of that network end.
-    """
-    if d_ref is not None:
-        if not _positive_number(d_ref):
-            raise ValueError(f"d_ref must be a positive number, got {d_ref!r}")
-        return float(d_ref), "argument"
-    if _positive_number(metadata.get("d_min")):
-        return float(metadata["d_min"]), "d_min"
-    kwargs = metadata.get("grow_kwargs")
-    if isinstance(kwargs, dict) and _positive_number(kwargs.get("d_min")):
-        return float(kwargs["d_min"]), "grow_kwargs"
-    return None, None
-
-
-def _vector3(value, name):
-    """`value` as a (3,) float array of finite entries, else ValueError."""
-    vector = np.asarray(value, dtype=float).reshape(-1)
-    if vector.size != 3 or not np.all(np.isfinite(vector)):
-        raise ValueError(f"{name} must be three finite numbers, got {value!r}")
-    return vector
-
-
-def _unit(vector, name):
-    """`vector` scaled to unit length, else ValueError for the zero vector."""
-    norm = float(np.linalg.norm(vector))
-    if not norm > 0.0:
-        raise ValueError(f"{name} must not be the zero vector")
-    return vector / norm
-
-
-def _frame_vector(frame):
-    """
-    The unit vector a frame record names, as ("axis", a) or ("plane", n);
-    None for no frame or a frame of kind "none".
-    """
-    if frame is None:
-        return None
-    if not isinstance(frame, dict):
-        raise ValueError("frame must be a dict, the frame record of an archive's metadata")
-    kind = frame.get("kind", "none")
-    if kind == "none":
-        return None
-    if kind == "axis":
-        return "axis", _unit(_vector3(frame.get("axis"), "frame axis"), "frame axis")
-    if kind == "plane":
-        return "plane", _unit(_vector3(frame.get("normal"), "frame normal"), "frame normal")
-    raise ValueError(f"frame kind must be 'none', 'axis' or 'plane', got {kind!r}")
-
-
-def _watson_moment(concentration):
-    """
-    <u^2> of the Watson distribution of the given concentration, u the
-    cosine to its axis, by quadrature with the exponent shifted by its
-    maximum so that no concentration in the search range overflows.
-    """
-    exponent = concentration * _WATSON_U ** 2 - max(concentration, 0.0)
-    density = _WATSON_WEIGHT * np.exp(exponent)
-    return float(np.sum(density * _WATSON_U ** 2) / np.sum(density))
-
-
-def _langevin(concentration):
-    """coth K - 1 / K, from its series where the two terms would cancel."""
-    if concentration < 1e-6:
-        return concentration / 3.0 - concentration ** 3 / 45.0
-    return 1.0 / math.tanh(concentration) - 1.0 / concentration
-
-
-def _bisect_increasing(function, target, low, high):
-    """
-    The argument in [low, high] at which the increasing `function` reaches
-    `target`, by bisection; None when the target lies outside the function's
-    range on the interval.
-    """
-    if not function(low) <= target <= function(high):
-        return None
-    for _ in range(_BISECTION_STEPS):
-        mid = (low + high) / 2.0
-        if not low < mid < high:
-            break
-        if function(mid) < target:
-            low = mid
-        else:
-            high = mid
-    return (low + high) / 2.0
-
-
-def _watson_concentration(mean_square):
-    """The Watson concentration whose <u^2> is `mean_square`, or None outside the searched range."""
-    return _bisect_increasing(_watson_moment, mean_square, -_CONCENTRATION_MAX, _CONCENTRATION_MAX)
-
-
-def _fisher_axial_concentration(mean_abs):
-    """The concentration K with coth K - 1 / K equal to `mean_abs`, or None outside (0, _CONCENTRATION_MAX]."""
-    # the function rises from 0 at K = 0, which is not a concentration
-    if not mean_abs > 0.0:
-        return None
-    return _bisect_increasing(_langevin, mean_abs, 0.0, _CONCENTRATION_MAX)
-
-
-def _axis_entry(cosine, weight, d_ref):
-    """Alignment of one class of edges to the frame axis, from the signed cosines; None without length."""
-    total = float(weight.sum())
-    if not total > 0.0:
-        return None
-    absolute = np.abs(cosine)
-    square = cosine * cosine
-    angle = np.degrees(np.arccos(np.minimum(absolute, 1.0)))
-    mean_abs = float(weight @ absolute) / total
-    return {"S": float(weight @ ((3.0 * square - 1.0) / 2.0)) / total,
-            "mean_abs_cos": mean_abs,
-            "crossing_ratio": 1.0 / mean_abs if mean_abs > 0.0 else None,
-            "mean_angle_deg": float(weight @ angle) / total,
-            "within_20_deg": float(weight[angle <= 20.0].sum()) / total,
-            "within_45_deg": float(weight[angle <= 45.0].sum()) / total,
-            "watson_K": _watson_concentration(float(weight @ square) / total),
-            "fisher_axial_K": _fisher_axial_concentration(mean_abs),
-            "length": total,
-            "length_d": total / d_ref if d_ref is not None else None}
-
-
-def _plane_entry(cosine, weight, d_ref):
-    """How much of one class of edges lies in the frame plane, from the cosines to its normal; None without length."""
-    total = float(weight.sum())
-    if not total > 0.0:
-        return None
-    square = cosine * cosine
-    return {"in_plane_fraction": float(weight @ (1.0 - square)) / total,
-            "S_n": float(weight @ ((3.0 * square - 1.0) / 2.0)) / total,
-            "length": total,
-            "length_d": total / d_ref if d_ref is not None else None}
-
-
-def _frame_orientation(vector, tangent, length, classes, d_ref):
-    """The axis or plane entry of every class; a class that is undefined (None mask) stays None."""
-    kind, direction = vector
-    cosine = tangent @ direction
-    entry = _axis_entry if kind == "axis" else _plane_entry
-    result = {"kind": kind}
-    for name, mask in classes.items():
-        result[name] = None if mask is None else entry(cosine[mask], length[mask], d_ref)
-    return result
-
-
-def _polar_order(cosine, length, label, senses, classes):
-    """
-    Length-weighted mean of the signed cosine to the frame axis, each edge
-    taken with the recorded sense of the tree its higher column belongs to;
-    an edge whose label indexes no sense (a bridge, a separator) is left out.
-    """
-    senses = np.asarray([] if senses is None else senses, dtype=float).reshape(-1)
-    labelled = (label >= 0) & (label < senses.size)
-    signed = np.zeros(cosine.size)
-    signed[labelled] = senses[label[labelled]] * cosine[labelled]
-    result = {}
-    for name, mask in classes.items():
-        if mask is None:
-            result[name] = None
-            continue
-        inside = mask & labelled
-        total = float(length[inside].sum())
-        result[name] = float(length[inside] @ signed[inside]) / total if total > 0.0 else None
-    return result
-
-
-def _orientation_shape(tangent, length):
-    """_orientation over one class of edges, with the order about its principal axis and its planarity appended."""
-    entry = _orientation(tangent, length)
-    eigenvalues = entry["eigenvalues"]
-    entry["S_max"] = None if eigenvalues is None else (3.0 * eigenvalues[0] - 1.0) / 2.0
-    entry["planarity"] = None if eigenvalues is None else 1.0 - 3.0 * eigenvalues[2]
-    return entry
-
-
-def _calibre_shares(edge_diameter, length, d_ref):
-    """Shares of length and of volume held by the edges thinner than each multiple of d_ref."""
-    known = np.isfinite(edge_diameter)
-    diameter, weight = edge_diameter[known], length[known]
-    volume = math.pi / 4.0 * diameter ** 2 * weight
-    shares = {}
-    for name, weights in (("length", weight), ("volume", volume)):
-        total = float(weights.sum())
-        shares[name] = {f"below_{multiple:g}": float(weights[diameter < multiple * d_ref].sum()) / total
-                        if total > 0.0 else None for multiple in CALIBRE_MULTIPLES}
-    return shares
-
-
-def _segment_calibres(nodes, paths, vertex_diameter):
-    """
-    Length and length-weighted mean diameter of every segment path, in the
-    order graph.segments returns them; NaN for a segment whose diameter is
-    unknown on an edge of positive length.
-    """
-    if not paths:
-        return np.zeros(0), np.zeros(0)
-    positions = nodes[:3].T
-    sizes = np.array([len(path) for path in paths], dtype=np.int64)
-    flat = np.concatenate(paths)
-    segment = np.repeat(np.arange(len(paths), dtype=np.int64), sizes)
-    inside = segment[1:] == segment[:-1]
-    tail, head = flat[:-1][inside], flat[1:][inside]
-    edge_segment = segment[:-1][inside]
-    step = np.linalg.norm(positions[head] - positions[tail], axis=1)
-    diameter = (vertex_diameter[tail] + vertex_diameter[head]) / 2.0
-    # a zero-length edge carries no weight, so its diameter, known or not, does not enter
-    weighted = np.where(step > 0.0, step * diameter, 0.0)
-    arc = np.bincount(edge_segment, weights=step, minlength=len(paths))
-    with np.errstate(invalid="ignore", divide="ignore"):
-        mean = np.bincount(edge_segment, weights=weighted, minlength=len(paths)) / arc
-    return arc, mean
-
-
-def _length_distribution(values, d_ref):
-    """Count, percentiles and coefficient of variation of segment lengths; every statistic None without any."""
-    stats = {"count": int(values.size), "median": None, "p10": None, "p90": None, "cv": None,
-             "median_d": None, "p10_d": None, "p90_d": None}
-    if values.size:
-        median, p10, p90 = (float(v) for v in np.percentile(values, [50.0, 10.0, 90.0]))
-        mean = float(values.mean())
-        stats.update({"median": median, "p10": p10, "p90": p90,
-                      "cv": float(values.std()) / mean if values.size >= 2 and mean > 0.0 else None,
-                      "median_d": median / d_ref, "p10_d": p10 / d_ref, "p90_d": p90 / d_ref})
-    return stats
-
-
-def _segments_by_class(arc, diameter, threshold, d_ref):
-    """Length distributions of the capillary and the larger segments, leaving out those without length or diameter."""
-    valid = (arc > 0.0) & np.isfinite(diameter)
-    capillary = valid & (diameter < threshold)
-    return {"capillary": _length_distribution(arc[capillary], d_ref),
-            "larger": _length_distribution(arc[valid & ~capillary], d_ref)}
-
-
-def _nearest_neighbour_distances(points):
-    """Distance from each of the (n, 2) points to the nearest other one: exact, by brute force in chunks."""
-    n = points.shape[0]
-    out = np.empty(n)
-    rows = max(1, _NEIGHBOUR_PAIRS // n)
-    for start in range(0, n, rows):
-        block = points[start:start + rows]
-        squared = ((block[:, 0, None] - points[None, :, 0]) ** 2
-                   + (block[:, 1, None] - points[None, :, 1]) ** 2)
-        own = np.arange(block.shape[0])
-        squared[own, start + own] = np.inf
-        out[start:start + rows] = np.sqrt(squared.min(axis=1))
-    return out
-
-
-def _box_corners(origin, basis, extents):
-    """
-    The eight corners of the box centred on `origin` whose sides run along
-    the rows of `basis` with the given extents, and its twelve edges as
-    pairs of corner indices.
-    """
-    signs = np.array([[sx, sy, sz] for sx in (-1.0, 1.0) for sy in (-1.0, 1.0) for sz in (-1.0, 1.0)])
-    corners = origin + (signs * extents / 2.0) @ basis
-    pairs = [(i, j) for i in range(8) for j in range(i + 1, 8) if np.count_nonzero(signs[i] != signs[j]) == 1]
-    return corners, pairs
-
-
-def _section_area(corners, pairs, axis, level, e1, e2):
-    """
-    Area of the polygon where the plane x . axis = level cuts the box: the
-    plane meets the box's edges in the polygon's vertices, which are ordered
-    by angle about their centroid in the plane's own coordinates and summed
-    by the shoelace formula. A corner on the plane is found from each of its
-    edges, and a repeated vertex adds no area.
-    """
-    s = corners @ axis
-    points = []
-    for i, j in pairs:
-        if s[i] == s[j]:
-            if s[i] == level:
-                points.extend([corners[i], corners[j]])
-            continue
-        if (s[i] - level) * (s[j] - level) <= 0.0:
-            points.append(corners[i] + (level - s[i]) / (s[j] - s[i]) * (corners[j] - corners[i]))
-    if len(points) < 3:
-        return 0.0
-    points = np.array(points)
-    u, v = points @ e1, points @ e2
-    order = np.argsort(np.arctan2(v - v.mean(), u - u.mean()), kind="stable")
-    u, v = u[order], v[order]
-    return 0.5 * abs(float(u @ np.roll(v, -1) - v @ np.roll(u, -1)))
-
-
-def _transverse_spacing(positions, lower, higher, axis, frame, d_ref, volume, metadata):
-    """
-    Nearest-neighbour spacing and density of the crossings of the given
-    edges (the capillary class, as columns of their lower and higher ends)
-    through planes perpendicular to the frame axis; see `describe`.
-    """
-    if lower.size == 0:
-        return None
-    x_lo, x_hi = positions[lower], positions[higher]
-    s_lo, s_hi = x_lo @ axis, x_hi @ axis
-    s_min = float(min(s_lo.min(), s_hi.min()))
-    s_max = float(max(s_lo.max(), s_hi.max()))
-    if not s_max > s_min:
-        return None
-    grow = _unit(_vector3(frame.get("grow_direction"), "frame grow_direction"), "frame grow_direction")
-    perpendicular = _unit(_vector3(frame.get("grow_perpendicular"), "frame grow_perpendicular"),
-                          "frame grow_perpendicular")
-    # in-plane axes from the frame itself, so that the result does not depend on the lab axes
-    e1 = grow - (grow @ axis) * axis
-    if np.linalg.norm(e1) < 1e-9:
-        e1 = perpendicular - (perpendicular @ axis) * axis
-    e1 = _unit(e1, "the frame's in-plane direction")
-    e2 = np.cross(axis, e1)
-    levels = s_min + (_TRANSVERSE_FIRST + _TRANSVERSE_STEP * np.arange(TRANSVERSE_PLANES)) * (s_max - s_min)
-
-    crossings = 0
-    pooled = 0
-    distances = []
-    for level in levels:
-        crossing = (s_lo < level) != (s_hi < level)
-        found = int(np.count_nonzero(crossing))
-        crossings += found
-        if found < 2:
-            continue
-        fraction = (level - s_lo[crossing]) / (s_hi[crossing] - s_lo[crossing])
-        point = x_lo[crossing] + fraction[:, None] * (x_hi[crossing] - x_lo[crossing])
-        distances.append(_nearest_neighbour_distances(np.stack([point @ e1, point @ e2], axis=1)))
-        pooled += found
-
-    extents = None
-    if volume is not None:
-        extents, source = _vector3(volume, "volume"), "argument"
-    elif metadata.get("growth_box_um") is not None:
-        extents, source = _vector3(metadata["growth_box_um"], "growth_box_um"), "growth_box_um"
-    if extents is not None:
-        origin = _vector3(frame.get("origin"), "frame origin")
-        basis = np.array([_unit(np.cross(grow, perpendicular), "the frame's third axis"), grow, perpendicular])
-        corners, pairs = _box_corners(origin, basis, extents)
-        area = sum(_section_area(corners, pairs, axis, level, e1, e2) for level in levels)
-    else:
-        source = "capillary_bounding_box"
-        ends = np.concatenate([x_lo, x_hi])
-        u, v = ends @ e1, ends @ e2
-        area = TRANSVERSE_PLANES * float((u.max() - u.min()) * (v.max() - v.min()))
-
-    result = {"planes": TRANSVERSE_PLANES, "count": pooled, "median": None, "mean": None, "p10": None, "p90": None,
-              "median_d": None, "mean_d": None, "p10_d": None, "p90_d": None,
-              "crossing_density": None, "crossing_density_d": None, "area_source": source}
-    if pooled:
-        values = np.concatenate(distances)
-        median, p10, p90 = (float(v) for v in np.percentile(values, [50.0, 10.0, 90.0]))
-        mean = float(values.mean())
-        result.update({"median": median, "mean": mean, "p10": p10, "p90": p90, "median_d": median / d_ref,
-                       "mean_d": mean / d_ref, "p10_d": p10 / d_ref, "p90_d": p90 / d_ref})
-    if area > 0.0:
-        density = crossings / area
-        result.update({"crossing_density": density, "crossing_density_d": density * d_ref ** 2})
-    return result
 
 
 def _volume_um3(points, r_max, volume, metadata):
@@ -1116,8 +704,7 @@ def clearance(nodes, margin=0.0, tol=DEFAULT_TOL, canonical=None, index="auto"):
     return result
 
 
-def describe(nodes, edges=None, metadata=None, volume=None, margin=None, tol=DEFAULT_TOL, tree=None,
-             frame=None, d_ref=None, class_bound=DEFAULT_CLASS_BOUND):
+def describe(nodes, edges=None, metadata=None, volume=None, margin=None, tol=DEFAULT_TOL, tree=None):
     """
     Measures the geometry and topology of a centreline network.
 
@@ -1222,115 +809,6 @@ def describe(nodes, edges=None, metadata=None, volume=None, margin=None, tol=DEF
     polylines, which equals the graph's length unless a polyline retraces
     another.
 
-    Frame. A network grown along a preferred direction or within a plane
-    records the frame it was steered by in metadata["frame"], which `frame`
-    overrides: its kind ("none", "axis" or "plane"), the unit axis a or
-    plane normal n, the heading g and perpendicular p of the first tree's
-    turtle frame (the generator's defaults are [0, 1, 0] and [0, 0, 1]) and
-    the origin o, the centre of the growth box or else the first root, in
-    the coordinates of `nodes`. "frame" is a copy of the record, or None.
-    Every quantity below that refers to a or n is None without a frame and
-    for a frame of kind "none". For them each edge has an oriented unit
-    tangent t_e = (x_hi - x_lo) / |x_hi - x_lo| from the vertex of its lower
-    column to the vertex of its higher: columns run from root to tip along
-    a polyline and a junction is named by its parent's column, so for a
-    network the generator wrote the tangent points the way the vessel grew.
-    <.> is the mean over the edges of a class weighted by edge length l_e;
-    a zero-length edge carries no weight. Lengths are in the archive's unit
-    (micrometres for the generator's archives) and a quantity suffixed _d
-    is the same in units of d_ref.
-
-    "classes". An edge of diameter d_e (as in "diameter_um") is
-    capillary-class when d_e < class_bound * d_ref and larger-class
-    otherwise; an edge whose diameter is unknown is in neither class. d_ref
-    is the `d_ref` argument, else metadata["d_min"], else
-    metadata["grow_kwargs"]["d_min"], whichever is the first finite positive
-    number; {"bound", "d_ref", "d_ref_source"} records the choice, the
-    source being "argument", "d_min", "grow_kwargs" or None. Without a d_ref
-    every quantity that depends on the classes is None: the thinnest vertex
-    is never taken as the reference, since its diameter says nothing about
-    where the capillaries of a network end.
-
-    "frame_orientation". {"kind", "all", "capillary", "larger"}, the class
-    entries None without d_ref and for a class without length. For an axis
-    frame, with u = t_e . a: "S" = <(3 u^2 - 1) / 2>, the nematic order
-    parameter, 1 for edges along a, -1/2 for edges perpendicular to it and
-    0 for isotropic ones; "mean_abs_cos" = <|u|>; "crossing_ratio" =
-    1 / <|u|>, the length of vessel per unit of extent covered along a
-    (None when <|u|> is 0); "mean_angle_deg" = <acos(min(|u|, 1))> in
-    degrees; "within_20_deg" and "within_45_deg" the fraction of length at
-    an angle of at most 20 or 45 degrees to a; "watson_K" the concentration
-    K of the Watson distribution, density proportional to exp(K u^2) on the
-    sphere, that has the measured <u^2>, W(K) = int_0^1 u^2 e^(K u^2) du /
-    int_0^1 e^(K u^2) du solved by bisection on [-200, 200] (W by a 256
-    point Gauss-Legendre rule), None when <u^2> lies outside
-    [W(-200), W(200)]; "fisher_axial_K" the K solving coth K - 1 / K = <|u|>
-    by bisection on (0, 200], None when <|u|> lies outside the range of
-    that function there, 0 to about 0.995; "length" the class's total edge
-    length and "length_d" the same in d_ref. For a plane frame, with
-    v = t_e . n: "in_plane_fraction" = <1 - v^2>, "S_n" = <(3 v^2 - 1) / 2>,
-    and "length" and "length_d" as above.
-
-    "polar_order". For an axis frame whose sense is "polar", when `tree` is
-    given: p = sum l_e s_k (t_e . a) / sum l_e over the edges whose higher
-    column carries a tree label k that indexes frame["tree_senses"], s_k
-    being that tree's recorded sense, +1 or -1; 1 when every tree runs
-    along a in its own sense and -1 when every tree runs against it. An
-    edge whose label indexes no sense (a bridge, label 2 in a generated
-    network, or a separator) is left out of both sums. {"all", "capillary",
-    "larger"}, the class entries None without d_ref and for a class without
-    labelled length; None altogether otherwise.
-
-    "orientation_by_class". {"all", "capillary", "larger"}, each the
-    "orientation" entry computed over the class's edges with "S_max" =
-    (3 lambda_1 - 1) / 2, the order parameter about the principal axis, and
-    "planarity" = 1 - 3 lambda_3, 0 for an isotropic covariance and 1 when
-    no length leaves a plane, both None without edges. None without d_ref.
-
-    "calibre_shares". {"length", "volume"}, each holding under "below_1.5",
-    "below_2" and "below_3" the share of the total edge length, or of the
-    total edge volume sum (pi / 4) d_e^2 l_e, held by the edges with
-    d_e < 1.5, 2 or 3 d_ref, over the edges of known diameter; None when
-    the total is 0. None without d_ref.
-
-    "segments_by_class". {"capillary", "larger"} over the segments of
-    "arc_chord": a segment's length is the sum of its edge lengths and its
-    diameter the length-weighted mean of its edge diameters, and it is
-    capillary when that diameter is below class_bound * d_ref; a segment of
-    zero length or unknown diameter is left out. Each entry holds "count",
-    the "median", "p10" and "p90" of the lengths (interpolated linearly as
-    for "arc_chord"), "cv" the population standard deviation over the mean
-    (None below two segments) and "median_d", "p10_d" and "p90_d" in d_ref;
-    every statistic is None when the count is 0. None without d_ref.
-
-    "transverse_spacing". For an axis frame with d_ref, over the
-    capillary-class edges of positive length; None otherwise, when there is
-    no such edge or when the edges have no extent along a. With s = x . a
-    over their end points and [s_min, s_max] its extent, nine planes
-    perpendicular to a are placed at c_k = s_min + (0.1 + 0.1 k)
-    (s_max - s_min), k = 0..8, through the central 80 % of the extent. An
-    edge crosses plane k when (s_lo < c_k) != (s_hi < c_k), at the point
-    interpolated linearly along it. In-plane coordinates run along
-    e1 = unit(g - (g . a) a), or unit(p - (p . a) a) when g lies along a,
-    and e2 = a x e1, so that nothing depends on the lab axes. On each plane
-    with at least two crossings the distance from every crossing to its
-    nearest other crossing is taken; pooled over the planes these give
-    "count", "median", "mean", "p10" and "p90", with "median_d", "mean_d",
-    "p10_d" and "p90_d" in d_ref, None when the count is 0.
-    "crossing_density" is the number of crossings on the nine planes, all
-    of them, over the summed area of the planes' sections through the
-    reference box, per square unit, and "crossing_density_d" the same per
-    d_ref^2. The box is `volume` ("area_source" "argument") or else
-    metadata["growth_box_um"] ("growth_box_um"), three extents along
-    (g x p, g, p) centred on o, each section being the polygon where the
-    plane cuts it. grow_network builds its box along the x, y and z axes of
-    `nodes`, which are (g x p, g, p) for the generator's default turtle
-    frame and for a network moved from it by frames.transform_frame, not
-    for one grown from another direction. Without either, the box is
-    replaced by the rectangle in (e1, e2) bounding the end points of the
-    capillary edges, the same on every plane ("capillary_bounding_box"), and
-    the density is None when that rectangle has no area. "planes" is 9.
-
     Args:
         nodes (ndarray): (4, N) array of x, y, z and diameter with NaN separators.
         edges (ndarray or None): (2, E) column indices of the graph's edges,
@@ -1344,12 +822,6 @@ def describe(nodes, edges=None, metadata=None, volume=None, margin=None, tol=DEF
             says avoid_collisions was on, else 0.
         tol (float): merging distance for the vertices, in micrometres.
         tree (ndarray or None): (N,) per-column tree label, -1 at separators.
-        frame (dict or None): the frame record; None takes
-            metadata["frame"] when there is one.
-        d_ref (float or None): reference diameter for the calibre classes,
-            in the units of `nodes`; None takes the metadata's d_min.
-        class_bound (float): an edge thinner than class_bound * d_ref is
-            capillary-class.
 
     Returns:
         dict: JSON-serialisable; numbers are Python int or float, undefined
@@ -1370,13 +842,6 @@ def describe(nodes, edges=None, metadata=None, volume=None, margin=None, tol=DEF
         tree = np.asarray(tree)
         if tree.shape != (n_columns,):
             raise ValueError(f"tree must hold one label per column, {n_columns}, got {tree.shape}")
-    if frame is None:
-        frame = metadata.get("frame")
-    frame_vector = _frame_vector(frame)
-    d_ref, d_ref_source = _reference_diameter(d_ref, metadata)
-    if not _positive_number(class_bound):
-        raise ValueError(f"class_bound must be a positive number, got {class_bound!r}")
-    class_bound = float(class_bound)
 
     degree = graph.degree(edges, n_columns)
     vertices = np.flatnonzero(canonical == np.arange(n_columns))
@@ -1385,8 +850,7 @@ def describe(nodes, edges=None, metadata=None, volume=None, margin=None, tol=DEF
     geometry = _polyline_geometry(nodes)
     length, tangent = _edge_geometry(nodes, edges)
     total_length_mm = float(length.sum()) / 1000.0
-    paths = graph.segments(nodes, edges, canonical)
-    arc_chord, curvature = _segment_stats(nodes, paths)
+    arc_chord, curvature = _segment_stats(nodes, graph.segments(nodes, edges, canonical))
 
     tip_vertices = vertices[degree[vertices] == 1]
     tips = {"count": int(tip_vertices.size),
@@ -1416,37 +880,6 @@ def describe(nodes, edges=None, metadata=None, volume=None, margin=None, tol=DEF
                 "tips": int(np.count_nonzero(tree[tip_vertices] == label)),
                 "length_mm": float(geometry["length"][of_polyline].sum()) / 1000.0}
 
-    # Frame-relative and class descriptors. The tangent of an edge runs from
-    # its lower column to its higher one, the direction of growth for a
-    # network the generator wrote; _edge_geometry's runs the way the edge is
-    # stored, which is the same for edges graph.edges_from_nodes built.
-    lower, higher = np.minimum(edges[0], edges[1]), np.maximum(edges[0], edges[1])
-    oriented = np.where((edges[0] <= edges[1])[:, None], tangent, -tangent)
-    edge_diameter = (vertex_diameter[edges[0]] + vertex_diameter[edges[1]]) / 2.0
-    classes = {"all": np.ones(edges.shape[1], dtype=bool), "capillary": None, "larger": None}
-    if d_ref is not None:
-        known = np.isfinite(edge_diameter)
-        classes["capillary"] = known & (edge_diameter < class_bound * d_ref)
-        classes["larger"] = known & ~classes["capillary"]
-    frame_orientation = polar_order = transverse_spacing = None
-    if frame_vector is not None:
-        frame_orientation = _frame_orientation(frame_vector, oriented, length, classes, d_ref)
-        kind, direction = frame_vector
-        if kind == "axis" and frame.get("sense") == "polar" and tree is not None:
-            polar_order = _polar_order(oriented @ direction, length, tree[higher].astype(np.int64),
-                                       frame.get("tree_senses"), classes)
-        if kind == "axis" and d_ref is not None:
-            capillary = classes["capillary"] & (length > 0.0)
-            transverse_spacing = _transverse_spacing(nodes[:3].T, lower[capillary], higher[capillary], direction,
-                                                     frame, d_ref, volume, metadata)
-    orientation_by_class = calibre_shares = segments_by_class = None
-    if d_ref is not None:
-        orientation_by_class = {name: _orientation_shape(oriented[mask], length[mask])
-                                for name, mask in classes.items()}
-        calibre_shares = _calibre_shares(edge_diameter, length, d_ref)
-        arc, mean_diameter = _segment_calibres(nodes, paths, vertex_diameter)
-        segments_by_class = _segments_by_class(arc, mean_diameter, class_bound * d_ref, d_ref)
-
     result = {
         "units": metadata.get("units", "um"),
         "points": int(geometry["columns"].size),
@@ -1470,14 +903,6 @@ def describe(nodes, edges=None, metadata=None, volume=None, margin=None, tol=DEF
         "events": dict(metadata.get("events") or {}),
         "flags": {key: metadata[key] for key in FLAG_KEYS if key in metadata},
         "per_tree": per_tree,
-        "frame": copy.deepcopy(frame),
-        "classes": {"bound": class_bound, "d_ref": d_ref, "d_ref_source": d_ref_source},
-        "frame_orientation": frame_orientation,
-        "polar_order": polar_order,
-        "orientation_by_class": orientation_by_class,
-        "calibre_shares": calibre_shares,
-        "segments_by_class": segments_by_class,
-        "transverse_spacing": transverse_spacing,
     }
     return _json_ready(result)
 
@@ -1503,13 +928,11 @@ def load_archive(path):
     return {"nodes": nodes, "metadata": metadata, "edges": edges, "node_kind": node_kind, "tree": tree}
 
 
-def describe_archive(path, volume=None, margin=None, tol=DEFAULT_TOL, frame=None, d_ref=None,
-                     class_bound=DEFAULT_CLASS_BOUND):
+def describe_archive(path, volume=None, margin=None, tol=DEFAULT_TOL):
     """Describes the network stored in an archive; see `describe`."""
     archive = load_archive(path)
     return describe(archive["nodes"], edges=archive["edges"], metadata=archive["metadata"],
-                    volume=volume, margin=margin, tol=tol, tree=archive["tree"],
-                    frame=frame, d_ref=d_ref, class_bound=class_bound)
+                    volume=volume, margin=margin, tol=tol, tree=archive["tree"])
 
 
 def main(argv=None):
