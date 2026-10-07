@@ -624,5 +624,14 @@
       "node_kind": "38d259f00eebd7a63288a0b883e1c4e2c408ef67eccaa973659624b06dd27219",
       "tree": "f1f21080086b26a5467432b8155712b2e856c3f7c450cadd509e2535c997654b"
     }
+  },
+  "describe_net_00000_tree.npz": {
+    "report": "36f0516a1c31f8fff0843224bf38691ba07be296c095896ed8f0a808030650d1"
+  },
+  "describe_net_00001_mesh.npz": {
+    "report": "e4bc990dd51205e8fd4d084952711d125d290a5e8c1e4afafadffeddb58fcba5"
+  },
+  "describe_net_00002_tumour.npz": {
+    "report": "bc9fb7711a10c4ac777408898d85bbe155f85186a62747fe64b7fca0a8f77bcc"
   }
 }

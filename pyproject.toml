@@ -30,4 +30,4 @@ Repository = "https://github.com/psweens/V-System"
 
 [tool.setuptools]
 py-modules = ["main", "vSystem", "libGenerator", "analyseGrammar", "utils", "computeVoxel", "preprocessing", "visuals", "check_connectivity",
-              "graph", "spatial", "tortuosity", "collisions", "anastomosis", "describe", "join", "library"]
+              "graph", "spatial", "tortuosity", "collisions", "anastomosis", "describe", "join", "library", "guidance", "frames"]

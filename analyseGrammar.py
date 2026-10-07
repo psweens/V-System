@@ -29,7 +29,7 @@ Upper-case letters are non-terminals left over from the recursion and draw
 nothing. Whitespace between tokens is ignored.
 
 Two optional shaping modes change how a braced stem is realised without
-changing what the grammar decides. With a `walk` (see tortuosity.py) the moves
+changing what the grammar decides, and the walk may in turn be guided. With a `walk` (see tortuosity.py) the moves
 inside a stem are replaced by a persistent random walk of the same arc length,
 so the stem curves continuously instead of zig-zagging, and the turns written
 inside the stem are ignored; the turtle's position and frame after the stem are
@@ -42,6 +42,15 @@ interpreter samples the stem itself and yields plain polyline rows, so that
 utils.interpolate_segments has nothing left to smooth; the samples of an
 unshortened stem are identical to those the default path produces. Neither
 mode is used unless asked for, and the default path draws no random numbers.
+
+A walk may carry a `guidance` (see guidance.py): before every step's draw
+the heading is turned deterministically towards an axis or a plane under
+the rule chosen for the stem's calibre. The rule is chosen once per walked
+polyline, from the diameter of its first move, and held, so that a local
+anomaly does not switch class part way along; bare moves and spline stems
+are never steered. Each redraw of a step draws its noise about the steered
+frame, so the walk still draws two numbers per attempt, and without a
+guidance nothing else runs.
 """
 import math
 import re
@@ -50,6 +59,7 @@ import numpy as np
 
 import libGenerator as lg
 from libGenerator import calBifurcation, getLength
+from guidance import EVENT_KEYS as GUIDANCE_EVENTS
 from utils import bspline, rotate_about, unit
 from tortuosity import perpendicular_rotation, step_std
 
@@ -178,9 +188,12 @@ class WalkSettings:
             untouched.
         bound_attempts (int): redraws a step that would leave the growth box
             is allowed before the branch is terminated.
+        guidance (guidance.Guidance or None): a per-tree guidance that
+            steers every walk step towards its rule's field; None leaves the
+            walk as it is.
     """
 
-    def __init__(self, persistence, rng, bound_attempts=20):
+    def __init__(self, persistence, rng, bound_attempts=20, guidance=None):
         if not persistence > 0.0:
             raise ValueError(f"persistence must be a positive number of diameters, got {persistence!r}")
         if bound_attempts < 0:
@@ -188,6 +201,7 @@ class WalkSettings:
         self.persistence = float(persistence)
         self.rng = rng
         self.bound_attempts = int(bound_attempts)
+        self.guidance = guidance
 
 
 def _start_state(d0, position, direction, perpendicular, bounds):
@@ -288,7 +302,7 @@ def _interpret(turtle_program, d0, position, direction, perpendicular, bounds, e
 
 
 _SHAPED_EVENTS = ("bound_terminations", "walk_bound_redraws", "walk_bound_terminations",
-                  "collision_redraws", "collision_terminations", "collision_truncated_stems")
+                  "collision_redraws", "collision_terminations", "collision_truncated_stems") + GUIDANCE_EVENTS
 
 
 def _sample_stem(control, subdivisions):
@@ -359,6 +373,8 @@ def _interpret_shaped(turtle_program, d0, position, direction, perpendicular, bo
     last_stem = None        # the stem the next polyline descends from
     control = None          # buffered control rows of a spline stem
     arc = 0.0               # arc position along the current stem
+    rule = None             # the guidance rule of the polyline being walked
+    rule_due = False        # the rule is chosen at the polyline's first move
     counter = [0]
 
     def open_stem(parent, junction, junction_diameter):
@@ -391,7 +407,12 @@ def _interpret_shaped(turtle_program, d0, position, direction, perpendicular, bo
                 std = step_std(h, diam, walk.persistence)
                 radius = diam / 2.0
                 terminated = False
+                if walk.guidance is not None and rule_due:
+                    rule = walk.guidance.rule_for(diam)
+                    rule_due = False
                 for _ in range(steps_per_move):
+                    if walk.guidance is not None:
+                        heading, perp = walk.guidance.steer(heading, perp, pos, rule, diam, h, arc, events)
                     bound_failures = 0
                     collision_failures = 0
                     while True:
@@ -508,6 +529,7 @@ def _interpret_shaped(turtle_program, d0, position, direction, perpendicular, bo
                 # whose restored position is that curve's first point
                 stem = start_stem(stem, pos, diam)
                 arc = 0.0
+                rule_due = True
                 if walk is None:
                     control = [(pos[0], pos[1], pos[2], diam)]
                 else:
@@ -522,6 +544,7 @@ def _interpret_shaped(turtle_program, d0, position, direction, perpendicular, bo
                 last_stem = stem
             stem = start_stem(last_stem, pos, diam)
             arc = 0.0
+            rule_due = True
             if walk is None:
                 control = [(pos[0], pos[1], pos[2], diam)]
             else:

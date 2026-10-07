@@ -320,7 +320,8 @@ def describe_case(name, report):
     hashes[name] = {"report": record_sha(restrict(report, rules["describe"]))}
     facts[name] = {"points": report["points"], "components": report["components"], "cycles": report["cycles"],
                    "volume_source": report["volume_source"], "violations": report["clearance_um"]["violations"],
-                   "events": len(report["events"]), "flags": sorted(restrict(report["flags"], rules["describe"]["flags"])),
+                   "events": len(restrict(report["events"], rules["events"])),
+                   "flags": sorted(restrict(report["flags"], rules["describe"]["flags"])),
                    "trees": sorted(report["per_tree"] or {})}
     extras[name] = {"report": sorted(beyond(report, rules["describe"])),
                     "events": beyond(report["events"], rules["events"])}
@@ -560,10 +561,17 @@ for row in index["networks"]:
         os.path.join(directory, row["file"]), "metadata")
     extra["metadata"][row["file"]] = sorted(beyond(metadata, rules["metadata"]))
     extra["events"][row["file"]] = beyond(metadata["events"], rules["events"])
+    report = describe_module.describe_archive(os.path.join(directory, row["file"]))
+    # from 3.5 the archive's metadata carries d_min at its top level, which the
+    # report's flags show; the flags are compared without it so that the rest of
+    # the report is pinned against the 3.4 archive, which has no such entry
+    report["flags"].pop("d_min", None)
+    describe_case("describe_" + row["file"], report)
 hashes["library"] = entry
 facts["library"] = {"files": [row["file"] for row in index["networks"]], "families": content["families"],
                     "columns": table[0][:len(lists["index_columns"])], "rows": len(table) - 1,
-                    "content_keys": sorted(content), "failures": len(content["failures"])}
+                    "content_keys": sorted(content), "failures": len(content["failures"]),
+                    "weights": library.library_weights(index).tolist()}
 extras["library"] = extra
 
 print(json.dumps({"hashes": hashes, "facts": facts, "extras": extras}, default=plain))
@@ -598,6 +606,15 @@ def run_drivers(scratch):
     runs = [(code_dir, start_driver(code_dir, os.path.join(scratch, name)))
             for name, code_dir in (("reference", REFERENCE), ("current", ROOT))]
     return tuple(finish_driver(process, code_dir) for code_dir, process in runs)
+
+
+def _restrict(value, rule):
+    """The 3.4 part of a record, as the driver's restrict takes it."""
+    if rule is None or not isinstance(value, dict):
+        return value
+    if "*" in rule:
+        return {key: _restrict(item, rule["*"]) for key, item in value.items()}
+    return {key: _restrict(value[key], sub) for key, sub in rule.items() if key in value}
 
 
 def file_sha256(path):
@@ -701,6 +718,63 @@ class PinnedRelease34Tests(unittest.TestCase):
                          ["net_00000_tree.npz", "net_00001_mesh.npz", "net_00002_tumour.npz"])
         self.assertEqual(facts["library"]["columns"], list(INDEX_COLUMNS_3_4))
         self.assertEqual((facts["library"]["rows"], facts["library"]["failures"]), (3, 0))
+
+    def test_with_the_later_options_off_the_frame_is_none_and_the_new_kwargs_are_none(self):
+        # what 3.5 appends while its options are off: a frame of kind "none" in
+        # every return, sidecar and archive, and guidance and root offsets of None
+        extras = self.current["extras"]
+        grown = [case for case in extras if isinstance(extras[case].get("returned"), dict)]
+        self.assertGreater(len(grown), 10)
+        for case in grown:
+            with self.subTest(case=case):
+                returned = extras[case]["returned"]
+                self.assertEqual(set(returned), {"frame"})
+                self.assertEqual(returned["frame"]["kind"], "none")
+                self.assertEqual(returned["frame"]["rules"], [])
+                if "kwargs" in extras[case]:
+                    self.assertEqual(extras[case]["kwargs"], {"guidance": None, "root_offsets": None})
+        for case in ("cli_tree", "cli_mesh", "cli_options"):
+            for stem, entry in extras[case].items():
+                with self.subTest(case=case, stem=stem):
+                    for record in (entry["sidecar"], entry["metadata"]):
+                        self.assertEqual(set(record), {"guidance", "root_offsets", "frame"})
+                        self.assertIsNone(record["guidance"])
+                        self.assertIsNone(record["root_offsets"])
+                        self.assertEqual(record["frame"]["kind"], "none")
+                    self.assertEqual(entry["arrays"], [])
+        for name, keys in extras["library"]["metadata"].items():
+            with self.subTest(archive=name):
+                self.assertEqual(keys, ["d_min", "frame", "peak_rss_mb", "seconds"])
+        self.assertEqual(extras["library"]["arrays"], {name: [] for name in extras["library"]["arrays"]})
+        self.assertEqual(extras["library"]["index"], [])
+        self.assertEqual(extras["library"]["library_version"], "3.5.0")
+
+    def test_a_3_4_library_loads_and_describes_as_it_did_with_the_new_keys_inert(self):
+        # the library the 3.4 modules wrote in the reference run, read by the current modules
+        import numpy as np
+        import library
+        from describe import describe_archive
+        directory = os.path.join(self.scratch, "reference", "library")
+        index = library.load_index(os.path.join(directory, "index.json"))
+        # the weights the 3.4 modules gave this index in the reference run, in this environment
+        self.assertEqual(library.library_weights(index).tolist(), self.reference["facts"]["library"]["weights"])
+        ratio = np.array([row["ratio"] for row in index["networks"]])
+        np.testing.assert_allclose(library.library_weights(index), ratio ** -3.0 / np.sum(ratio ** -3.0),
+                                   rtol=1e-15)
+        for row in index["networks"]:
+            with self.subTest(archive=row["file"]):
+                report = describe_archive(os.path.join(directory, row["file"]))
+                # every 3.4 key as the 3.4 modules reported it on the same archive
+                self.assertEqual(hashlib.sha256(json.dumps(_restrict(report, RULES["describe"]), sort_keys=True,
+                                                           separators=(",", ":")).encode()).hexdigest(),
+                                 self.reference["hashes"]["describe_" + row["file"]]["report"])
+                self.assertIsNone(report["frame"])
+                for key in ("frame_orientation", "polar_order", "transverse_spacing"):
+                    self.assertIsNone(report[key], key)
+                self.assertEqual(report["classes"], {"bound": 2.0, "d_ref": 1.0, "d_ref_source": "grow_kwargs"})
+                for key in ("calibre_shares", "segments_by_class", "orientation_by_class"):
+                    self.assertIsNotNone(report[key], key)
+                self.assertGreater(report["calibre_shares"]["length"]["below_2"], 0.0)
 
     def test_with_the_later_options_off_every_appended_counter_is_zero(self):
         def appended(value):

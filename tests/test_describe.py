@@ -10,6 +10,7 @@ import io
 import json
 import math
 import os
+import random
 import sys
 import tempfile
 import unittest
@@ -24,6 +25,7 @@ import graph  # noqa: E402
 from collisions import KIN_REACH  # noqa: E402
 from describe import (FLAG_KEYS, POLAR_BINS, AZIMUTH_BINS, describe, clearance,  # noqa: E402
                       load_archive, describe_archive, main)
+import main as main_module  # noqa: E402
 
 FIXTURES = sorted(glob.glob(os.path.join(ROOT, "tests", "fixtures", "*.npz")))
 
@@ -612,6 +614,583 @@ class CommandLineTests(unittest.TestCase):
         self.assertEqual(result["clearance_um"]["margin"], 1.5)
         with self.assertRaises(SystemExit):
             self.run_main(FIXTURES[0], "--margin", "-1")
+
+
+# ---------------------------------------------------------------------------
+# 3.5: the frame-relative and calibre-class descriptors
+# ---------------------------------------------------------------------------
+
+# The keys describe wrote before 3.5, in order, and the ones appended since.
+OLD_KEYS = ("units", "points", "polylines", "vertices", "edges", "components", "cycles", "total_length_mm",
+            "diameter_um", "arc_chord", "curvature_per_um", "tips", "degree_histogram", "orientation",
+            "length_density_mm_per_mm3", "volume_mm3", "volume_source", "bounding_box_um", "clearance_um",
+            "events", "flags", "per_tree")
+NEW_KEYS = ("frame", "classes", "frame_orientation", "polar_order", "orientation_by_class",
+            "calibre_shares", "segments_by_class", "transverse_spacing")
+EMPTY_LENGTHS = {"count": 0, "median": None, "p10": None, "p90": None, "cv": None,
+                 "median_d": None, "p10_d": None, "p90_d": None}
+PROPERTIES = {"k": 3, "epsilon": 7.0, "randmarg": 0.2, "sigma": 5, "stochparams": True}
+
+
+def frame_record(kind="axis", axis=(1.0, 0.0, 0.0), sense="nematic", tree_senses=None, normal=(0.0, 0.0, 1.0),
+                 origin=(0.0, 0.0, 0.0), grow_direction=(0.0, 1.0, 0.0), grow_perpendicular=(0.0, 0.0, 1.0)):
+    """A frame record as the generator writes it, without rules."""
+    return {"frame_version": 1, "kind": kind,
+            "axis": [float(v) for v in axis] if kind == "axis" else None,
+            "sense": sense if kind == "axis" else None,
+            "tree_senses": None if tree_senses is None else [int(v) for v in tree_senses],
+            "normal": [float(v) for v in normal] if kind == "plane" else None,
+            "origin": [float(v) for v in origin],
+            "grow_direction": [float(v) for v in grow_direction],
+            "grow_perpendicular": [float(v) for v in grow_perpendicular],
+            "rules": []}
+
+
+def unit_polylines(directions, rng, box=200.0, diameter=1.0):
+    """One two-point polyline of unit length per row of `directions`, each from a random point of a box."""
+    directions = np.asarray(directions, dtype=float)
+    n = directions.shape[0]
+    start = rng.uniform(0.0, box, (n, 3))
+    nodes = np.full((4, 3 * n - 1), np.nan)
+    nodes[:3, 0::3] = start.T
+    nodes[:3, 1::3] = (start + directions).T
+    nodes[3, 0::3] = diameter
+    nodes[3, 1::3] = diameter
+    return nodes
+
+
+def directions_about_z(rng, cosines):
+    """Unit vectors with the given cosines to the z axis and uniform azimuths."""
+    cosines = np.asarray(cosines, dtype=float)
+    azimuth = rng.uniform(0.0, 2.0 * np.pi, cosines.size)
+    sine = np.sqrt(np.maximum(1.0 - cosines ** 2, 0.0))
+    return np.stack([sine * np.cos(azimuth), sine * np.sin(azimuth), cosines], axis=1)
+
+
+def rejection_cosines(rng, n, log_density):
+    """
+    n cosines to the axis under a density on the sphere proportional to
+    exp(log_density(u)), log_density at most 0, by rejection from the
+    uniform sphere, whose cosine is uniform on [-1, 1].
+    """
+    kept = []
+    drawn = 0
+    while drawn < n:
+        u = rng.uniform(-1.0, 1.0, 4 * n)
+        accepted = u[rng.uniform(0.0, 1.0, 4 * n) < np.exp(log_density(u))]
+        kept.append(accepted)
+        drawn += accepted.size
+    return np.concatenate(kept)[:n]
+
+
+def watson_mean_square(k):
+    """<u^2> of the Watson distribution exp(k u^2), by a fine trapezoidal rule, as a check on describe's quadrature."""
+    # the rule is written out so that the test runs on every numpy the project supports
+    u = np.linspace(0.0, 1.0, 200001)
+    density = np.exp(k * u * u - max(k, 0.0))
+    weight = np.full(u.size, 1.0 / (u.size - 1))
+    weight[[0, -1]] /= 2.0
+    return float(np.sum(weight * u * u * density) / np.sum(weight * density))
+
+
+def langevin(k):
+    """coth k - 1 / k."""
+    return 1.0 / math.tanh(k) - 1.0 / k
+
+
+def square_array(n, spacing, length, axis=2, diameter=1.0):
+    """
+    n x n straight vessels of the given length along one axis, each a
+    two-point polyline from 0 to `length` along it, on a square grid of the
+    given spacing centred on the axis.
+    """
+    across = [k for k in range(3) if k != axis]
+    runs = []
+    for i in range(n):
+        for j in range(n):
+            start = [0.0, 0.0, 0.0]
+            start[across[0]] = (i - (n - 1) / 2.0) * spacing
+            start[across[1]] = (j - (n - 1) / 2.0) * spacing
+            end = list(start)
+            end[axis] = length
+            runs.append([tuple(start) + (diameter,), tuple(end) + (diameter,)])
+    return archive(*runs)
+
+
+def rotation(rng):
+    """A random proper rotation matrix."""
+    q, r = np.linalg.qr(rng.normal(size=(3, 3)))
+    q = q * np.sign(np.diag(r))
+    if np.linalg.det(q) < 0.0:
+        q[:, 0] = -q[:, 0]
+    return q
+
+
+def rotated(nodes, frame, matrix):
+    """The archive and the frame record turned by `matrix` about the origin."""
+    turned = nodes.copy()
+    finite = np.isfinite(nodes[0])
+    turned[:3, finite] = matrix @ nodes[:3, finite]
+    record = dict(frame)
+    for key in ("axis", "normal", "origin", "grow_direction", "grow_perpendicular"):
+        if record.get(key) is not None:
+            record[key] = (matrix @ np.asarray(record[key], dtype=float)).tolist()
+    return turned, record
+
+
+_SMALL_TREE = {}
+
+
+def small_tree():
+    """A small tree grown once from fixed seeds, for the tests that need a generated network."""
+    if not _SMALL_TREE:
+        random.seed(3)
+        np.random.seed(3)
+        _SMALL_TREE.update(main_module.grow_network(5, 20.0, dict(PROPERTIES), (48, 48, 24), seed=3))
+    return _SMALL_TREE
+
+
+class FrameOrientationTests(unittest.TestCase):
+    def test_order_is_exact_for_vessels_along_and_across_the_axis(self):
+        along = describe(archive(straight()), frame=frame_record(axis=(1, 0, 0)))["frame_orientation"]
+        self.assertEqual(along["kind"], "axis")
+        # the classes need a reference diameter
+        self.assertIsNone(along["capillary"])
+        self.assertIsNone(along["larger"])
+        entry = along["all"]
+        self.assertEqual((entry["S"], entry["mean_abs_cos"], entry["crossing_ratio"]), (1.0, 1.0, 1.0))
+        self.assertEqual((entry["mean_angle_deg"], entry["within_20_deg"], entry["within_45_deg"]), (0.0, 1.0, 1.0))
+        self.assertEqual((entry["length"], entry["length_d"]), (45.0, None))
+        # a single direction lies beyond the range of both concentrations
+        self.assertIsNone(entry["watson_K"])
+        self.assertIsNone(entry["fisher_axial_K"])
+
+        across = describe(archive(straight(axis=1)), frame=frame_record(axis=(1, 0, 0)))["frame_orientation"]["all"]
+        self.assertEqual((across["S"], across["mean_abs_cos"]), (-0.5, 0.0))
+        self.assertAlmostEqual(across["mean_angle_deg"], 90.0)
+        self.assertIsNone(across["crossing_ratio"])
+        self.assertEqual((across["within_20_deg"], across["within_45_deg"]), (0.0, 0.0))
+        self.assertIsNone(across["watson_K"])
+        self.assertIsNone(across["fisher_axial_K"])
+
+        # equal lengths along x and along y: every average is halfway
+        both = archive(straight(), straight(axis=1, offset=(0.0, 10.0, 0.0)))
+        mixed = describe(both, frame=frame_record(axis=(1, 0, 0)), d_ref=1.0)["frame_orientation"]
+        entry = mixed["all"]
+        self.assertAlmostEqual(entry["S"], 0.25)
+        self.assertAlmostEqual(entry["mean_abs_cos"], 0.5)
+        self.assertAlmostEqual(entry["crossing_ratio"], 2.0)
+        self.assertAlmostEqual(entry["mean_angle_deg"], 45.0)
+        self.assertEqual((entry["within_20_deg"], entry["within_45_deg"]), (0.5, 0.5))
+        # each concentration inverts its defining moment
+        self.assertAlmostEqual(watson_mean_square(entry["watson_K"]), 0.5, places=6)
+        self.assertAlmostEqual(langevin(entry["fisher_axial_K"]), 0.5, places=9)
+        # at d_ref 1 both vessels (diameter 4) are larger-class, so that entry is
+        # the whole network and the capillary one has no length
+        self.assertEqual(mixed["larger"], dict(entry, length_d=90.0))
+        self.assertIsNone(mixed["capillary"])
+
+        # a plane frame: both vessels lie in the xy plane, half of their
+        # length runs along a normal of x
+        plane = describe(both, frame=frame_record(kind="plane", normal=(0, 0, 1)))["frame_orientation"]
+        self.assertEqual(plane["kind"], "plane")
+        self.assertEqual(plane["all"], {"in_plane_fraction": 1.0, "S_n": -0.5, "length": 90.0, "length_d": None})
+        tilted = describe(both, frame=frame_record(kind="plane", normal=(1, 0, 0)), d_ref=2.0)["frame_orientation"]
+        self.assertAlmostEqual(tilted["all"]["in_plane_fraction"], 0.5)
+        self.assertAlmostEqual(tilted["all"]["S_n"], 0.25)
+        self.assertEqual(tilted["all"]["length_d"], 45.0)
+
+    def test_isotropic_tangents_have_no_order(self):
+        rng = np.random.default_rng(11)
+        directions = rng.normal(size=(10000, 3))
+        directions /= np.linalg.norm(directions, axis=1)[:, None]
+        nodes = unit_polylines(directions, rng)
+        entry = describe(nodes, frame=frame_record(axis=(0, 0, 1)))["frame_orientation"]["all"]
+        self.assertLess(abs(entry["S"]), 0.03)
+        self.assertLess(abs(entry["watson_K"]), 0.3)
+        self.assertAlmostEqual(entry["mean_abs_cos"], 0.5, delta=0.03)
+        # the mean angle of a uniform direction is int_0^1 acos(u) du = 1 radian
+        self.assertAlmostEqual(entry["mean_angle_deg"], math.degrees(1.0), delta=2.0)
+        self.assertAlmostEqual(entry["length"], 10000.0, places=6)
+        plane = describe(nodes, frame=frame_record(kind="plane"))["frame_orientation"]["all"]
+        self.assertAlmostEqual(plane["in_plane_fraction"], 2.0 / 3.0, delta=0.03)
+        self.assertLess(abs(plane["S_n"]), 0.03)
+
+    def test_watson_concentration_is_recovered(self):
+        rng = np.random.default_rng(5)
+        cosines = rejection_cosines(rng, 10000, lambda u: 5.0 * (u * u - 1.0))
+        nodes = unit_polylines(directions_about_z(rng, cosines), rng)
+        entry = describe(nodes, frame=frame_record(axis=(0, 0, 1)))["frame_orientation"]["all"]
+        self.assertLess(abs(entry["watson_K"] - 5.0) / 5.0, 0.1)
+        # and the measured order agrees with the distribution's own
+        self.assertAlmostEqual(entry["S"], (3.0 * watson_mean_square(5.0) - 1.0) / 2.0, delta=0.03)
+
+    def test_fisher_axial_concentration_is_recovered(self):
+        rng = np.random.default_rng(6)
+        cosines = rejection_cosines(rng, 10000, lambda u: 5.0 * (np.abs(u) - 1.0))
+        nodes = unit_polylines(directions_about_z(rng, cosines), rng)
+        entry = describe(nodes, frame=frame_record(axis=(0, 0, 1)))["frame_orientation"]["all"]
+        self.assertLess(abs(entry["fisher_axial_K"] - 5.0) / 5.0, 0.1)
+        self.assertAlmostEqual(entry["mean_abs_cos"], langevin(5.0), delta=0.03)
+
+    def test_polar_order_follows_the_tree_senses_and_the_column_order(self):
+        nodes = archive(straight())                       # root at x = 0, tip at x = 45
+        tree = np.zeros(nodes.shape[1], dtype=np.int8)
+        polar = frame_record(axis=(1, 0, 0), sense="polar", tree_senses=[1])
+        r = describe(nodes, tree=tree, frame=polar, d_ref=10.0)
+        self.assertEqual(r["polar_order"], {"all": 1.0, "capillary": 1.0, "larger": None})
+        against = frame_record(axis=(1, 0, 0), sense="polar", tree_senses=[-1])
+        r = describe(nodes, tree=tree, frame=against)
+        self.assertEqual(r["polar_order"], {"all": -1.0, "capillary": None, "larger": None})
+        # the tangent runs from the lower column to the higher, so a polyline
+        # written from its tip to its root runs against the axis
+        self.assertEqual(describe(archive(straight()[::-1]), tree=tree, frame=polar)["polar_order"]["all"], -1.0)
+        # an edge whose label indexes no sense, as a bridge's label 2, is left out of both sums
+        with_bridge = archive(straight(), straight(offset=(0.0, 10.0, 0.0))[::-1])
+        labels = np.full(with_bridge.shape[1], -1, dtype=np.int8)
+        labels[np.isfinite(with_bridge[0])] = [0] * 10 + [2] * 10
+        self.assertEqual(describe(with_bridge, tree=labels, frame=polar)["polar_order"]["all"], 1.0)
+        labels[np.isfinite(with_bridge[0])] = [0] * 10 + [1] * 10
+        self.assertEqual(describe(with_bridge, tree=labels, frame=polar)["polar_order"]["all"], 1.0)
+        two = frame_record(axis=(1, 0, 0), sense="polar", tree_senses=[1, -1])
+        self.assertEqual(describe(with_bridge, tree=labels, frame=two)["polar_order"]["all"], 1.0)
+        two = frame_record(axis=(1, 0, 0), sense="polar", tree_senses=[1, 1])
+        self.assertEqual(describe(with_bridge, tree=labels, frame=two)["polar_order"]["all"], 0.0)
+        # None without tree labels, for a nematic sense and for a plane frame
+        self.assertIsNone(describe(nodes, frame=polar)["polar_order"])
+        self.assertIsNone(describe(nodes, tree=tree, frame=frame_record(axis=(1, 0, 0)))["polar_order"])
+        self.assertIsNone(describe(nodes, tree=tree, frame=frame_record(kind="plane"))["polar_order"])
+
+    def test_calibre_shares_are_exact(self):
+        nodes = archive([(0, 0, 0, 1.0), (10, 0, 0, 1.0)], [(0, 10, 0, 4.0), (5, 10, 0, 4.0)])
+        shares = describe(nodes, d_ref=1.0)["calibre_shares"]
+        self.assertEqual(set(shares), {"length", "volume"})
+        for key in ("below_1.5", "below_2", "below_3"):
+            self.assertAlmostEqual(shares["length"][key], 2.0 / 3.0)
+            self.assertAlmostEqual(shares["volume"][key], 10.0 / 90.0)
+        self.assertEqual(list(shares["length"]), ["below_1.5", "below_2", "below_3"])
+        # at d_ref 2 the thick vessel is below 3 d_ref but not below 2
+        shares = describe(nodes, d_ref=2.0)["calibre_shares"]
+        self.assertAlmostEqual(shares["length"]["below_2"], 2.0 / 3.0)
+        self.assertAlmostEqual(shares["length"]["below_3"], 1.0)
+        self.assertAlmostEqual(shares["volume"]["below_3"], 1.0)
+        self.assertIsNone(describe(nodes)["calibre_shares"])
+        # an edge of unknown diameter is outside the totals
+        unknown = archive([(0, 0, 0, np.nan), (10, 0, 0, np.nan)], [(0, 10, 0, 1.0), (5, 10, 0, 1.0)])
+        self.assertEqual(describe(unknown, d_ref=1.0)["calibre_shares"]["length"]["below_2"], 1.0)
+
+    def test_transverse_spacing_of_a_square_array(self):
+        n, spacing, length = 4, 3.0, 20.0
+        nodes = square_array(n, spacing, length, axis=2)
+        frame = frame_record(axis=(0, 0, 1), origin=(0.0, 0.0, length / 2.0))
+        box = (n * spacing, n * spacing, length)
+        r = describe(nodes, frame=frame, d_ref=1.0, volume=box)["transverse_spacing"]
+        self.assertEqual((r["planes"], r["count"], r["area_source"]), (9, 9 * n * n, "argument"))
+        for key in ("median", "mean", "p10", "p90", "median_d", "mean_d", "p10_d", "p90_d"):
+            self.assertAlmostEqual(r[key], spacing, msg=key)
+        self.assertAlmostEqual(r["crossing_density"], 1.0 / spacing ** 2)
+        self.assertAlmostEqual(r["crossing_density_d"], 1.0 / spacing ** 2)
+        # d_ref scales the _d forms only
+        r = describe(nodes, frame=frame, d_ref=2.0, volume=box)["transverse_spacing"]
+        self.assertAlmostEqual(r["median"], spacing)
+        self.assertAlmostEqual(r["median_d"], spacing / 2.0)
+        self.assertAlmostEqual(r["crossing_density_d"], 4.0 / spacing ** 2)
+        # the growth box of the metadata serves when no volume is given
+        r = describe(nodes, frame=frame, d_ref=1.0, metadata={"growth_box_um": list(box)})["transverse_spacing"]
+        self.assertEqual(r["area_source"], "growth_box_um")
+        self.assertAlmostEqual(r["crossing_density"], 1.0 / spacing ** 2)
+        # without either, the rectangle bounding the capillary end points
+        r = describe(nodes, frame=frame, d_ref=1.0)["transverse_spacing"]
+        self.assertEqual(r["area_source"], "capillary_bounding_box")
+        self.assertAlmostEqual(r["crossing_density"], n ** 2 / ((n - 1) * spacing) ** 2)
+        self.assertAlmostEqual(r["median"], spacing)
+        # the box follows the frame: with the axis along x the extents still
+        # run along (g x p, g, p), which are x, y and z
+        across = square_array(n, spacing, length, axis=0)
+        frame_x = frame_record(axis=(1, 0, 0), origin=(length / 2.0, 0.0, 0.0))
+        r = describe(across, frame=frame_x, d_ref=1.0, volume=(length, n * spacing, n * spacing))["transverse_spacing"]
+        self.assertEqual(r["count"], 9 * n * n)
+        self.assertAlmostEqual(r["median"], spacing)
+        self.assertAlmostEqual(r["crossing_density"], 1.0 / spacing ** 2)
+        # the heading along the axis: the in-plane axes come from the perpendicular instead
+        frame_g = frame_record(axis=(0, 0, 1), origin=(0.0, 0.0, length / 2.0), grow_direction=(0, 0, 1),
+                               grow_perpendicular=(1, 0, 0))
+        r = describe(nodes, frame=frame_g, d_ref=1.0)["transverse_spacing"]
+        self.assertAlmostEqual(r["crossing_density"], n ** 2 / ((n - 1) * spacing) ** 2)
+        # None without an axis frame or a reference diameter, without a
+        # capillary edge, and when the capillaries have no extent along the axis
+        self.assertIsNone(describe(nodes, frame=frame)["transverse_spacing"])
+        self.assertIsNone(describe(nodes, frame=frame_record(kind="plane"), d_ref=1.0)["transverse_spacing"])
+        self.assertIsNone(describe(nodes, frame=frame, d_ref=0.1)["transverse_spacing"])
+        flat = describe(archive(straight(axis=1)), frame=frame_record(axis=(1, 0, 0)), d_ref=10.0)
+        self.assertIsNone(flat["transverse_spacing"])
+        # end points spread along the axis but no edge crossing a plane:
+        # nothing pooled, and a density of zero over the bounding rectangle
+        r = describe(nodes, frame=frame_record(axis=(1, 0, 0)), d_ref=1.0)["transverse_spacing"]
+        self.assertEqual((r["count"], r["median"], r["crossing_density"]), (0, None, 0.0))
+        # a bounding rectangle without area gives no density
+        r = describe(archive([(0, 0, 0, 1.0), (0, 0, 10, 1.0)]), frame=frame, d_ref=1.0)["transverse_spacing"]
+        self.assertEqual((r["count"], r["area_source"]), (0, "capillary_bounding_box"))
+        self.assertIsNone(r["crossing_density"])
+
+    def test_transverse_spacing_does_not_depend_on_the_lab_axes(self):
+        rng = np.random.default_rng(2)
+        nodes = square_array(4, 3.0, 20.0)
+        frame = frame_record(axis=(0, 0, 1), origin=(0.0, 0.0, 10.0))
+        turned_nodes, turned_frame = rotated(nodes, frame, rotation(rng))
+        for volume in ((12.0, 12.0, 20.0), None):
+            with self.subTest(volume=volume):
+                reference = describe(nodes, frame=frame, d_ref=1.0, volume=volume)["transverse_spacing"]
+                turned = describe(turned_nodes, frame=turned_frame, d_ref=1.0, volume=volume)["transverse_spacing"]
+                self.assertEqual(turned["count"], reference["count"])
+                self.assertEqual(turned["area_source"], reference["area_source"])
+                values = dict(numeric_leaves(turned))
+                for key, value in numeric_leaves(reference):
+                    self.assertAlmostEqual(values[key], value, places=9, msg=key)
+
+    def test_section_area_of_an_oblique_plane(self):
+        # one vessel along (1, 1, 0) through a cube of side 2 centred on the
+        # origin: the plane at s = sqrt(2) t cuts the cube in a rectangle of
+        # 2 by 2 sqrt(2) (1 - |t|), and the nine planes sit at t = -0.8 .. 0.8,
+        # so the sections sum to 20 sqrt(2); the single crossing per plane is
+        # not pooled but counts towards the density
+        nodes = archive([(-1.0, -1.0, 0.0, 1.0), (1.0, 1.0, 0.0, 1.0)])
+        frame = frame_record(axis=(1.0, 1.0, 0.0), origin=(0.0, 0.0, 0.0))
+        r = describe(nodes, frame=frame, d_ref=1.0, volume=(2.0, 2.0, 2.0))["transverse_spacing"]
+        self.assertEqual((r["count"], r["median"], r["area_source"]), (0, None, "argument"))
+        self.assertAlmostEqual(r["crossing_density"], 9.0 / (20.0 * math.sqrt(2.0)))
+        self.assertAlmostEqual(r["crossing_density_d"], 9.0 / (20.0 * math.sqrt(2.0)))
+        self.assertEqual(json.loads(json.dumps(r, allow_nan=False)), r)
+
+    def test_segments_by_class_on_a_y(self):
+        # the Y's segments: the parent's two edges of diameter 3.5 and 2.5,
+        # each of length 1, and the child of length 2 and diameter 2.125
+        # (edges of 2.5 and 1.75); at d_ref 1.5 the bound falls at 3
+        r = describe(Y_NODES, d_ref=1.5)["segments_by_class"]
+        capillary = r["capillary"]
+        self.assertEqual(capillary["count"], 2)
+        self.assertAlmostEqual(capillary["median"], 1.5)
+        self.assertAlmostEqual(capillary["p10"], 1.1)
+        self.assertAlmostEqual(capillary["p90"], 1.9)
+        self.assertAlmostEqual(capillary["cv"], 1.0 / 3.0)
+        self.assertAlmostEqual(capillary["median_d"], 1.0)
+        self.assertAlmostEqual(capillary["p10_d"], 1.1 / 1.5)
+        self.assertAlmostEqual(capillary["p90_d"], 1.9 / 1.5)
+        larger = r["larger"]
+        self.assertEqual((larger["count"], larger["median"], larger["p10"], larger["p90"]), (1, 1.0, 1.0, 1.0))
+        self.assertIsNone(larger["cv"])
+        self.assertAlmostEqual(larger["median_d"], 1.0 / 1.5)
+        # every segment capillary at a large d_ref: the larger entry is empty
+        r = describe(Y_NODES, d_ref=10.0)["segments_by_class"]
+        self.assertEqual(r["larger"], EMPTY_LENGTHS)
+        self.assertEqual(r["capillary"]["count"], 3)
+        self.assertAlmostEqual(r["capillary"]["median"], 1.0)
+        # the bound moves with class_bound
+        r = describe(Y_NODES, d_ref=1.0, class_bound=3.0)["segments_by_class"]
+        self.assertEqual((r["capillary"]["count"], r["larger"]["count"]), (2, 1))
+        r = describe(Y_NODES, d_ref=1.0)["segments_by_class"]
+        self.assertEqual((r["capillary"]["count"], r["larger"]["count"]), (0, 3))
+        self.assertIsNone(describe(Y_NODES)["segments_by_class"])
+        # a segment of unknown diameter is left out
+        unknown = archive([(0, 0, 0, np.nan), (1, 0, 0, np.nan)], [(0, 5, 0, 1.0), (1, 5, 0, 1.0)])
+        r = describe(unknown, d_ref=1.0)["segments_by_class"]
+        self.assertEqual((r["capillary"]["count"], r["larger"]["count"]), (1, 0))
+
+    def test_orientation_by_class_measures_order_and_planarity(self):
+        planar = archive(straight(axis=0), straight(axis=1, offset=(0.0, 100.0, 0.0)))
+        r = describe(planar, d_ref=1.0)
+        by_class = r["orientation_by_class"]
+        self.assertEqual(list(by_class), ["all", "capillary", "larger"])
+        self.assertAlmostEqual(by_class["all"]["planarity"], 1.0)
+        self.assertAlmostEqual(by_class["all"]["S_max"], 0.25)
+        # "all" is the "orientation" entry with the two keys appended
+        self.assertEqual({k: v for k, v in by_class["all"].items() if k not in ("S_max", "planarity")},
+                         r["orientation"])
+        self.assertEqual(list(by_class["all"])[-2:], ["S_max", "planarity"])
+        # vessels of diameter 4 at d_ref 1 are all larger-class
+        self.assertEqual(by_class["larger"], by_class["all"])
+        self.assertIsNone(by_class["capillary"]["eigenvalues"])
+        self.assertIsNone(by_class["capillary"]["S_max"])
+        self.assertIsNone(by_class["capillary"]["planarity"])
+        line = describe(archive(straight()), d_ref=1.0)["orientation_by_class"]["larger"]
+        self.assertAlmostEqual(line["S_max"], 1.0)
+        self.assertAlmostEqual(line["planarity"], 1.0)
+        isotropic = archive(straight(axis=0), straight(axis=1, offset=(0, 100, 0)),
+                            straight(axis=2, offset=(0, 0, 200)))
+        entry = describe(isotropic, d_ref=1.0)["orientation_by_class"]["all"]
+        self.assertAlmostEqual(entry["S_max"], 0.0)
+        self.assertAlmostEqual(entry["planarity"], 0.0)
+        self.assertIsNone(describe(planar)["orientation_by_class"])
+
+
+class ClassAndFrameSourceTests(unittest.TestCase):
+    def test_reference_diameter_sources_in_order_of_preference(self):
+        record = {"d_min": 2.5, "grow_kwargs": {"d_min": 1.5}}
+        r = describe(Y_NODES, metadata=record, d_ref=1.0)
+        self.assertEqual(r["classes"], {"bound": 2.0, "d_ref": 1.0, "d_ref_source": "argument"})
+        r = describe(Y_NODES, metadata=record)
+        self.assertEqual(r["classes"], {"bound": 2.0, "d_ref": 2.5, "d_ref_source": "d_min"})
+        # a d_min that is not a positive finite number (a bool is not a number) is passed over
+        for d_min in (None, True, False, float("nan"), float("inf"), 0.0, -1.0, "2.5"):
+            with self.subTest(d_min=d_min):
+                r = describe(Y_NODES, metadata={"d_min": d_min, "grow_kwargs": {"d_min": 1.5}})
+                self.assertEqual(r["classes"], {"bound": 2.0, "d_ref": 1.5, "d_ref_source": "grow_kwargs"})
+        # the thinnest vertex is never the fallback: without a source every class key is None
+        polar = frame_record(axis=(0, 1, 0), sense="polar", tree_senses=[1])
+        tree = np.zeros(Y_NODES.shape[1], dtype=np.int8)
+        for record in ({}, {"d_min": None}, {"d_min": True, "grow_kwargs": {"d_min": False}},
+                       {"grow_kwargs": {"d_min": float("nan")}}, {"grow_kwargs": None}, {"grow_kwargs": 3.0}):
+            with self.subTest(record=record):
+                r = describe(Y_NODES, metadata=record, frame=polar, tree=tree)
+                self.assertEqual(r["classes"], {"bound": 2.0, "d_ref": None, "d_ref_source": None})
+                for key in ("orientation_by_class", "calibre_shares", "segments_by_class", "transverse_spacing"):
+                    self.assertIsNone(r[key], key)
+                self.assertIsNotNone(r["frame_orientation"]["all"])
+                self.assertIsNone(r["frame_orientation"]["capillary"])
+                self.assertIsNone(r["frame_orientation"]["larger"])
+                self.assertIsNotNone(r["polar_order"]["all"])
+                self.assertIsNone(r["polar_order"]["capillary"])
+                self.assertIsNone(r["polar_order"]["larger"])
+        # with a source the classes follow the bound: the Y's edges have
+        # diameters 3.5, 2.5, 2.5 and 1.75, each of length 1
+        r = describe(Y_NODES, d_ref=1.0, class_bound=3.0, frame=polar)
+        self.assertEqual(r["classes"], {"bound": 3.0, "d_ref": 1.0, "d_ref_source": "argument"})
+        self.assertEqual(r["frame_orientation"]["capillary"]["length"], 3.0)
+        self.assertEqual(r["frame_orientation"]["larger"]["length"], 1.0)
+        self.assertEqual(r["frame_orientation"]["all"]["length_d"], 4.0)
+
+    def test_invalid_arguments_are_rejected(self):
+        for d_ref in (0.0, -1.0, float("nan"), float("inf"), True, "1"):
+            with self.subTest(d_ref=d_ref), self.assertRaises(ValueError):
+                describe(Y_NODES, d_ref=d_ref)
+        for bound in (0.0, -2.0, float("nan"), True):
+            with self.subTest(bound=bound), self.assertRaises(ValueError):
+                describe(Y_NODES, d_ref=1.0, class_bound=bound)
+        bad_frames = ("axis", dict(frame_record(), kind="spiral"), dict(frame_record(), axis=[0.0, 0.0, 0.0]),
+                      dict(frame_record(), axis=None), dict(frame_record(kind="plane"), normal=[1.0, 2.0]))
+        for frame in bad_frames:
+            with self.subTest(frame=frame), self.assertRaises(ValueError):
+                describe(Y_NODES, frame=frame)
+        # a frame the metadata holds is checked the same way
+        with self.assertRaises(ValueError):
+            describe(Y_NODES, metadata={"frame": dict(frame_record(), axis=[1.0, float("nan"), 0.0])})
+        # the box needs the frame's origin and heading
+        box = square_array(2, 3.0, 10.0)
+        with self.assertRaises(ValueError):
+            describe(box, frame=dict(frame_record(axis=(0, 0, 1)), origin=None), d_ref=1.0, volume=(6.0, 6.0, 10.0))
+
+    def test_archive_without_a_frame_has_no_frame_relative_keys(self):
+        r = describe(Y_NODES)
+        self.assertEqual(tuple(r), OLD_KEYS + NEW_KEYS)
+        for key in NEW_KEYS:
+            if key != "classes":
+                self.assertIsNone(r[key], key)
+        self.assertEqual(r["classes"], {"bound": 2.0, "d_ref": None, "d_ref_source": None})
+        self.assertEqual(json.loads(json.dumps(r, allow_nan=False)), r)
+        # the fixtures predate frames and record no d_min
+        r = describe_archive(FIXTURES[0])
+        self.assertIsNone(r["frame"])
+        self.assertIsNone(r["frame_orientation"])
+        self.assertEqual(r["classes"], {"bound": 2.0, "d_ref": None, "d_ref_source": None})
+        self.assertIsNone(r["calibre_shares"])
+
+    def test_frame_of_kind_none_is_copied_but_sets_nothing(self):
+        record = frame_record(kind="none")
+        tree = np.zeros(Y_NODES.shape[1], dtype=np.int8)
+        r = describe(Y_NODES, metadata={"frame": record, "d_min": 1.5}, tree=tree)
+        self.assertEqual(r["frame"], record)
+        # the copy is independent of the record
+        r["frame"]["rules"].append("x")
+        self.assertEqual(record["rules"], [])
+        for key in ("frame_orientation", "polar_order", "transverse_spacing"):
+            self.assertIsNone(r[key], key)
+        # the classes do not need a frame
+        self.assertEqual(r["classes"], {"bound": 2.0, "d_ref": 1.5, "d_ref_source": "d_min"})
+        self.assertIsNotNone(r["calibre_shares"])
+        self.assertIsNotNone(r["orientation_by_class"])
+        self.assertIsNotNone(r["segments_by_class"])
+
+    def test_frame_argument_overrides_the_metadata(self):
+        stored = frame_record(axis=(1, 0, 0))
+        given = frame_record(axis=(0, 1, 0))
+        nodes = archive(straight())
+        r = describe(nodes, metadata={"frame": stored})
+        self.assertEqual(r["frame"], stored)
+        self.assertEqual(r["frame_orientation"]["all"]["S"], 1.0)
+        r = describe(nodes, metadata={"frame": stored}, frame=given)
+        self.assertEqual(r["frame"], given)
+        self.assertEqual(r["frame_orientation"]["all"]["S"], -0.5)
+        # a frame given as the argument is copied too, numpy vectors and all
+        array_frame = dict(given, axis=np.array([0.0, 1.0, 0.0]))
+        r = describe(nodes, frame=array_frame)
+        self.assertEqual(r["frame"], given)
+        self.assertEqual(json.loads(json.dumps(r, allow_nan=False)), r)
+        # describe_archive passes the three arguments through
+        record = {"frame": stored, "d_min": 2.0, "units": "um"}
+        with tempfile.TemporaryDirectory() as folder:
+            path = os.path.join(folder, "framed.npz")
+            np.savez(path, nodes=nodes, metadata=np.array(json.dumps(record)))
+            r = describe_archive(path)
+            self.assertEqual(r["frame"], stored)
+            self.assertEqual(r["classes"], {"bound": 2.0, "d_ref": 2.0, "d_ref_source": "d_min"})
+            r = describe_archive(path, frame=given, d_ref=1.0, class_bound=5.0)
+        self.assertEqual(r, describe(nodes, metadata=record, frame=given, d_ref=1.0, class_bound=5.0))
+        self.assertEqual(r["classes"], {"bound": 5.0, "d_ref": 1.0, "d_ref_source": "argument"})
+        self.assertEqual(r["frame"], given)
+
+    def test_new_keys_are_unit_invariant(self):
+        grown = small_tree()
+        nodes, edges, tree = grown["nodes"], grown["edges"], grown["tree"]
+        frame = frame_record(axis=(0, 1, 0), sense="polar", tree_senses=[1], origin=(0.0, 200.0, 0.0))
+        volume = (500.0, 400.0, 300.0)
+        base = describe(nodes, edges, tree=tree, frame=frame, d_ref=5.0, volume=volume)
+        scaled = describe(nodes * 3.0, edges, tree=tree, frame=dict(frame, origin=[0.0, 600.0, 0.0]), d_ref=15.0,
+                          volume=tuple(3.0 * v for v in volume))
+        # every new quantity is defined on this network
+        for key in NEW_KEYS:
+            self.assertIsNotNone(base[key], key)
+        self.assertGreater(base["transverse_spacing"]["count"], 0)
+        self.assertIsNotNone(base["transverse_spacing"]["crossing_density"])
+        self.assertGreater(base["frame_orientation"]["capillary"]["length"], 0.0)
+        self.assertGreater(base["frame_orientation"]["larger"]["length"], 0.0)
+        self.assertGreater(base["segments_by_class"]["capillary"]["count"], 1)
+        self.assertGreater(base["segments_by_class"]["larger"]["count"], 1)
+        # lengths (the class totals, the segment and spacing statistics, the
+        # reference diameter and the origin) scale with the unit, the crossing
+        # density with its inverse square, and everything dimensionless or in
+        # d_ref stays the same
+        base_leaves = dict(numeric_leaves({key: base[key] for key in NEW_KEYS}))
+        scaled_leaves = dict(numeric_leaves({key: scaled[key] for key in NEW_KEYS}))
+        self.assertEqual(set(base_leaves), set(scaled_leaves))
+        lengths = ("length", "median", "mean", "p10", "p90")
+        for key, value in base_leaves.items():
+            if key.split(".")[-1] in lengths or key == ".classes.d_ref" or key.startswith(".frame.origin"):
+                factor = 3.0
+            elif key.endswith(".crossing_density"):
+                factor = 1.0 / 9.0
+            else:
+                factor = 1.0
+            self.assertAlmostEqual(scaled_leaves[key], factor * value, delta=1e-9 * max(1.0, abs(factor * value)),
+                                   msg=key)
+        self.assertEqual(json.loads(json.dumps(base, allow_nan=False)), base)
+
+    def test_old_keys_are_unchanged_by_the_new_arguments(self):
+        grown = small_tree()
+        plain = describe(grown["nodes"], grown["edges"], tree=grown["tree"])
+        frame = frame_record(axis=(0, 1, 0), sense="polar", tree_senses=[1], origin=(0.0, 200.0, 0.0))
+        extended = describe(grown["nodes"], grown["edges"], tree=grown["tree"], frame=frame, d_ref=5.0,
+                            class_bound=1.5)
+        self.assertEqual(tuple(plain)[:len(OLD_KEYS)], OLD_KEYS)
+        self.assertEqual({key: plain[key] for key in OLD_KEYS}, {key: extended[key] for key in OLD_KEYS})
+        # the arguments only fill the keys after them
+        self.assertIsNone(plain["frame"])
+        self.assertEqual(plain["classes"], {"bound": 2.0, "d_ref": None, "d_ref_source": None})
+        self.assertEqual(extended["frame"], frame)
+        self.assertEqual(extended["classes"], {"bound": 1.5, "d_ref": 5.0, "d_ref_source": "argument"})
+        self.assertEqual(extended["frame_orientation"]["kind"], "axis")
+        self.assertIsNotNone(extended["polar_order"]["all"])
+        self.assertEqual(extended["transverse_spacing"]["area_source"], "capillary_bounding_box")
+        self.assertEqual(json.loads(json.dumps(extended, allow_nan=False)), extended)
 
 
 if __name__ == "__main__":

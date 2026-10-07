@@ -22,6 +22,7 @@ import subprocess
 import sys
 import tempfile
 import unittest
+from unittest import mock
 
 import numpy as np
 
@@ -687,12 +688,17 @@ class FamilyTests(unittest.TestCase):
         self.assertEqual(tree.tortuosity, "stems")
         self.assertFalse(tree.anastomose)
 
-    def test_aligned_is_refused_with_an_explanation(self):
-        with tempfile.TemporaryDirectory() as out:
-            with self.assertRaises(SystemExit) as caught:
-                main(["--family", "aligned", "--count", "1", "--seed", "1", "--out", out])
-        self.assertIn("aligned", str(caught.exception))
-        self.assertIsNone(FAMILIES["aligned"])
+    def test_a_family_without_a_preset_is_refused_with_an_explanation(self):
+        with mock.patch.dict(FAMILIES, {"unoffered": None}):
+            with tempfile.TemporaryDirectory() as out:
+                with self.assertRaises(SystemExit) as caught:
+                    main(["--family", "unoffered", "--count", "1", "--seed", "1", "--out", out])
+                self.assertEqual(os.listdir(out), [])
+        self.assertIn("unoffered", str(caught.exception))
+        with contextlib.redirect_stderr(io.StringIO()):
+            with self.assertRaises(SystemExit):
+                main(["--family", "capillary", "--count", "1", "--seed", "1"])
+        self.assertFalse(any(preset is None for preset in FAMILIES.values()))
 
     def test_every_available_family_runs_end_to_end(self):
         for family in ("tree", "mesh", "tumour"):
