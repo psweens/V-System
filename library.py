@@ -111,7 +111,7 @@ DEFAULT_FAMILIES = ("tree", "mesh", "tumour")
 
 # The families grown in a cube, with the side of the cube in root diameters:
 # c R keeps the two trees of a pair within reach of each other.
-BOX_C = {"mesh": DEFAULT_MESH_BOX_C, "aligned": 15.0}
+BOX_C = {"mesh": DEFAULT_MESH_BOX_C, "aligned": 15.0, "aligned_tight": 20.0}
 
 # The parser is given this volume: tree and tumour growth never read it, and
 # a mesh grows in a cube of side 3 x voxel_size, the voxel size being set to

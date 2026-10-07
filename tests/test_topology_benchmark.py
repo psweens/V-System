@@ -251,7 +251,7 @@ class FamilyBenchmark(unittest.TestCase):
                              + events.get("anastomosis_no_partner", 0) + events.get("anastomosis_collision_failed", 0))
             steps = sum(events.get(key, 0) for key in ("guided_steps", "guidance_onset_steps", "unguided_steps",
                                                         "guidance_undefined_steps"))
-            if self.members[ident]["family"] == "aligned":
+            if main.FAMILIES[self.members[ident]["family"]].get("guidance"):
                 self.assertGreater(steps, 0)
                 self.assertGreater(events.get("guided_steps", 0), 0)
             else:

@@ -89,8 +89,13 @@ RNG_STREAMS = {"walk": 1, "anastomosis": 2}
 # axis, G 4.9, after an onset of 2 diameters) while the larger vessels are
 # kept in planes perpendicular to x (G 5), so that each tree feeds one sheet
 # and the capillaries run from sheet to sheet, as in muscle; it needs d_min,
-# and 80% of its tips seek an arteriovenous partner. The persistence values, and the guidance values of
-# `aligned`, are provisional calibrations (see docs/geometry and the README).
+# and 80% of its tips seek an arteriovenous partner. `aligned_tight` is
+# aligned with its capillaries steered harder and from their first step (G 2,
+# onset 0 for both rules) and its roots 40 d_min apart (-20 and +20 along x),
+# in a cube of side 20 R. The persistence values, and the guidance values of
+# `aligned` and `aligned_tight`, are provisional calibrations (see
+# docs/geometry and the README); released presets are frozen, so a changed
+# value takes a new family name.
 # A preset listed as None is a family this version does not offer.
 FAMILIES = {
     "tree": {},
@@ -106,6 +111,13 @@ FAMILIES = {
                 "guidance": [{"below": 2.0, "field": "axis", "axis": [1, 0, 0], "sense": "polar",
                               "polarity": "partner", "length": 4.9, "onset": 2.0},
                              {"below": None, "field": "plane", "normal": [1, 0, 0], "length": 5.0}]},
+    "aligned_tight": {"tortuosity": "walk", "persistence": 10.0, "avoid_collisions": True, "anastomose": True,
+                      "anastomose_mode": "arteriovenous", "anastomosis_fraction": 0.8, "grow_in_volume": True,
+                      "root_offsets": [[-20.0, 0.0, 0.0], [20.0, 0.0, 0.0]],
+                      "guidance": [{"below": 2.0, "field": "axis", "axis": [1, 0, 0], "sense": "polar",
+                                    "polarity": "partner", "length": 2.0, "onset": 0.0},
+                                   {"below": None, "field": "plane", "normal": [1, 0, 0], "length": 5.0,
+                                    "onset": 0.0}]},
 }
 
 # The default turtle frame of the first tree; the second tree of a pair heads back.

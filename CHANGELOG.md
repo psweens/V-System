@@ -1,5 +1,16 @@
 # Changelog
 
+## 3.6.0 (in progress)
+
+### Geometry
+
+- The `aligned_tight` family: `aligned` with its capillaries steered harder
+  and from their first step (G 2 and an onset of 0 for both rules) and its
+  roots moved by −20 and +20 d_min along x, 40 d_min apart; it needs d_min,
+  its values are provisional, and a library grows it in a cube of side
+  `library.BOX_C["aligned_tight"]` = 20 R. `aligned` keeps the preset 3.5.0
+  released.
+
 ## 3.5.0
 
 Version 3.5 lets the walk be steered. `--guidance` turns each step's heading

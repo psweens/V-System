@@ -133,7 +133,7 @@ Useful options (`python main.py --help` lists them all):
 | `--grow-in-volume` | off | confine growth to the volume's proportions so no vessel is cut |
 | `--no-connect` | off | rasterise bare capsules, leaving sub-voxel vessels dotted |
 | `--units` | `um` | the unit one grammar unit stands for, recorded in the sidecar |
-| `--family` | `tree` | preset bundle of the geometry options: `tree`, `mesh`, `tumour`, `aligned` (which needs `--d-min`) |
+| `--family` | `tree` | preset bundle of the geometry options: `tree`, `mesh`, `tumour`, `aligned`, `aligned_tight` (the last two need `--d-min`) |
 | `--tortuosity` | `stems` | `stems`: five sub-segments smoothed by a B-spline; `walk`: a persistent random walk of the same arc length |
 | `--persistence` | none | persistence length of the walk in vessel diameters; required by `walk` |
 | `--avoid-collisions` | off | keep branches apart by at least `--collision-margin` (default 1 µm), redrawing or shortening, and count what could not be placed |
@@ -504,7 +504,12 @@ from terminal arterioles to collecting venules with cross-connections (Skalak
 and Schmid-Schönbein 1986; Sarelius 1986; Emerson and Segal 1997), whose
 orientation has been fitted with a Fisher-axial law (Mathieu et al. 1983;
 Mathieu-Costello 1987). It needs `--d-min`, and its guidance values are
-provisional. Options given explicitly override the preset. The persistence
+provisional. `aligned_tight` is `aligned` with its capillaries steered harder
+and from their first step (G 2, so κ = 4P / G = 20, and an onset of 0 for
+both rules) and its roots moved by −20 and +20 d_min along x, 40 d_min apart,
+in a cube of side 20 R in a library; it also needs `--d-min`, and its values
+are provisional too. Released presets are frozen, so a changed value takes a
+new family name. Options given explicitly override the preset. The persistence
 values of the presets are provisional calibrations from the sweep in
 `docs/geometry`. A preset listed as None in `main.FAMILIES` is a family this
 version does not offer, and is refused.
@@ -872,14 +877,14 @@ vsystem-library --out lib --count 2000 --seed 1 --workers 8
 | --- | --- | --- |
 | `--out DIR` | required | output directory; a run into a directory holding a manifest resumes it |
 | `--count N` | required | number of networks |
-| `--families` | `tree mesh tumour` | families to grow, in id order (`aligned` when listed); only presets that exist are accepted, so a family without one and unknown names are refused before anything is grown |
+| `--families` | `tree mesh tumour` | families to grow, in id order (`aligned` and `aligned_tight` when listed); only presets that exist are accepted, so a family without one and unknown names are refused before anything is grown |
 | `--family-shares` | `1 1 1` | relative share of each family, by largest remainder with ties to the family listed first (2000 at `1 1 1` gives 667 667 666) |
 | `--ratio-range R_LO R_HI` | `2.52 25` | range of R, log-uniform and stratified; 2^(4/3) gives at least about four generations |
 | `--seed S` | required | library seed |
 | `--workers W` | `1` | worker processes |
 | `--collision-margin` | `1.0` | clearance between vessel surfaces, units of d_min |
 | `--mesh-box-c` | `15` | a mesh grows in a cube of side this many times its root diameter, which keeps its two trees within reach of each other |
-| `--box-c FAMILY C` | `mesh 15`, `aligned 15` | the cube side of a box family (mesh, aligned) in root diameters (repeatable); refused for a family that grows free, and with `--mesh-box-c` for mesh; an aligned member whose root offsets leave a small cube is recorded as a failure |
+| `--box-c FAMILY C` | `mesh 15`, `aligned 15`, `aligned_tight 20` | the cube side of a box family (mesh, aligned, aligned_tight) in root diameters (repeatable); refused for a family that grows free, and with `--mesh-box-c` for mesh; an aligned member whose root offsets leave a small cube is recorded as a failure |
 | `--iteration-cap` | `64` | generations allowed; d_min stops growth first |
 | `--avoid-collisions` / `--no-avoid-collisions` | on | collision avoidance for the tree family; the mesh and tumour presets avoid collisions already |
 
@@ -909,8 +914,9 @@ preset's root calibre is replaced by R; its aneurysm and stenosis
 probabilities reach the properties through the parser's defaults as on the
 command line. Tree and tumour growth never read the volume; a mesh and an
 aligned network grow in a cube of side 3 × voxel size = c R, with c from
-`library.BOX_C` (15 for both; `--mesh-box-c` for mesh, `--box-c FAMILY C`
-for any box family, not both for mesh). A library in another unit is the same
+`library.BOX_C` (15 for mesh and aligned, 20 for aligned_tight, whose roots
+are 40 d_min apart; `--mesh-box-c` for mesh, `--box-c FAMILY C` for any box
+family, not both for mesh). A library in another unit is the same
 library rescaled: growth at (2R, d_min 2, margin 2, box 2 × 15 R) equals
 twice the library network to float rounding. The default library holds
 `tree`, `mesh` and `tumour` (`library.DEFAULT_FAMILIES`); `aligned` is grown

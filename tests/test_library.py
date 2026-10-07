@@ -412,7 +412,8 @@ class BoxConstantTests(unittest.TestCase):
         self.assertEqual(library.box_constants(), library.BOX_C)
         self.assertEqual(library.box_constants(12.0), dict(library.BOX_C, mesh=12.0))
         self.assertEqual(library.box_constants(None, {"aligned": 20.0, "mesh": 11.0}),
-                         {"mesh": 11.0, "aligned": 20.0})
+                         dict(library.BOX_C, mesh=11.0, aligned=20.0))
+        self.assertEqual(library.BOX_C, {"mesh": 15.0, "aligned": 15.0, "aligned_tight": 20.0})
         with self.assertRaises(ValueError):
             library.box_constants(12.0, {"mesh": 11.0})
         with self.assertRaises(ValueError):
