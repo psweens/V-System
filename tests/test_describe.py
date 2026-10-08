@@ -2169,6 +2169,33 @@ class TopologyDescriptorTests(unittest.TestCase):
                 self.assertEqual(r["tissue_distance"]["shape"], shape)
                 self.assertEqual(r["volume_source"], source)
 
+    def test_a_library_archive_samples_its_tissue_over_its_growth_box(self):
+        # a library archive records grow_network's box as "growth_box", which
+        # only the tissue distance reads: every other key stays as without it
+        nodes = archive([(0.0, 0.0, 0.0), (10.0, 0.0, 0.0), (10.0, 4.0, 0.0)], diameter=1.0)
+        plain = describe(nodes, evd_spacing=1.0)
+        r = describe(nodes, metadata={"growth_box": [12.0, 6.0, 2.0]}, evd_spacing=1.0)
+        self.assertEqual(r["tissue_distance"]["domain"],
+                         {"min": [0.0, 0.0, 0.0], "max": [12.0, 6.0, 2.0], "source": "growth_box"})
+        self.assertEqual(r["tissue_distance"]["shape"], [12, 6, 2])
+        self.assertEqual(r["volume_source"], "bounding_box")
+        self.assertEqual({k: v for k, v in r.items() if k != "tissue_distance"},
+                         {k: v for k, v in plain.items() if k != "tissue_distance"})
+        self.assertEqual(describe(nodes, metadata={"growth_box": [12.0, 6.0, 2.0]}), describe(nodes))
+        # the argument and growth_box_um come first; None is no box
+        cases = [({"volume": (20.0, 10.0, 6.0)}, {"growth_box": [12.0, 6.0, 2.0]}, "argument"),
+                 ({}, {"growth_box": [12.0, 6.0, 2.0], "growth_box_um": [14.0, 8.0, 4.0]}, "growth_box_um"),
+                 ({}, {"growth_box": [12.0, 6.0, 2.0], "fit": "voxel_size", "volume": [24, 12, 4], "voxel_size": 0.5},
+                  "growth_box"),
+                 ({}, {"growth_box": None}, "bounding_box")]
+        for arguments, metadata, source in cases:
+            with self.subTest(source=source, metadata=metadata):
+                r = describe(nodes, metadata=metadata, evd_spacing=1.0, **arguments)
+                self.assertEqual(r["tissue_distance"]["domain"]["source"], source)
+        for box in ([12.0, 6.0], [12.0, float("nan"), 2.0]):
+            with self.subTest(box=box), self.assertRaises(ValueError):
+                describe(nodes, metadata={"growth_box": box}, evd_spacing=1.0)
+
     def test_tissue_distance_is_opt_in_and_draws_nothing(self):
         self.assertIsNone(describe(Y_NODES)["tissue_distance"])
         for spacing in (0.0, -1.0, float("nan"), float("inf"), True, "1"):

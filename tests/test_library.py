@@ -253,6 +253,22 @@ class CommandLineTests(unittest.TestCase):
             self.assertIn(key, manifest["run"])
         self.assertEqual(manifest["run"]["runs"][0]["grown"], 3)
 
+    def test_describe_samples_a_member_s_tissue_over_its_growth_box(self):
+        from describe import describe_archive
+        self.assertEqual(self.status, 0, self.stderr)
+        with open(os.path.join(self.out, "index.json")) as handle:
+            rows = json.load(handle)["networks"]
+        for row in rows:
+            with self.subTest(family=row["family"]):
+                path = os.path.join(self.out, row["file"])
+                box = main.load_network(path)["metadata"]["growth_box"]
+                self.assertEqual(box is None, row["family"] != "mesh")
+                tissue = describe_archive(path, evd_spacing=1.0)["tissue_distance"]
+                if box is None:
+                    self.assertEqual(tissue["domain"]["source"], "bounding_box")
+                else:
+                    self.assertEqual(tissue["domain"], {"min": [0.0, 0.0, 0.0], "max": box, "source": "growth_box"})
+
     def test_rerunning_resumes_without_regrowing_and_the_manifest_hash_is_stable(self):
         with open(os.path.join(self.out, "manifest.json")) as handle:
             before = json.load(handle)

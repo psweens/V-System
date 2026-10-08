@@ -684,13 +684,16 @@ median and p90. With `evd_spacing`, `tissue_distance` gives the distance from
 the points of a regular grid of at most 64³ points (the spacing raised, and
 recorded, when needed) to the nearest vessel wall, by the voxeliser's capsule
 rule, exactly and without any random draw: mean, median, p90, p99 and maximum
-outside the vessels, and the inside fraction. The grid spans the volume
-describe reads for the length density, else the bounding box. The topology
-keys leave `describe_archive` at 21 s on the largest network the benchmark
-grows, the tree of 1.08 million points at R 25, which has no cycle to search;
-it takes 14 s on an `aligned_bed` network of 708 thousand points at R 25, and
-the tissue distance at `evd_spacing` 1 adds 2 to 6.5 s on the largest
-networks of each family.
+outside the vessels, and the inside fraction. The grid spans describe's
+`volume` when given, else the growth box (`growth_box_um` from the command
+line, or `growth_box` in a library network's metadata, which the length
+density does not read), else the voxeliser's field of an archive fitted by
+voxel size, else the bounding box. The topology keys leave
+`describe_archive` at 21 s on the largest network the benchmark grows, the
+tree of 1.08 million points at R 25, which has no cycle to search; it takes
+14 s on an `aligned_bed` network of 708 thousand points at R 25, and the
+tissue distance at `evd_spacing` 1 adds 2 to 6.5 s on the largest networks
+of each family.
 
 ### Placing networks by their frame: `frames.py`
 

@@ -1258,11 +1258,13 @@ def _volume_um3(points, r_max, volume, metadata):
 def _tissue_domain(points, r_max, volume, metadata):
     """
     The box the tissue distance is sampled in: the reference box of the
-    length density, from the same source, placed as that source places it.
+    length density, from the same source, placed as that source places it,
+    except that a library archive's growth box, which the length density
+    does not read, comes before the voxel_size field and the bounding box.
 
     Returns:
         tuple: (low, high, source), the box's corners and the source's name
-        as _volume_um3 gives it.
+        as _volume_um3 gives it, or "growth_box" for a library archive's box.
     """
     low, high = points.min(axis=0), points.max(axis=0)
     centre = (low + high) / 2.0
@@ -1272,6 +1274,9 @@ def _tissue_domain(points, r_max, volume, metadata):
     if metadata.get("growth_box_um") is not None:
         # grow_network's box runs from the origin to its extents
         return np.zeros(3), _vector3(metadata["growth_box_um"], "growth_box_um"), "growth_box_um"
+    if metadata.get("growth_box") is not None:
+        # a library archive records the same box as "growth_box", in the units of its nodes
+        return np.zeros(3), _vector3(metadata["growth_box"], "growth_box"), "growth_box"
     shape, voxel = metadata.get("volume"), metadata.get("voxel_size")
     if metadata.get("fit") == "voxel_size" and shape is not None and voxel is not None:
         # the voxeliser puts the centre of the network's bounding box at voxel
@@ -2216,7 +2221,10 @@ def describe(nodes, edges=None, metadata=None, volume=None, margin=None, tol=DEF
     the field runs from c - (n + 1) s / 2 to c + (n - 1) s / 2 and a grid of
     spacing s has its points at the voxel centres; metadata["growth_box_um"]
     from 0 to its extents in the coordinates of `nodes`; and the padded
-    bounding box where it lies. Along axis i, of extent E_i, the grid has
+    bounding box where it lies. A library archive's metadata["growth_box"],
+    which the length density does not read, is taken like
+    metadata["growth_box_um"], after it and before the voxel_size field
+    ("source" "growth_box"). Along axis i, of extent E_i, the grid has
     n_i = max(1, floor(E_i / h + 1e-9)) points, h apart and centred in the
     box, h being `evd_spacing`; when that would make more than 64^3 points
     in all, h is raised to the least E_i / m (m a whole number) at which
@@ -2237,7 +2245,7 @@ def describe(nodes, edges=None, metadata=None, volume=None, margin=None, tol=DEF
     is drawn at random. {"spacing_requested", "spacing" h, "raised" whether
     h was raised, "shape" the number of points along each axis, "points"
     their total, "domain" {"min", "max", "source"} the box and the source's
-    name as in "volume_source", "capsules" their number, "inside_fraction"
+    name as in "volume_source" or "growth_box", "capsules" their number, "inside_fraction"
     the share of points inside, "outside_points" the number outside, "mean",
     "median", "p90", "p99" and "max" of f over the points outside
     (interpolated linearly as for "arc_chord"), and "spacing_d", "mean_d",

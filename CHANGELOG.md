@@ -79,7 +79,10 @@ check by running the 3.5 modules, kept under
   ((max − min)/mean of a segment's vertex diameters, junction ends left out,
   per class) and `tissue_distance` (with `evd_spacing` only: distance to the
   nearest vessel wall on a grid of at most 64³ points by the voxeliser's
-  capsule rule, exact and draw-free). Every earlier key is byte-identical.
+  capsule rule, exact and draw-free, over describe's `volume`, else the
+  growth box (`growth_box_um`, or a library archive's `growth_box`), else
+  the voxel_size field, else the bounding box). Every earlier key is
+  byte-identical.
 - `frame_orientation` gains `fisher_axial_K_exact` per class about an
   axis: the K of the Fisher-axial law exp(K |t·a|) whose ⟨|t·a|⟩,
   1 / (1 − e^−K) − 1 / K, equals the measured one, by bisection on

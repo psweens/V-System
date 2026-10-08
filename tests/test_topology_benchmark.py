@@ -149,21 +149,6 @@ def capillary_summary(report):
     return out
 
 
-def describe_member_archive(path, evd_spacing=1.0):
-    """
-    describe on a library archive, with the tissue distance on a grid of
-    `evd_spacing` d_min over the member's growth box when it has one: library
-    metadata records the box as "growth_box", which describe reads as the
-    command line's "growth_box_um".
-    """
-    network = main.load_network(path)
-    metadata = dict(network["metadata"])
-    if metadata.get("growth_box") is not None and metadata.get("growth_box_um") is None:
-        metadata["growth_box_um"] = metadata["growth_box"]
-    return describe(network["nodes"], network["edges"], metadata=metadata, tree=network["tree"],
-                    evd_spacing=evd_spacing)
-
-
 def bridge_geometry(grown):
     """
     The bridges of a grown network: for each, the chord's angle to x, whether
@@ -278,7 +263,7 @@ class FamilyBenchmark(unittest.TestCase):
             report = describe_archive(path)
             describe_seconds = time.perf_counter() - started
             started = time.perf_counter()
-            tissue = describe_member_archive(path)["tissue_distance"]
+            tissue = describe_archive(path, evd_spacing=1.0)["tissue_distance"]   # over a member's growth box
             tissue_seconds = time.perf_counter() - started
             report["tissue_distance"] = tissue
             summary = capillary_summary(report)
