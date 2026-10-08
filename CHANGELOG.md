@@ -125,12 +125,13 @@ check by running the 3.5 modules, kept under
   ones, restricts every record to the keys 3.5 wrote, and checks that every
   setting 3.6 added is off, no rung is made and every appended counter is
   zero; it takes about 55 s on an Intel Xeon Gold 5220 workstation. Its
-  hashes are recorded on Linux x86_64 with numpy's AVX-512 and AVX2 code
-  paths, and the 3.4 pin checks the same two Linux recordings beside its
-  macOS one. A recorded hash can match only where rounding matches a
-  recording's: on another CPU code path or numpy version a pin skips those
-  cases, and its comparison of the two sets of modules in one environment
-  still runs.
+  hashes are recorded on Linux x86_64 twice, with OpenBLAS's SkylakeX
+  kernels and numpy's AVX-512 loops and with OpenBLAS's Zen kernels and
+  numpy's AVX2 loops, and the 3.4 pin checks the same two Linux recordings
+  beside its macOS one. A recorded hash can match only where rounding
+  matches a recording's: on other kernels or another numpy version a pin
+  skips those cases, and its comparison of the two sets of modules in one
+  environment still runs.
 - Additions only: the return key `rungs`; the sidecar and metadata keys of
   the nine settings and `rungs`; the describe keys above; the ten counters;
   the index column `rungs`; and `rng_streams.rungs` in every sidecar.

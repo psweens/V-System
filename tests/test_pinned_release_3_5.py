@@ -43,8 +43,10 @@ must be zero.
 Running both in one environment is the only portable comparison: the
 B-spline, the walk and the collision checks go through kernels whose last
 bits differ between machines. Hashes recorded on a machine
-(tests/fixtures/reference_hashes_3_5*.json, one file per recording) are
-checked as well: a case passes when it matches a recording, and the check is
+(tests/fixtures/reference_hashes_3_5*.json, one file per recording: Linux
+x86_64 with OpenBLAS's SkylakeX kernels and numpy's AVX-512 loops, and with
+OpenBLAS's Zen kernels and numpy's AVX2 loops (_zen)) are checked as well: a
+case passes when it matches a recording, and the check is
 skipped only when the reference code itself reproduces none of them here.
 The reference directory is an unchanged copy of the release: the sha256 of
 each of its files is recorded with the hashes and checked, and the drivers
