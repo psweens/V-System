@@ -1,8 +1,8 @@
 """
-Tests of connections.py, the rungs that join neighbouring capillaries: the
-two parallel lines of the order (chords, site gaps, components and cycles,
-the partition of the sites, junction zones and clearance), partners that
-touch, lines of unequal diameter (the search radius and the rung's
+Tests of connections.py, the rungs that join neighbouring capillaries: two
+parallel lines 400 d long and 5 d apart (chords, site gaps, components and
+cycles, the partition of the sites, junction zones and clearance), partners
+that touch, lines of unequal diameter (the search radius and the rung's
 diameter), joints shared by two polylines, the lateral rule about the
 tangent and about an axis and its counter, the ranking of partners, the tree
 separation, the refusals, and the stage on its own: deterministic, drawing
@@ -90,8 +90,8 @@ KS_P_TEN_SEEDS = (0.37, 0.40, 0.46, 0.23, 0.18, 0.48, 0.25, 0.38, 0.12, 0.98)
 # properties), seeds 1-10 got 3 6 3 5 3 3 5 7 1 3 rungs at the default
 # spacing, with no clearance violation after them; 37 of their 39 rungs, and
 # 46 of 49 at spacing 10, joined vertices of unequal diameter.
-# The order's bounds stand: chords within 0.2 d of 5 d and at least 60
-# degrees to x, KS p above 0.01 (seeds 1-3). Scaling by 0.5 and 2 reproduced
+# The tests assert chords within 0.2 d of 5 d and at least 60 degrees to
+# x, and KS p above 0.01 (seeds 1-3). Scaling by 0.5 and 2 reproduced
 # every column and every chord to 0 difference on seeds 1-10, on the lines
 # and on the walked trees, so the scale test asks for equality.
 SCALE_ATOL = 0.0
@@ -112,7 +112,7 @@ def lines(*specs, length=400.0, spacing=0.2):
 
 
 def parallel_lines(gap=5.0, diameter=1.0):
-    """The order's fixture: two lines along x, `gap` apart along y, trees 0 and 1."""
+    """Two lines along x, `gap` apart along y, trees 0 and 1."""
     return lines((0.0, diameter, 0), (gap, diameter, 1))
 
 
@@ -167,7 +167,7 @@ def wide_lines():
 
 def split_lines(every=40.0):
     """
-    The order's two lines with the first cut into polylines `every` long,
+    The two parallel lines with the first cut into polylines `every` long,
     each starting with a bitwise copy of the last column of the one before:
     one vessel still, whose joints have degree two but are shared by two
     polylines. Returns (nodes, tree, joints), joints the x of the cuts.
@@ -291,7 +291,7 @@ def site_gaps(nodes, sites):
 
 
 class ParallelLineTests(unittest.TestCase):
-    """The order's two parallel lines along x, 400 d long and 5 d apart."""
+    """Two parallel lines along x, 400 d long and 5 d apart."""
 
     @classmethod
     def setUpClass(cls):
@@ -532,7 +532,7 @@ class LateralRuleTests(unittest.TestCase):
                         self.assertEqual(events["rung_angle_skipped"], 2)
 
     def test_the_angle_counter_counts_the_partners_the_angle_alone_refuses(self):
-        # a brute-force reading on the order's lines: each site that reaches
+        # a brute-force reading on the parallel lines: each site that reaches
         # the search counts the points of the other line within 8 d, not yet a
         # rung end, that stand less than 60 degrees off x; the points of its own
         # line, all along x, are excluded before the angle and not counted
@@ -707,7 +707,7 @@ class StageTests(unittest.TestCase):
         self.assertGreater(len(first[2]), 0)
 
     def test_the_stage_draws_the_gaps_then_the_permutation_then_the_walks(self):
-        # on the order's lines, and on lines of d 1.5 sampled every 0.25, whose
+        # on the parallel lines, and on lines of d 1.5 sampled every 0.25, whose
         # gaps are drawn at 20 x 1.5 and whose walks step 0.25, not 0.2 d
         for (nodes, tree), diameter in ((self.lines, 1.0), (wide_lines(), 1.5)):
             step = float(np.median(np.diff(nodes[0, graph.polylines(nodes)[0]])))

@@ -89,6 +89,22 @@ check by running the 3.5 modules, kept under
   tangents and agrees with the exact value only as K grows.
 - The library index gains `rungs`, the number of cross-connections,
   appended after the 3.5 columns; archive metadata lists the rungs.
+- `tests/test_topology_benchmark.py` (slow) also reports the topology
+  keys, the tissue distance, the rung outcomes and the size of each
+  member's program, and grows the filled families only in their own
+  invocation, named in `VSYSTEM_BENCHMARK_FAMILIES`, at the ratios in
+  `VSYSTEM_BENCHMARK_RATIOS` (the last for cost only). On an Intel Xeon
+  Gold 5220 workstation (Linux, Python 3.12, numpy 2.5) the fill multiplies
+  the grammar's moves by about 13 in aligned_bed and 15 in capillary_bed.
+  aligned_bed grows in 13, 54 and 690 s at R 4, 8 and 16 (means over seeds
+  1 to 3) and 28 minutes at R 25, and capillary_bed in 34 and 335 s at R 4
+  and 8 and 55 minutes for one network at R 16, against 5.6, 31, 170 and
+  890 s for aligned_tight. `describe_archive` takes 21 s on the largest
+  network grown, a tree of 1.08 million points at R 25, as in 3.5, and the
+  tissue distance adds 2 to 6.5 s on the largest networks. A 2000-network
+  library of tree, mesh, tumour, aligned and aligned_tight in equal shares
+  over the default range projects to 43 CPU hours, 6.7 GB of archives and a
+  peak of 0.83 GB per worker.
 
 ### Tools
 

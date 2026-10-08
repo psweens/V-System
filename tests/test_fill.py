@@ -143,9 +143,9 @@ class OptionTests(unittest.TestCase):
 
 class IsolationTests(unittest.TestCase):
     """
-    Order item 24 at the level of growth: the rungs run after anastomosis on
-    a stream of their own, so turning them on changes nothing drawn before
-    them. The development measurement over seeds 1-10 of GROWTH at d0 4:
+    The rungs in grown networks: they run after anastomosis on a stream of
+    their own, so turning them on changes nothing drawn before them. The
+    development measurement over seeds 1-10 of GROWTH at d0 4:
     rungs 1, 2, 1, 7, 0, 4, 5, 1, 2, 2 from 13-38 sites, and 5-11
     anastomosis bridges; the seeds asserted, 1-3, each make a rung.
     """

@@ -601,7 +601,17 @@ half, walk with avoidance takes 2.5×, with anastomosis 4×, and the two-tree
 grows it on an Intel Xeon Gold 5220 workstation, it takes 8.8, 49 and 185 s
 at R 4, 8 and 16 (means over seeds 1 to 3, 6.6, 28 and 87 thousand points)
 and 600 s at R 25 (298 thousand points, peak RSS 356 MB), where a mesh takes
-6.7, 29, 199 and 818 s (`tests/test_topology_benchmark.py`).
+6.7, 29, 199 and 818 s (`tests/test_topology_benchmark.py`). Grown the same
+way with 3.6, `aligned_tight` takes 5.6, 31 and 170 s at R 4, 8 and 16 (5.6,
+21 and 102 thousand points) and 890 s at R 25 (358 thousand points). The
+capillary fill multiplies the grammar's moves by about 13 in `aligned_bed`
+and 15 in `capillary_bed`. `aligned_bed` takes 13, 54 and 690 s at R 4, 8 and
+16 (11, 43 and 300 thousand points) and 28 minutes at R 25 (708 thousand
+points, peak RSS 0.93 GB). `capillary_bed` takes 34 and 335 s at R 4 and 8
+(17 and 107 thousand points) and 55 minutes for one network at R 16 (634
+thousand points, peak RSS 0.83 GB); at R 4, four fifths of its time goes on
+walking anastomosis bridges between its many tips. Both vary several-fold
+between seeds at one R.
 
 ### Measuring: `describe.py`
 
@@ -676,8 +686,11 @@ recorded, when needed) to the nearest vessel wall, by the voxeliser's capsule
 rule, exactly and without any random draw: mean, median, p90, p99 and maximum
 outside the vessels, and the inside fraction. The grid spans the volume
 describe reads for the length density, else the bounding box. The topology
-keys add about 0.2 s to describe on a network of a million points; the
-tissue distance takes a few seconds more there.
+keys leave `describe_archive` at 21 s on the largest network the benchmark
+grows, the tree of 1.08 million points at R 25, which has no cycle to search;
+it takes 14 s on an `aligned_bed` network of 708 thousand points at R 25, and
+the tissue distance at `evd_spacing` 1 adds 2 to 6.5 s on the largest
+networks of each family.
 
 ### Placing networks by their frame: `frames.py`
 
