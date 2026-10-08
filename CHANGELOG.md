@@ -1,5 +1,38 @@
 # Changelog
 
+## 3.6.1
+
+Version 3.6.1 makes the walk faster and changes no output.
+
+### Geometry
+
+- `tortuosity` turns the walk's frame without `np.cross` and
+  `np.linalg.norm`, whose argument handling costs far more than the
+  arithmetic on a 3-vector. `_cross` rounds each product and then each
+  difference, as `np.cross` does, and `_norm` takes the square root of the
+  vector's dot product with itself, as `np.linalg.norm` does for a real
+  vector. Every step of the walk uses them, and so does every anastomosis
+  bridge and rung walked with `bridge_path`. On an Intel Xeon Gold 5220
+  workstation, walked growth takes 22 to 37% less time (capillary_bed at
+  R 4, 81 s against 54 s; mesh at R 16, 78 s against 49 s); growth without
+  the walk is unchanged.
+
+### Tools
+
+- `library_version` is 3.6.1, and the code hash changes with
+  `tortuosity.py`, so a library grown with 3.6.0 refuses to resume under
+  3.6.1, as any change of the generator does.
+
+### Compatibility
+
+- Every network, archive, sidecar, library member and description is the
+  same bit for bit as in 3.6.0. `tests/test_geometry.py` checks `_cross` and
+  `_norm` against numpy on 4500 vector pairs, signed zeros, subnormals,
+  infinities and NaN among them, and the 3.4 and 3.5 pins pass unchanged.
+  The growth times quoted under 3.6.0 and in the README were measured
+  before this change.
+- pyproject version 3.6.1.
+
 ## 3.6.0
 
 Version 3.6 fills the finest calibres and joins them side to side.
