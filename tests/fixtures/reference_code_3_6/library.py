@@ -89,7 +89,6 @@ import time
 
 import numpy as np
 
-import bed
 import graph
 import main as cli
 from describe import describe
@@ -98,14 +97,13 @@ from describe import describe
 RNG_STREAMS = {"ratio": 4}
 
 # The version of the library format and generator, the release it belongs to.
-LIBRARY_VERSION = "3.7.0"
+LIBRARY_VERSION = "3.6.1"
 
 RATIO_LAW = "log-uniform"
 UNITS = "d_min"
 DEFAULT_RATIO_RANGE = (2.52, 25.0)      # 2 ** (4 / 3) gives at least about four generations
 DEFAULT_MESH_BOX_C = 15.0
 DEFAULT_ITERATION_CAP = 64
-DEFAULT_BED_MAX_CANDIDATES = 2_000_000
 DEFAULT_COLLISION_MARGIN = 1.0
 
 # The families a library holds unless --families says otherwise.
@@ -114,7 +112,7 @@ DEFAULT_FAMILIES = ("tree", "mesh", "tumour")
 # The families grown in a cube, with the side of the cube in root diameters:
 # c R keeps the two trees of a pair within reach of each other.
 BOX_C = {"mesh": DEFAULT_MESH_BOX_C, "aligned": 15.0, "aligned_tight": 20.0, "aligned_bed": 20.0,
-         "capillary_bed": 15.0, "foam": 15.0}
+         "capillary_bed": 15.0}
 
 # The parser is given this volume: tree and tumour growth never read it, and
 # a mesh grows in a cube of side 3 x voxel_size, the voxel size being set to
@@ -126,7 +124,7 @@ VOLUME = (3, 3, 3)
 # Modules whose source bytes make up the code hash: this one and main's
 # import closure.
 CODE_MODULES = ("library", "main", "vSystem", "libGenerator", "analyseGrammar", "utils", "computeVoxel",
-                "tortuosity", "collisions", "anastomosis", "graph", "spatial", "guidance", "connections", "bed")
+                "tortuosity", "collisions", "anastomosis", "graph", "spatial", "guidance", "connections")
 
 # Columns of index.csv, in order. Append-only: the columns from frame_kind on
 # were added in 3.5 (orientation about the frame axis, the polar order and
@@ -164,11 +162,6 @@ def check_families(families):
     if len(set(families)) != len(families):
         raise SystemExit("--families lists a family twice")
     return list(families)
-
-
-def bed_families(families):
-    """The families listed whose preset grows an explicit bed, in the order given."""
-    return [family for family in families if (cli.FAMILIES.get(family) or {}).get("bed") is not None]
 
 
 def family_counts(count, families, shares):
@@ -276,25 +269,16 @@ def member_argv(family, ratio, *, d_min=1.0, collision_margin=DEFAULT_COLLISION_
 
 
 def grow_member(family, ratio, seed, *, d_min=1.0, collision_margin=DEFAULT_COLLISION_MARGIN,
-                mesh_box_c=None, iteration_cap=DEFAULT_ITERATION_CAP, avoid_collisions=True, box_c=None,
-                bed_max_candidates=DEFAULT_BED_MAX_CANDIDATES):
+                mesh_box_c=None, iteration_cap=DEFAULT_ITERATION_CAP, avoid_collisions=True, box_c=None):
     """
     Grows one library network exactly as `vsystem` would from the same
     arguments and seed: main's parser with the family preset, its parameter
     sampling under the seeded global generators, then grow_network.
 
-    A member with an explicit bed is refused before anything is drawn when
-    its planned candidate edges (bed.planned_candidates over its growth box)
-    exceed `bed_max_candidates`.
-
     Returns:
         dict: "grown" (the result of grow_network), "argv", "kwargs" (every
         keyword passed to grow_network, JSON-ready), "niter", "d0" and
         "properties".
-
-    Raises:
-        ValueError: for a member the command line refuses, and
-        (bed.BedTooLarge) for a bed over the cap.
     """
     argv = member_argv(family, ratio, d_min=d_min, collision_margin=collision_margin, mesh_box_c=mesh_box_c,
                        iteration_cap=iteration_cap, avoid_collisions=avoid_collisions, box_c=box_c)
@@ -305,13 +289,6 @@ def grow_member(family, ratio, seed, *, d_min=1.0, collision_margin=DEFAULT_COLL
         # a refusal of the command line, such as a root offset outside the
         # member's box, is an error of this member, which the library records
         raise ValueError(str(exc)) from None
-    if args.bed is not None:
-        # the last point before the first draw; a member always grows at a fixed voxel size
-        planned = bed.planned_candidates(np.asarray(args.volume, dtype=float) * float(args.voxel_size),
-                                         bed.parse_settings(args.bed), args.d_min)
-        if planned > bed_max_candidates:
-            raise bed.BedTooLarge(f"planned {planned} candidate edges exceed --bed-max-candidates "
-                                  f"{bed_max_candidates}; raise the cap or lower --box-c {family}")
     random.seed(seed)
     np.random.seed(seed % (2 ** 32))
     properties, d0, niter = cli.sample_parameters(args)
@@ -473,10 +450,8 @@ def growth_settings(args, box_c=None):
     The growth parameters of a library, as the manifest records them. The
     mesh box constant is recorded as before; the constants of the other box
     families listed in `--families` are recorded under "box_c", which is
-    absent when none is listed, and the cap on a bed's planned candidate
-    edges under "bed_max_candidates", absent when no family listed has a
-    bed, so that a library of the default families records what it always
-    did.
+    absent when none is listed, so that a library of the default families
+    records what it always did.
     """
     boxes = box_constants(args.mesh_box_c, box_c)
     families = args.families if args.families else list(DEFAULT_FAMILIES)
@@ -486,8 +461,6 @@ def growth_settings(args, box_c=None):
     listed = {family: boxes[family] for family in families if family in boxes and family != "mesh"}
     if listed:
         settings["box_c"] = listed
-    if bed_families(families):
-        settings["bed_max_candidates"] = int(args.bed_max_candidates)
     return settings
 
 
@@ -504,8 +477,7 @@ def grow_and_write(task):
         result = grow_member(member["family"], member["ratio"], member["seed"], d_min=settings["d_min"],
                              collision_margin=settings["collision_margin"], mesh_box_c=settings["mesh_box_c"],
                              iteration_cap=settings["iteration_cap"], avoid_collisions=settings["avoid_collisions"],
-                             box_c=settings.get("box_c"),
-                             bed_max_candidates=settings.get("bed_max_candidates", DEFAULT_BED_MAX_CANDIDATES))
+                             box_c=settings.get("box_c"))
         grown = result["grown"]
         row = describe_member(grown, settings["collision_margin"], settings["d_min"])
         row["generations"] = max(drawn_generations(p) for p in grown["programs"])
@@ -665,17 +637,6 @@ def effective_sample_size(weights):
     return float(weights.sum() ** 2 / np.sum(weights ** 2))
 
 
-def _whole_number(text):
-    """A whole number given as integer or float text, such as "2000000" or "2e6", as an int."""
-    try:
-        value = float(text)
-    except ValueError:
-        raise argparse.ArgumentTypeError(f"not a number: {text!r}")
-    if not value.is_integer():
-        raise argparse.ArgumentTypeError(f"not a whole number: {text!r}")
-    return int(value)
-
-
 def build_parser():
     parser = argparse.ArgumentParser(
         description="Grow a reproducible library of networks in relative units (d_min = 1), with an index "
@@ -702,10 +663,6 @@ def build_parser():
                              + "; not together with --mesh-box-c for mesh)")
     parser.add_argument("--iteration-cap", type=int, default=DEFAULT_ITERATION_CAP,
                         help=f"generations allowed; d_min stops growth first (default {DEFAULT_ITERATION_CAP})")
-    parser.add_argument("--bed-max-candidates", type=_whole_number, default=DEFAULT_BED_MAX_CANDIDATES, metavar="N",
-                        help="refuse, and record as a failure, a bed member whose planned candidate edges exceed N, "
-                             "before anything is drawn; it bounds the candidates only, not the walk "
-                             "(default 2e6)")
     parser.add_argument("--avoid-collisions", dest="avoid_collisions", action="store_true", default=True,
                         help="grow trees with collision avoidance (default; mesh and tumour always do)")
     parser.add_argument("--no-avoid-collisions", dest="avoid_collisions", action="store_false",
@@ -746,8 +703,6 @@ def main(argv=None):
         raise SystemExit("--collision-margin cannot be negative")
     if (args.mesh_box_c is not None and args.mesh_box_c <= 0.0) or args.iteration_cap < 1:
         raise SystemExit("--mesh-box-c must be positive and --iteration-cap at least 1")
-    if args.bed_max_candidates < 1:
-        raise SystemExit("--bed-max-candidates must be a whole number of at least 1")
 
     settings = growth_settings(args, box_c)
     settings.update({"ratio_lo": float(lo), "ratio_hi": float(hi)})

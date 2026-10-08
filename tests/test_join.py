@@ -7,11 +7,15 @@ Run from the repository root with
 The benchmarks at the two performance targets are slow and run only with
 VSYSTEM_SLOW_TESTS=1; they print per-stage timings and the outcome mix.
 """
+import contextlib
+import io
+import json
 import math
 import os
 import random
 import resource
 import sys
+import tempfile
 import time
 import unittest
 
@@ -21,8 +25,10 @@ ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 if ROOT not in sys.path:
     sys.path.insert(0, ROOT)
 
+import bed  # noqa: E402
 import graph  # noqa: E402
 import join  # noqa: E402
+import library  # noqa: E402
 import main  # noqa: E402
 from anastomosis import BRIDGE  # noqa: E402
 from describe import clearance  # noqa: E402
@@ -140,7 +146,8 @@ class RegistryTests(unittest.TestCase):
 
     def test_main_does_not_import_frames_join_or_library(self):
         for name in ("main", "vSystem", "libGenerator", "analyseGrammar", "utils", "computeVoxel",
-                     "tortuosity", "collisions", "anastomosis", "graph", "spatial", "guidance", "connections"):
+                     "tortuosity", "collisions", "anastomosis", "graph", "spatial", "guidance", "connections",
+                     "bed"):
             with open(os.path.join(ROOT, name + ".py")) as handle:
                 source = handle.read()
             for other in ("frames", "join", "library"):
@@ -149,6 +156,44 @@ class RegistryTests(unittest.TestCase):
 
     def test_the_stream_tags_of_the_generator_are_what_they_were(self):
         self.assertEqual(main.RNG_STREAMS, {"walk": 1, "anastomosis": 2, "rungs": 5})
+
+    def test_the_bed_keeps_its_tag_to_itself(self):
+        # bed.py's tag 7, like join's 3 and the library's 4, is registered nowhere else
+        self.assertEqual(bed.RNG_TAG, 7)
+        for registry in (main.RNG_STREAMS, join.RNG_STREAMS, library.RNG_STREAMS):
+            self.assertNotIn(bed.RNG_TAG, set(registry.values()))
+            self.assertNotIn("bed", registry)
+        self.assertEqual(library.CODE_MODULES[-1], "bed")
+
+    def test_a_bed_run_records_its_stream_beside_the_registered_ones(self):
+        with tempfile.TemporaryDirectory() as out:
+            with contextlib.redirect_stdout(io.StringIO()):
+                status = main.main(["--count", "1", "--seed", "5", "--volume", "48", "48", "48", "--fit", "voxel_size",
+                                    "--voxel-size", "1", "--d0", "8", "0", "--iterations", "3", "3", "--d-min", "1",
+                                    "--grow-in-volume", "--bed", "{}", "--out", out])
+            self.assertEqual(status, 0)
+            stem = next(name[:-5] for name in os.listdir(out) if name.endswith(".json"))
+            with open(os.path.join(out, stem + ".json")) as handle:
+                streams = json.load(handle)["rng_streams"]
+        self.assertEqual(streams["bed"], [5, 7])
+        self.assertEqual({name: value for name, value in streams.items() if name != "bed"},
+                         {name: [5, tag] for name, tag in main.RNG_STREAMS.items()})
+
+    def test_the_bed_counters_close_main_s_events(self):
+        self.assertEqual(tuple(main.EVENT_KEYS[-len(bed.EVENT_KEYS):]), bed.EVENT_KEYS)
+        self.assertEqual(len(set(main.EVENT_KEYS)), len(main.EVENT_KEYS))
+        self.assertTrue(all(key.startswith("bed_") for key in bed.EVENT_KEYS))
+        self.assertEqual(bed.EVENT_KEYS, ("bed_proposals", "bed_proposals_on_feeders", "bed_proposals_overlapping",
+                                          "bed_seeds", "bed_tips", "bed_tips_inside_junction",
+                                          "bed_candidates", "bed_candidates_tip",
+                                          "bed_refused_degree", "bed_refused_angle", "bed_refused_girth",
+                                          "bed_refused_clearance", "bed_refused_clearance_at_end", "bed_edges",
+                                          "bed_edges_dead_end", "bed_edges_island", "bed_edges_dropped",
+                                          "bed_seeds_dead_end", "bed_seeds_island",
+                                          "bed_segments", "bed_segments_walked", "bed_segments_chord",
+                                          "bed_segments_dropped", "bed_segments_removed", "bed_walk_redraws",
+                                          "bed_tips_attached", "bed_tip_edges", "bed_components",
+                                          "bed_components_one_tree"))
 
 
 class CropTests(unittest.TestCase):
