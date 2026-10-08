@@ -1007,6 +1007,69 @@ class PinnedRelease36Tests(unittest.TestCase):
                 for key, count in appended(extras):
                     self.assertEqual(count, 0, key)
 
+    def test_with_the_later_options_off_what_3_7_added_is_off(self):
+        # 3.7 appends the explicit bed: with it off, every record holds the
+        # shaping key bed as None, no run records the bed's stream, no bed
+        # counter counts and nothing else is returned, stored or recorded
+        import bed
+        import library
+        import numpy as np
+        extras = self.current["extras"]
+        grown = [case for case in extras if isinstance(extras[case].get("returned"), dict)]
+        self.assertGreater(len(grown), 10)
+        for case in grown:
+            with self.subTest(case=case):
+                self.assertNotIn("bed", extras[case]["returned"])
+                if "kwargs" in extras[case]:
+                    self.assertIn("bed", extras[case]["kwargs"])
+                    self.assertIsNone(extras[case]["kwargs"]["bed"])
+        for case in ("cli_tree", "cli_fill", "cli_aligned_tight"):
+            for stem, entry in extras[case].items():
+                with self.subTest(case=case, stem=stem):
+                    for record in (entry["sidecar"], entry["metadata"]):
+                        self.assertIn("bed", record)
+                        self.assertIsNone(record["bed"])
+                    self.assertNotIn("bed", entry["rng_streams"])
+                    self.assertEqual(entry["arrays"], [])
+        for case in ("library", "library_fill"):
+            with self.subTest(case=case):
+                # an archive's grow_kwargs is pinned to its 3.6 keys, so its bed is read from the archive itself
+                for name in self.current["facts"][case]["files"]:
+                    with np.load(os.path.join(self.scratch, "current", case, name), allow_pickle=False) as handle:
+                        grow_kwargs = json.loads(handle["metadata"].item())["grow_kwargs"]
+                    self.assertIn("bed", grow_kwargs, name)
+                    self.assertIsNone(grow_kwargs["bed"], name)
+                # a library listing no family with a bed records no cap on one
+                self.assertNotIn("bed_max_candidates", self.current["facts"][case]["growth"])
+                self.assertEqual(extras[case]["library_version"], library.LIBRARY_VERSION)
+
+        # every bed counter is listed wherever the events are recorded, and none counts
+        def events_of(value):
+            # the "events" records of a case's extras, at any depth; a library's are kept by archive
+            if isinstance(value, dict):
+                for key, item in value.items():
+                    if key == "events" and all(not isinstance(count, dict) for count in item.values()):
+                        yield item
+                    elif key == "events":
+                        yield from item.values()
+                    else:
+                        yield from events_of(item)
+
+        listed = 0
+        for case, entry in extras.items():
+            with self.subTest(case=case):
+                for events in events_of(entry):
+                    counted = {key: count for key, count in events.items() if key.startswith("bed_")}
+                    if counted:
+                        self.assertEqual(counted, dict.fromkeys(bed.EVENT_KEYS, 0))
+                        listed += 1
+        self.assertGreater(listed, len(grown))
+        # a stage that creates a generator while off fails the hash of the generators each case created
+        for case, hashes in self.current["hashes"].items():
+            if isinstance(hashes, dict) and "stage_generators" in hashes:
+                with self.subTest(case=case):
+                    self.assertEqual(hashes["stage_generators"], self.reference["hashes"][case]["stage_generators"])
+
     def test_the_released_presets_are_unchanged(self):
         import main
         for family, released in (("tree", {}), ("mesh", MESH_3_6), ("tumour", TUMOUR_3_6), ("aligned", ALIGNED_3_6),

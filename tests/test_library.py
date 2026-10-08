@@ -4,7 +4,8 @@ Tests of library.py: the network-library generator and its weights.
 Run from the repository root with
     python -m unittest tests.test_library
 The command-line runs grow tiny libraries (small ratio ranges) in worker
-processes, so this module takes about a minute.
+processes, so this module takes about a minute. A library of the foam family,
+whose explicit bed takes longer to grow, runs only with VSYSTEM_SLOW_TESTS=1.
 """
 import contextlib
 import io
@@ -23,11 +24,13 @@ ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 if ROOT not in sys.path:
     sys.path.insert(0, ROOT)
 
+import bed  # noqa: E402
 import library  # noqa: E402
 import main  # noqa: E402
 from analyseGrammar import tokenise  # noqa: E402
 from library import grow_member, library_weights, plan_library, plan_ratios  # noqa: E402
 
+SLOW = unittest.skipUnless(os.environ.get("VSYSTEM_SLOW_TESTS"), "set VSYSTEM_SLOW_TESTS=1 to run the slow tests")
 TINY = ["--ratio-range", "2.52", "3.5"]
 
 
@@ -431,7 +434,7 @@ class BoxConstantTests(unittest.TestCase):
         self.assertEqual(library.box_constants(None, {"aligned": 20.0, "mesh": 11.0}),
                          dict(library.BOX_C, mesh=11.0, aligned=20.0))
         self.assertEqual(library.BOX_C, {"mesh": 15.0, "aligned": 15.0, "aligned_tight": 20.0, "aligned_bed": 20.0,
-                                         "capillary_bed": 15.0})
+                                         "capillary_bed": 15.0, "foam": 15.0})
         with self.assertRaises(ValueError):
             library.box_constants(12.0, {"mesh": 11.0})
         with self.assertRaises(ValueError):
@@ -475,6 +478,18 @@ class BoxConstantTests(unittest.TestCase):
         args = library.build_parser().parse_args(["--out", "x", "--count", "1", "--seed", "1", "--families", "tree",
                                                   "--box-c", "aligned", "12"])
         self.assertNotIn("box_c", library.growth_settings(args, {"aligned": 12.0}))
+
+    def test_a_library_listing_foam_records_its_box_and_the_cap_on_its_bed(self):
+        args = library.build_parser().parse_args(["--out", "x", "--count", "1", "--seed", "1", "--families", "foam"])
+        self.assertEqual(library.growth_settings(args),
+                         {"collision_margin": 1.0, "mesh_box_c": 15.0, "iteration_cap": 64, "avoid_collisions": True,
+                          "d_min": 1.0, "box_c": {"foam": 15.0}, "bed_max_candidates": 2000000})
+        # a library of families without a bed records neither, whatever the cap given
+        args = library.build_parser().parse_args(["--out", "x", "--count", "1", "--seed", "1", "--families", "tree",
+                                                  "mesh", "--bed-max-candidates", "10"])
+        self.assertEqual(library.growth_settings(args),
+                         {"collision_margin": 1.0, "mesh_box_c": 15.0, "iteration_cap": 64, "avoid_collisions": True,
+                          "d_min": 1.0})
 
 
 class AlignedFailureTests(unittest.TestCase):
@@ -546,6 +561,66 @@ class AlignedLibraryTests(unittest.TestCase):
             self.assertNotIn(".npz:", stdout)                                    # nothing was grown again
             with open(index_path) as handle:
                 after = {row["id"]: row for row in json.load(handle)["networks"]}
+            for column in library.INDEX_COLUMNS:
+                if column not in ("seconds", "peak_rss_mb"):
+                    self.assertEqual(after[0][column], before[0][column], column)
+        finally:
+            with open(index_path, "w") as handle:
+                json.dump({"units": index["units"], "ratio_law": index["ratio_law"],
+                           "networks": [before[k] for k in sorted(before)]}, handle)
+
+
+@SLOW
+class FoamLibraryTests(unittest.TestCase):
+    """A one-network library of the foam family: its row, its metadata and a resumed row."""
+
+    @classmethod
+    def setUpClass(cls):
+        cls.out = tempfile.mkdtemp()
+        cls.argv = ["--out", cls.out, "--count", "1", "--seed", "1", "--families", "foam", "--ratio-range", "4", "4.2",
+                    "--workers", "1"]
+        cls.status, cls.stdout, cls.stderr = run_cli(cls.argv)
+
+    @classmethod
+    def tearDownClass(cls):
+        shutil.rmtree(cls.out, ignore_errors=True)
+
+    def test_the_foam_row_carries_the_bed_in_its_events_and_no_bridge(self):
+        self.assertEqual(self.status, 0, self.stderr)
+        with open(os.path.join(self.out, "index.json")) as handle:
+            (row,) = json.load(handle)["networks"]
+        record = main.load_network(os.path.join(self.out, row["file"]))["metadata"]
+        # the bed's columns carry the bridge label, but bridges and rungs count anastomose's and the rungs
+        self.assertEqual(row["bridges"], 0)
+        self.assertEqual(row["rungs"], 0)
+        self.assertEqual(record["bridges"], [])
+        # the row's events keep every counter that is not zero, the bed's among them
+        self.assertGreater(row["events"]["bed_seeds"], 0)
+        self.assertGreater(row["events"]["bed_segments"], 0)
+        self.assertEqual({key: row["events"].get(key, 0) for key in bed.EVENT_KEYS},
+                         {key: record["events"][key] for key in bed.EVENT_KEYS})
+        # the settings are recorded normalised, every key written out
+        self.assertEqual(record["grow_kwargs"]["bed"], bed.parse_settings(main.FAMILIES["foam"]["bed"]))
+        self.assertEqual(list(record["grow_kwargs"]["bed"]), list(bed.SETTING_KEYS))
+        self.assertEqual(record["frame"]["kind"], "none")
+        self.assertEqual(len(record["root_columns"]), 2)
+
+    def test_a_resumed_foam_row_is_rebuilt_equal(self):
+        self.assertEqual(self.status, 0, self.stderr)
+        index_path = os.path.join(self.out, "index.json")
+        with open(index_path) as handle:
+            index = json.load(handle)
+        before = {row["id"]: row for row in index["networks"]}
+        try:
+            index["networks"] = []
+            with open(index_path, "w") as handle:
+                json.dump(index, handle)
+            status, stdout, stderr = run_cli(self.argv)
+            self.assertEqual(status, 0, stderr)
+            self.assertNotIn(".npz:", stdout)                                    # nothing was grown again
+            with open(index_path) as handle:
+                after = {row["id"]: row for row in json.load(handle)["networks"]}
+            self.assertEqual(sorted(after), sorted(before))
             for column in library.INDEX_COLUMNS:
                 if column not in ("seconds", "peak_rss_mb"):
                     self.assertEqual(after[0][column], before[0][column], column)

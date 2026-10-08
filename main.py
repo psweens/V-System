@@ -55,6 +55,8 @@ from spatial import make_index
 from utils import interpolate_segments
 from connections import EVENT_KEYS as CONNECTION_EVENTS, check_settings as check_rung_settings
 from connections import cross_connect as connect_rungs
+from bed import EVENT_KEYS as BED_EVENTS, RNG_TAG as BED_TAG, SeedsNotPlaced, build as build_bed
+from bed import check_settings as check_bed_settings, parse_settings as parse_bed, planned_seeds as planned_bed_seeds
 from vSystem import F, _check_fill as check_fill
 
 # The unit one grammar unit is taken to stand for. Diameters, segment lengths
@@ -71,16 +73,18 @@ TORTUOSITIES = ("stems", "walk")
 ANASTOMOSE_MODES = ("any", "arteriovenous")
 
 # Every counter a run can report, so that a sidecar lists the zero ones too.
-# Append-only: the guidance counters come after the anastomosis ones, and the
-# cross-connection counters after those.
-EVENT_KEYS = ("bound_terminations", "walk_bound_redraws", "walk_bound_terminations",
-              "collision_redraws", "collision_terminations", "collision_truncated_stems",
-              "root_relocations", "root_collisions") + ANASTOMOSIS_EVENTS + GUIDANCE_EVENTS + CONNECTION_EVENTS
+# Append-only: the guidance counters come after the anastomosis ones, the
+# cross-connection counters after those, and the bed counters after those.
+EVENT_KEYS = (("bound_terminations", "walk_bound_redraws", "walk_bound_terminations",
+               "collision_redraws", "collision_terminations", "collision_truncated_stems",
+               "root_relocations", "root_collisions")
+              + ANASTOMOSIS_EVENTS + GUIDANCE_EVENTS + CONNECTION_EVENTS + BED_EVENTS)
 
 # Independent random streams for the stages after the grammar, each seeded
 # from the run seed together with a fixed tag, so that enabling a stage never
 # changes a draw the grammar makes and every stage is reproducible on its own.
-# join.py takes tag 3 and library.py tag 4; 6 is free and 7 is reserved.
+# join.py takes tag 3, library.py tag 4 and bed.py tag 7, which a bed run's
+# sidecar records; 6 is free.
 RNG_STREAMS = {"walk": 1, "anastomosis": 2, "rungs": 5}
 
 # Bundles of settings for a family of networks. `tree` is the plain grammar;
@@ -102,10 +106,15 @@ RNG_STREAMS = {"walk": 1, "anastomosis": 2, "rungs": 5}
 # 60 degrees from x. `capillary_bed` is an unguided arteriovenous pair, every
 # tip seeking a partner, filled with capillary trees of three generations
 # whose stems run as two blocks, its capillaries cross-connected by rungs at
-# least 60 degrees from their tangent. The persistence values, and the
-# guidance, capillary and rung values of the families from `aligned` on, are
-# provisional calibrations (see docs/geometry and the README); released
-# presets are frozen, so a changed value takes a new family name.
+# least 60 degrees from their tangent. `foam` is two feeder trees in the mesh
+# layout whose grammar stops below 2 d_min, joined by an explicit capillary
+# bed: seeds placed with a hard core, joined greedily under a degree cap of 3,
+# a smallest branch angle and a girth bound, pruned of dead ends and islands,
+# and walked; its bed values are provisional calibrations. The persistence
+# values, and the guidance, capillary and rung values of the families from
+# `aligned` on, are provisional calibrations (see docs/geometry and the
+# README); released presets are frozen, so a changed value takes a new family
+# name.
 # A preset listed as None is a family this version does not offer.
 FAMILIES = {
     "tree": {},
@@ -143,6 +152,10 @@ FAMILIES = {
                       "capillary_generations": 3, "capillary_runs": 2,
                       "cross_connect": True, "rung_below": 2.0, "rung_spacing": 20.0, "rung_radius": 8.0,
                       "rung_lateral_deg": 60.0, "rung_axis": None, "rung_min_separation": 2},
+    "foam": {"tortuosity": "walk", "persistence": 10.0, "avoid_collisions": True, "grow_in_volume": True,
+             "bed": {"kind": "foam", "spacing": 7.5, "girth": 8, "min_angle": 60.0, "reach": 2.5,
+                     "diameter": 1.0, "persistence": 8.0, "feeder_stop": 2.0, "tip_edges": 2,
+                     "stretch": 1.0, "density": 0.5, "jitter": 0.25, "step": 0.5}},
 }
 
 # The default turtle frame of the first tree; the second tree of a pair heads back.
@@ -152,6 +165,10 @@ DEFAULT_PERPENDICULAR = (0.0, 0.0, 1.0)
 
 class RootOutsideBox(ValueError):
     """A root offset puts a root outside the growth box."""
+
+
+class BedBoxTooSmall(ValueError):
+    """The growth box holds no seed of an explicit bed."""
 
 
 def _walk_settings(tortuosity, persistence, seed, guidance=None):
@@ -264,7 +281,7 @@ def grow_network(niter, d0, properties, tVol, fit="isotropic", clip_axes=(2,), v
                  anastomosis_fraction=0.5, anastomose_mode="any", anastomosis_min_separation=3,
                  seed=None, guidance=None, root_offsets=None, capillary_generations=0, capillary_runs=1,
                  cross_connect=False, rung_below=2.0, rung_spacing=20.0, rung_radius=8.0, rung_lateral_deg=60.0,
-                 rung_axis=None, rung_min_separation=2):
+                 rung_axis=None, rung_min_separation=2, bed=None):
     """
     Grows one network and returns its geometry and graph, without rendering it.
 
@@ -321,6 +338,14 @@ def grow_network(niter, d0, properties, tVol, fit="isotropic", clip_axes=(2,), v
             rung_min_separation: the rungs' settings, passed to
             connections.cross_connect as below, spacing, radius,
             lateral_deg, axis and min_separation.
+        bed (dict or None): the settings of an explicit capillary bed (see
+            bed.BedSettings; keys left out take their defaults). With a bed,
+            two feeder trees grow in the mesh layout, their grammar stopping
+            below feeder_stop x d_min, and bed.build joins their tips by a
+            bed on the random sub-streams [seed, bed.RNG_TAG, k] instead of
+            anastomosing them. Needs grow_in_volume, d_min and a seed, and
+            refuses anastomose, cross_connect, a capillary fill and guidance.
+            None creates no generator of the bed and changes nothing.
 
     Returns:
         dict: "nodes" the (4, N) centreline; "program" the grammar string (of
@@ -333,7 +358,11 @@ def grow_network(niter, d0, properties, tVol, fit="isotropic", clip_axes=(2,), v
         axis or plane the finest guided class was steered towards, with the
         rules, the growth frame and the origin (the box centre, else the first
         root) in the coordinates of "nodes"; kind "none" without guidance;
-        "rungs" the cross-connections made, [] when they are off.
+        "rungs" the cross-connections made, [] when they are off. With a
+        bed, its columns follow the feeders' and are labelled BRIDGE in
+        "tree", its counters are the bed_* events, "frame" is
+        bed.frame_record's (kind "axis" at a stretch above 1), and
+        "bridges", which holds anastomose's bridges, and "rungs" are [].
 
     Raises:
         ValueError: for guidance without the walk, a malformed guidance or
@@ -341,9 +370,30 @@ def grow_network(niter, d0, properties, tVol, fit="isotropic", clip_axes=(2,), v
         "partner" polarity without a second tree or root offsets that differ
         along its axis, (RootOutsideBox) an offset that puts a root outside
         the growth box, malformed capillary or rung settings, and
-        capillary generations or cross-connections without d_min.
+        capillary generations or cross-connections without d_min. With a
+        bed, also for settings bed.parse_settings or bed.check_settings
+        refuses, an option the bed refuses or lacks, a root diameter below
+        feeder_stop x d_min and (BedBoxTooSmall) a growth box that holds no
+        seed, each before anything is drawn except, under the isotropic fit,
+        the box too small and an offset outside it, and (bed.SeedsNotPlaced)
+        when the bed's proposals run out before its seeds are placed.
     """
     libGenerator.setProperties(properties)
+    if bed is not None:
+        # an explicit bed grows its own feeder pair and returns here, so that
+        # what follows is what 3.6 ran
+        return _grow_bed(niter, d0, tVol, bed, fit=fit, clip_axes=clip_axes, voxel_size=voxel_size,
+                         subdivisions=subdivisions, direction=direction, perpendicular=perpendicular,
+                         d_min=d_min, grow_in_volume=grow_in_volume, tortuosity=tortuosity,
+                         persistence=persistence, avoid_collisions=avoid_collisions,
+                         collision_margin=collision_margin, collision_attempts=collision_attempts,
+                         collision_index=collision_index, anastomose=anastomose,
+                         anastomose_mode=anastomose_mode, seed=seed, guidance=guidance,
+                         root_offsets=root_offsets, capillary_generations=capillary_generations,
+                         capillary_runs=capillary_runs, cross_connect=cross_connect,
+                         rungs=dict(below=rung_below, spacing=rung_spacing, radius=rung_radius,
+                                    lateral_deg=rung_lateral_deg, axis=rung_axis,
+                                    min_separation=rung_min_separation))
     if anastomose_mode not in ANASTOMOSE_MODES:
         raise ValueError(f"anastomose_mode must be one of {ANASTOMOSE_MODES}, got {anastomose_mode!r}")
     if anastomose and seed is None:
@@ -481,6 +531,153 @@ def grow_network(niter, d0, properties, tVol, fit="isotropic", clip_axes=(2,), v
     }
 
 
+def _check_bed_box(box, settings, d_min):
+    # a bed needs at least one seed in its growth box
+    if planned_bed_seeds(box, settings, d_min) == 0:
+        raise BedBoxTooSmall(f"the growth box {box.tolist()} holds no seed of the bed at spacing "
+                             f"{settings['spacing']:g} d_min and density {settings['density']:g}")
+
+
+def _bed_roots(box, offsets, d_min):
+    # the roots of a bed's feeder pair in the mesh layout, moved by the offsets
+    positions = [np.array([box[0] / 2.0, 0.0, box[2] / 2.0]), np.array([box[0] / 2.0, box[1], box[2] / 2.0])]
+    if offsets is not None:
+        positions = [position + offset * d_min for position, offset in zip(positions, offsets)]
+        for k, position in enumerate(positions):
+            if np.any(position < 0.0) or np.any(position > box):
+                raise RootOutsideBox(f"root offset {k} puts the root at {position.tolist()}, outside the "
+                                     f"growth box {box.tolist()}")
+    return positions
+
+
+def _grow_bed(niter, d0, tVol, bed, *, fit, clip_axes, voxel_size, subdivisions, direction, perpendicular, d_min,
+              grow_in_volume, tortuosity, persistence, avoid_collisions, collision_margin, collision_attempts,
+              collision_index, anastomose, anastomose_mode, seed, guidance, root_offsets, capillary_generations,
+              capillary_runs, cross_connect, rungs):
+    """
+    grow_network's path with an explicit bed: two feeder trees grown in the
+    mesh layout as a regular pair is, their grammar stopping below
+    feeder_stop x d_min, then joined by bed.build. Every refusal of the
+    settings comes before anything is drawn but, under the isotropic fit, a
+    box too small to hold a seed and a root offset outside the box, which
+    are known only once the grammar has drawn; the two feeder programs are
+    the only draws from the global generators. Under the voxel_size fit the
+    box is known, so no free-extent pass runs; otherwise the box is the
+    first program's, as for a regular pair. The steps it shares with
+    grow_network are written out rather than factored, so that
+    grow_network's released body stays as it was.
+    """
+    # a new dict: a preset's settings are shared by reference and never changed
+    settings = parse_bed(bed)
+    # the regular checks, for parity with the command line
+    if anastomose_mode not in ANASTOMOSE_MODES:
+        raise ValueError(f"anastomose_mode must be one of {ANASTOMOSE_MODES}, got {anastomose_mode!r}")
+    check_fill(d_min, capillary_generations, capillary_runs)
+    if not isinstance(cross_connect, bool):
+        raise ValueError(f"cross_connect must be True or False, got {cross_connect!r}")
+    check_rung_settings(**rungs)
+    # what the bed refuses and what it needs
+    if anastomose:
+        raise ValueError("a bed cannot be combined with anastomose: the bed joins the feeder trees itself")
+    if cross_connect:
+        raise ValueError("a bed cannot be combined with cross_connect")
+    if capillary_generations != 0 or capillary_runs != 1:
+        raise ValueError("a bed cannot be combined with a capillary fill: capillary_generations must be 0 "
+                         "and capillary_runs 1")
+    if guidance is not None:
+        raise ValueError("a bed cannot be combined with guidance: its feeder trees grow unguided")
+    if not grow_in_volume:
+        raise ValueError("a bed needs grow_in_volume: it grows in the growth box")
+    if d_min is None:
+        raise ValueError("a bed needs d_min: its settings are in units of d_min")
+    if seed is None or isinstance(seed, bool) or not isinstance(seed, (int, np.integer)) or seed < 0:
+        raise ValueError(f"a bed needs a seed, a non-negative integer, so that the network is reproducible, "
+                         f"got {seed!r}")
+    if not _finite_number(collision_margin) or collision_margin < 0.0:
+        raise ValueError(f"a bed needs a finite collision margin of at least 0, got {collision_margin!r}")
+    if (isinstance(collision_attempts, bool) or not isinstance(collision_attempts, (int, np.integer))
+            or collision_attempts < 0):
+        raise ValueError(f"collision_attempts must be an integer of at least 0, got {collision_attempts!r}")
+    if collision_index not in ("auto", "grid", "kdtree"):
+        raise ValueError(f"collision_index must be 'auto', 'grid' or 'kdtree', got {collision_index!r}")
+    if tortuosity not in TORTUOSITIES:
+        raise ValueError(f"tortuosity must be one of {TORTUOSITIES}, got {tortuosity!r}")
+    if tortuosity == "walk" and (persistence is None or not persistence > 0.0):
+        raise ValueError("the walk needs a positive persistence, in multiples of the vessel diameter")
+    check_bed_settings(settings, d_min=d_min, collision_margin=collision_margin)
+    offsets = _root_offsets(root_offsets, 2, grow_in_volume, d_min)
+    stop = settings["feeder_stop"] * d_min
+    if d0 < stop:
+        raise ValueError(f"the root diameter {d0:g} is below the bed's feeder_stop x d_min, {stop:g}, so the "
+                         f"feeder trees would have no tip")
+    shape = np.asarray(tVol, dtype=float)
+    box = None
+    if fit == "voxel_size":
+        if not _finite_number(voxel_size) or voxel_size <= 0:
+            raise ValueError("growing in the volume at a fixed voxel size needs a positive, finite "
+                             "voxel_size, since it sets the field of view in grammar units")
+        # the box is known, so it and the roots are checked before the grammar draws
+        box = shape * float(voxel_size)
+        _check_bed_box(box, settings, d_min)
+        positions = _bed_roots(box, offsets, d_min)
+    # the feeders' grammar, the only global draws
+    programs = [F(niter, d0, stop) for _ in range(2)]
+    events = {key: 0 for key in EVENT_KEYS}
+    direction = np.asarray(direction, dtype=float)
+    perpendicular = np.asarray(perpendicular, dtype=float)
+    if box is None:
+        # the box takes the volume's proportions at the largest size the first
+        # tree still overflows, as for a regular pair
+        extent, _ = _free_extent(programs[0], d0, direction, perpendicular,
+                                 _walk_settings(tortuosity, persistence, seed))
+        box = shape * float(np.min(extent / shape))
+        _check_bed_box(box, settings, d_min)
+        positions = _bed_roots(box, offsets, d_min)
+    bounds = (np.zeros(3), box)
+    directions = [direction, -direction]
+
+    resolved_index = "grid" if collision_index == "auto" else collision_index
+    avoider = None
+    index_kind = None
+    if avoid_collisions:
+        index_kind = resolved_index
+        cell = d0 * libGenerator.aneurysm_factor + collision_margin
+        avoider = CollisionAvoider(make_index(index_kind, cell_size=cell), margin=collision_margin,
+                                   attempts=collision_attempts)
+    walk = _walk_settings(tortuosity, persistence, seed)
+
+    pieces = []
+    labels = []
+    for index, (program, position, heading) in enumerate(zip(programs, positions, directions)):
+        if index:
+            position = _clear_root(avoider, position, heading, box, d0 / 2.0, events)
+            positions[index] = position
+        rows = branching_turtle_to_coords(program, d0, position=position, direction=heading,
+                                          perpendicular=perpendicular, bounds=bounds, walk=walk,
+                                          avoid=avoider, events=events, subdivisions=subdivisions)
+        part = interpolate_segments(rows, subdivisions=subdivisions)
+        if pieces:
+            pieces.append(np.full((4, 1), np.nan))
+            labels.append(np.array([-1], dtype=np.int8))
+        pieces.append(part)
+        labels.append(np.where(np.isnan(part[0]), -1, index).astype(np.int8))
+    nodes = np.concatenate(pieces, axis=1)
+    tree = np.concatenate(labels)
+
+    result = build_bed((np.zeros(3), box), settings, d_min=d_min, seed=seed, collision_margin=collision_margin,
+                       feeders=(nodes, tree), frame=unguided_frame(direction, perpendicular, box / 2.0),
+                       attempts=collision_attempts, index_kind=resolved_index, events=events)
+    built = graph.build(result["nodes"])
+    return {
+        "nodes": result["nodes"], "program": programs[0], "programs": programs,
+        "edges": built["edges"], "node_kind": built["node_kind"], "tree": result["tree"],
+        "events": events, "growth_box_um": [float(v) for v in box],
+        "root_positions_um": [[float(v) for v in p] for p in positions],
+        "clip_axes": (), "bridges": [], "collision_index": index_kind,
+        "frame": result["frame"], "rungs": [],
+    }
+
+
 def generate_network(niter, d0, properties, tVol, fit="isotropic", clip_axes=(2,),
                      voxel_size=None, subdivisions=3,
                      direction=DEFAULT_DIRECTION, perpendicular=DEFAULT_PERPENDICULAR,
@@ -518,8 +715,10 @@ def generate_network(niter, d0, properties, tVol, fit="isotropic", clip_axes=(2,
             persistence, avoid_collisions, collision_margin, collision_attempts,
             collision_index, anastomose, anastomosis_radius,
             anastomosis_fraction, anastomose_mode, anastomosis_min_separation,
-            seed, guidance, root_offsets). Left out, the network is the plain
-            grammar's.
+            seed, guidance, root_offsets, capillary_generations,
+            capillary_runs, cross_connect, rung_below, rung_spacing,
+            rung_radius, rung_lateral_deg, rung_axis, rung_min_separation,
+            bed). Left out, the network is the plain grammar's.
 
     Returns:
         tuple: (volume, program, nodes) with volume a uint8 array of 0 and 1,
@@ -686,6 +885,7 @@ def shaping_options(args):
         "cross_connect": args.cross_connect, "rung_below": args.rung_below, "rung_spacing": args.rung_spacing,
         "rung_radius": args.rung_radius, "rung_lateral_deg": args.rung_lateral_deg, "rung_axis": args.rung_axis,
         "rung_min_separation": args.rung_min_separation,
+        "bed": None if args.bed is None else parse_bed(args.bed),
     }
 
 
@@ -779,7 +979,9 @@ def build_parser(family="tree"):
                             "aligned_tight = aligned steered harder from the first step with its roots "
                             "40 d_min apart; aligned_bed = aligned_tight filled with capillary trees and "
                             "cross-connected; capillary_bed = an arteriovenous pair filled with capillary "
-                            "trees and cross-connected, unguided. Options given explicitly override the preset")
+                            "trees and cross-connected, unguided; foam = two feeder trees stopping at 2 d_min "
+                            "joined by a greedy degree-3 capillary bed with a girth bound. Options given "
+                            "explicitly override the preset")
     shape.add_argument("--tortuosity", choices=TORTUOSITIES, default="stems",
                        help="stems: each stem is the grammar's five sub-segments smoothed by a "
                             "B-spline (default); walk: each stem is a persistent random walk of the "
@@ -848,6 +1050,12 @@ def build_parser(family="tree"):
     shape.add_argument("--rung-min-separation", type=int, default=2,
                        help="smallest number of tree segments between a rung's site and its partner "
                             "(default 2: never on the site's own vessel)")
+    shape.add_argument("--bed", type=parse_json_option, default=None, metavar="JSON",
+                       help="grow an explicit capillary bed between the tips of two feeder trees in the mesh "
+                            "layout instead of anastomosing them: a JSON object of bed settings (kind, spacing, "
+                            "girth, min_angle, reach, diameter, persistence, feeder_stop, tip_edges, stretch, "
+                            "density, jitter, step; see bed.py); needs --grow-in-volume and --d-min; null turns "
+                            "a preset's bed off (default: none)")
     preset = FAMILIES.get(family)
     if preset:
         parser.set_defaults(**preset)
@@ -868,7 +1076,43 @@ def validate_shaping(args):
         raise SystemExit("--anastomosis-fraction must lie between 0 and 1")
     if not args.anastomosis_radius > 0.0:
         raise SystemExit("--anastomosis-radius must be positive")
-    trees = 2 if args.anastomose and args.anastomose_mode == "arteriovenous" else 1
+    if args.bed is not None:
+        # each refusal mirrors one grow_network makes with a bed
+        try:
+            settings = parse_bed(args.bed)
+        except ValueError as error:
+            raise SystemExit(f"--bed: {error}")
+        if args.anastomose:
+            raise SystemExit("--bed cannot be combined with --anastomose: the bed joins the feeder trees itself")
+        if args.cross_connect:
+            raise SystemExit("--bed cannot be combined with --cross-connect")
+        if args.capillary_generations != 0 or args.capillary_runs != 1:
+            raise SystemExit("--bed cannot be combined with a capillary fill: --capillary-generations must be 0 "
+                             "and --capillary-runs 1")
+        if args.guidance is not None:
+            raise SystemExit("--bed cannot be combined with --guidance: its feeder trees grow unguided")
+        if not args.grow_in_volume:
+            raise SystemExit("--bed needs --grow-in-volume: it grows in the growth box")
+        if args.d_min is None:
+            raise SystemExit("--bed needs --d-min: its settings are in units of d_min")
+        if args.seed is not None and args.seed < 0:
+            # the bed's streams are default_rng([seed, 7, k]), which takes no negative seed
+            raise SystemExit(f"--bed needs a non-negative --seed, got {args.seed}")
+        try:
+            check_bed_settings(settings, d_min=args.d_min, collision_margin=args.collision_margin)
+        except ValueError as error:
+            raise SystemExit(f"--bed: {error}")
+        if args.fit == "voxel_size" and args.voxel_size is not None:
+            # the box is known here only at a fixed voxel size; otherwise it is the tree's
+            if not math.isfinite(args.voxel_size) or args.voxel_size <= 0:
+                raise SystemExit(f"--bed: growing at a fixed voxel size needs a positive, finite --voxel-size, "
+                                 f"got {args.voxel_size:g}")
+            box = np.asarray(args.volume, dtype=float) * float(args.voxel_size)
+            try:
+                _check_bed_box(box, settings, args.d_min)
+            except ValueError as error:
+                raise SystemExit(f"--bed: {error}")
+    trees = 2 if args.bed is not None or (args.anastomose and args.anastomose_mode == "arteriovenous") else 1
     try:
         offsets = _root_offsets(args.root_offsets, trees, args.grow_in_volume, args.d_min)
         _bind_guidance(args.guidance, trees, DEFAULT_DIRECTION, offsets, args.d_min, args.tortuosity)
@@ -915,6 +1159,8 @@ def main(argv=None):
     os.makedirs(args.out, exist_ok=True)
     tVol = tuple(args.volume)
     shaping = shaping_options(args)
+    # a bed's feeder trees stop below feeder_stop x d_min, so a thinner root grows no tip
+    stop = None if shaping["bed"] is None else shaping["bed"]["feeder_stop"] * args.d_min
 
     for index in range(args.count):
         seed = base_seed + index
@@ -925,6 +1171,10 @@ def main(argv=None):
             raise SystemExit(
                 f"--d-min {args.d_min:g} exceeds the root diameter {d0:.3g} sampled for seed "
                 f"{seed}, so the network would be empty; lower --d-min or raise --d0")
+        if stop is not None and d0 < stop:
+            raise SystemExit(
+                f"--bed: feeder_stop x --d-min, {stop:g}, exceeds the root diameter {d0:.3g} sampled for seed "
+                f"{seed}, so the feeder trees would have no tip; lower --d-min or raise --d0")
         try:
             grown = grow_network(niter, d0, properties, tVol, fit=args.fit, clip_axes=args.clip_axes,
                                  voxel_size=args.voxel_size, subdivisions=args.subdivisions,
@@ -932,11 +1182,16 @@ def main(argv=None):
                                  **shaping)
         except RootOutsideBox as error:
             raise SystemExit(f"--root-offsets: {error} (seed {seed})")
+        except (BedBoxTooSmall, SeedsNotPlaced) as error:
+            raise SystemExit(f"--bed: {error} (seed {seed})")
         nodes = grown["nodes"]
         volume = process_network(nodes, tVol, fit=args.fit, voxel_size=args.voxel_size,
                                  clip_axes=grown["clip_axes"], connect=args.connect)
         stem = f"Lnet_i{niter}_s{seed}"
         write_volume(os.path.join(args.out, stem + ".tiff"), volume)
+        streams = {name: [seed, tag] for name, tag in RNG_STREAMS.items()}
+        if shaping["bed"] is not None:
+            streams["bed"] = [seed, BED_TAG]        # the bed's own tag, recorded only when it draws
         record = {
             "seed": seed,
             "iterations": niter,
@@ -957,7 +1212,7 @@ def main(argv=None):
             "trees": len(grown["programs"]),
             "growth_box_um": grown["growth_box_um"],
             "root_positions_um": grown["root_positions_um"],
-            "rng_streams": {name: [seed, tag] for name, tag in RNG_STREAMS.items()},
+            "rng_streams": streams,
             "collision_index": grown["collision_index"],
             "events": grown["events"],
             "bridges": len(grown["bridges"]),

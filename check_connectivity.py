@@ -212,7 +212,7 @@ def generate_and_check(count, passthrough):
     carrying a break the volume boundary does not explain.
     """
     import random
-    from main import (FAMILIES, build_parser, generate_network, sample_parameters, shaping_options,
+    from main import (FAMILIES, build_parser, generate_network, parse_bed, sample_parameters, shaping_options,
                       validate_shaping)
 
     peel = argparse.ArgumentParser(add_help=False)
@@ -232,14 +232,21 @@ def generate_and_check(count, passthrough):
           f"fit {args.fit}, {shaping}, "
           f"connect {args.connect}, seeds {base}..{base + count - 1}\n")
 
+    # the smallest root that grows a network: d_min, and with a bed feeder_stop x d_min,
+    # below which the feeder trees would have no tip
+    if args.bed is None:
+        floor, limit = args.d_min, "--d-min"
+    else:
+        floor, limit = parse_bed(args.bed)["feeder_stop"] * args.d_min, "the bed's feeder_stop x --d-min"
+
     failed = 0
     for index in range(count):
         seed = base + index
         random.seed(seed)                      # the seeding main() uses, so these are its networks
         np.random.seed(seed % (2 ** 32))
         properties, d0, niter = sample_parameters(args)
-        if args.d_min is not None and d0 < args.d_min:
-            print(f"seed {seed}: --d-min exceeds the sampled root diameter, skipped\n")
+        if floor is not None and d0 < floor:
+            print(f"seed {seed}: {limit} exceeds the sampled root diameter, skipped\n")
             continue
         volume, _, nodes = generate_network(niter, d0, properties, tVol, fit=args.fit,
                                             clip_axes=args.clip_axes, voxel_size=args.voxel_size,
