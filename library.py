@@ -97,7 +97,7 @@ from describe import describe
 RNG_STREAMS = {"ratio": 4}
 
 # The version of the library format and generator, the release it belongs to.
-LIBRARY_VERSION = "3.6.0"
+LIBRARY_VERSION = "3.6.1"
 
 RATIO_LAW = "log-uniform"
 UNITS = "d_min"

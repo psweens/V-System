@@ -383,6 +383,20 @@ class TortuosityTests(unittest.TestCase):
                 self.assertFalse(np.array_equal(plain["nodes"].shape, walked["nodes"].shape)
                                  and np.array_equal(plain["nodes"], walked["nodes"], equal_nan=True))
 
+    def test_the_rotation_helpers_give_what_numpy_gives_bit_for_bit(self):
+        import tortuosity
+        rng = np.random.default_rng(29)
+        vectors = [rng.normal(size=3) * 10.0 ** rng.integers(-300, 300, size=3) for _ in range(2000)]
+        vectors += [rng.normal(size=3) for _ in range(2000)]
+        special = [0.0, -0.0, 1.0, -1.0, 5e-324, -5e-324, 2.2250738585072014e-308, 1.7976931348623157e308,
+                   float("inf"), -float("inf"), float("nan")]
+        vectors += [np.array(rng.choice(special, size=3)) for _ in range(500)]
+        with np.errstate(all="ignore"):
+            for i, a in enumerate(vectors):
+                b = vectors[(7 * i + 3) % len(vectors)]
+                self.assertEqual(tortuosity._cross(a, b).tobytes(), np.cross(a, b).tobytes(), (a, b))
+                self.assertEqual(np.float64(tortuosity._norm(a)).tobytes(), np.linalg.norm(a).tobytes(), a)
+
     def test_the_walk_is_reproducible_from_the_seed(self):
         a = grow(5, tortuosity="walk", persistence=6.0)
         b = grow(5, tortuosity="walk", persistence=6.0)

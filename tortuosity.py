@@ -44,11 +44,27 @@ import math
 import numpy as np
 
 
+def _cross(a, b):
+    """
+    The cross product of two float64 3-vectors, bit for bit what np.cross
+    gives (each product rounded, then each difference), without its per-call
+    overhead, which dominates on 3-vectors.
+    """
+    a0, a1, a2 = np.asarray(a, dtype=float).tolist()
+    b0, b1, b2 = np.asarray(b, dtype=float).tolist()
+    return np.array([a1 * b2 - a2 * b1, a2 * b0 - a0 * b2, a0 * b1 - a1 * b0])
+
+
+def _norm(vector):
+    """np.linalg.norm of a float64 vector, bit for bit: the square root of its dot product with itself."""
+    return math.sqrt(vector.dot(vector))
+
+
 def _rotate(vector, axis, angle):
     """Rodrigues rotation of `vector` about the unit `axis` by `angle` radians."""
     c = math.cos(angle)
     s = math.sin(angle)
-    return vector * c + np.cross(axis, vector) * s + axis * (axis @ vector) * (1.0 - c)
+    return vector * c + _cross(axis, vector) * s + axis * (axis @ vector) * (1.0 - c)
 
 
 def step_std(step, diameter, persistence):
@@ -77,13 +93,13 @@ def perpendicular_rotation(rng, heading, perp, std):
     """
     angle = rng.normal(0.0, std)
     phi = rng.uniform(0.0, 2.0 * math.pi)
-    binormal = np.cross(heading, perp)
+    binormal = _cross(heading, perp)
     axis = math.cos(phi) * perp + math.sin(phi) * binormal
     new_heading = _rotate(heading, axis, angle)
-    new_heading = new_heading / np.linalg.norm(new_heading)
+    new_heading = new_heading / _norm(new_heading)
     new_perp = _rotate(perp, axis, angle)
     new_perp = new_perp - (new_perp @ new_heading) * new_heading
-    new_perp = new_perp / np.linalg.norm(new_perp)
+    new_perp = new_perp / _norm(new_perp)
     return new_heading, new_perp
 
 
