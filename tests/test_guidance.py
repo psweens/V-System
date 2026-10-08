@@ -809,6 +809,61 @@ class FamilyTests(unittest.TestCase):
                 main.main(["--family", "capillary", "--count", "1", "--seed", "1"])
 
 
+class TightFamilyTests(unittest.TestCase):
+    """
+    aligned_tight: aligned with capillary G 2, onset 0 for both rules and the
+    roots 20 d_min either side of the box centre, in a cube of side 20 R.
+    """
+
+    PRESET = {"tortuosity": "walk", "persistence": 10.0, "avoid_collisions": True, "anastomose": True,
+              "anastomose_mode": "arteriovenous", "anastomosis_fraction": 0.8, "grow_in_volume": True,
+              "root_offsets": [[-20.0, 0.0, 0.0], [20.0, 0.0, 0.0]],
+              "guidance": [{"below": 2.0, "field": "axis", "axis": [1, 0, 0], "sense": "polar", "polarity": "partner",
+                            "length": 2.0, "onset": 0.0},
+                           {"below": None, "field": "plane", "normal": [1, 0, 0], "length": 5.0, "onset": 0.0}]}
+
+    def test_the_preset_is_aligned_with_its_own_guidance_and_offsets_and_aligned_is_as_released(self):
+        self.assertEqual(FAMILIES["aligned_tight"], self.PRESET)
+        self.assertEqual(library.BOX_C["aligned_tight"], 20.0)
+        released = dict(self.PRESET, root_offsets=[[-15.0, 0.0, 0.0], [15.0, 0.0, 0.0]],
+                        guidance=[dict(self.PRESET["guidance"][0], length=4.9, onset=2.0),
+                                  {"below": None, "field": "plane", "normal": [1, 0, 0], "length": 5.0}])
+        self.assertEqual(FAMILIES["aligned"], released)
+
+    def test_the_smallest_library_ratio_grows_inside_its_cube_and_records_its_frame(self):
+        # at R 2.52 the cube's side is 50.4 d_min, so the roots, 40 apart about its centre, stay inside
+        member = library.grow_member("aligned_tight", 2.52, 3)
+        grown = member["grown"]
+        np.testing.assert_allclose(grown["growth_box_um"], [50.4, 50.4, 50.4], rtol=1e-12)
+        roots = np.asarray(grown["root_positions_um"])
+        self.assertAlmostEqual(float(roots[1][0] - roots[0][0]), 40.0, delta=1e-9)
+        frame = grown["frame"]
+        self.assertEqual((frame["kind"], frame["axis"], frame["sense"], frame["tree_senses"]),
+                         ("axis", [1.0, 0.0, 0.0], "polar", [1, -1]))
+        self.assertEqual(frame["rules"], parse_rules(self.PRESET["guidance"], 1.0))
+        events = grown["events"]
+        self.assertGreater(events["guided_steps"], 0)
+        self.assertEqual(events["guidance_onset_steps"], 0)                   # no onset
+        self.assertIn("--voxel-size", member["argv"])
+        self.assertEqual(member["argv"][member["argv"].index("--voxel-size") + 1], repr(20.0 * 2.52 / 3.0))
+
+    def test_it_runs_on_the_command_line_and_needs_d_min(self):
+        argv = ["--family", "aligned_tight", "--count", "1", "--seed", "8", "--volume", "48", "48", "24",
+                "--iterations", "5", "5", "--fit", "voxel_size", "--voxel-size", "2"]
+        with tempfile.TemporaryDirectory() as out:
+            with contextlib.redirect_stderr(io.StringIO()), self.assertRaises(SystemExit):
+                main.main(argv + ["--out", out])
+            self.assertEqual(os.listdir(out), [])
+            with contextlib.redirect_stdout(io.StringIO()):
+                self.assertEqual(main.main(argv + ["--d-min", "2", "--out", out]), 0)
+            stem = next(name[:-5] for name in os.listdir(out) if name.endswith(".json"))
+            with open(os.path.join(out, stem + ".json")) as handle:
+                sidecar = json.load(handle)
+        self.assertEqual(sidecar["family"], "aligned_tight")
+        self.assertEqual(sidecar["guidance"], self.PRESET["guidance"])
+        self.assertEqual(sidecar["frame"]["kind"], "axis")
+
+
 class ClassTests(unittest.TestCase):
     """
     The aligned preset at R 5 over seeds 1-10, guided and with guidance None,

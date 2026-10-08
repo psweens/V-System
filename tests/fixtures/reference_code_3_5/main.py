@@ -53,9 +53,7 @@ from computeVoxel import AXES, FITS, process_network
 from guidance import EVENT_KEYS as GUIDANCE_EVENTS, Guidance, _is_number as _finite_number, unguided_frame
 from spatial import make_index
 from utils import interpolate_segments
-from connections import EVENT_KEYS as CONNECTION_EVENTS, check_settings as check_rung_settings
-from connections import cross_connect as connect_rungs
-from vSystem import F, _check_fill as check_fill
+from vSystem import F
 
 # The unit one grammar unit is taken to stand for. Diameters, segment lengths
 # and --voxel-size are all in this unit, so that --voxel-size is a modality's
@@ -71,17 +69,15 @@ TORTUOSITIES = ("stems", "walk")
 ANASTOMOSE_MODES = ("any", "arteriovenous")
 
 # Every counter a run can report, so that a sidecar lists the zero ones too.
-# Append-only: the guidance counters come after the anastomosis ones, and the
-# cross-connection counters after those.
+# Append-only: the guidance counters come after the anastomosis ones.
 EVENT_KEYS = ("bound_terminations", "walk_bound_redraws", "walk_bound_terminations",
               "collision_redraws", "collision_terminations", "collision_truncated_stems",
-              "root_relocations", "root_collisions") + ANASTOMOSIS_EVENTS + GUIDANCE_EVENTS + CONNECTION_EVENTS
+              "root_relocations", "root_collisions") + ANASTOMOSIS_EVENTS + GUIDANCE_EVENTS
 
 # Independent random streams for the stages after the grammar, each seeded
 # from the run seed together with a fixed tag, so that enabling a stage never
 # changes a draw the grammar makes and every stage is reproducible on its own.
-# join.py takes tag 3 and library.py tag 4; 6 is free and 7 is reserved.
-RNG_STREAMS = {"walk": 1, "anastomosis": 2, "rungs": 5}
+RNG_STREAMS = {"walk": 1, "anastomosis": 2}
 
 # Bundles of settings for a family of networks. `tree` is the plain grammar;
 # `mesh` is a capillary-bed-like network: two trees grown into the volume from
@@ -93,19 +89,8 @@ RNG_STREAMS = {"walk": 1, "anastomosis": 2, "rungs": 5}
 # axis, G 4.9, after an onset of 2 diameters) while the larger vessels are
 # kept in planes perpendicular to x (G 5), so that each tree feeds one sheet
 # and the capillaries run from sheet to sheet, as in muscle; it needs d_min,
-# and 80% of its tips seek an arteriovenous partner. `aligned_tight` is
-# aligned with its capillaries steered harder and from their first step (G 2,
-# onset 0 for both rules) and its roots 40 d_min apart (-20 and +20 along x),
-# in a cube of side 20 R. `aligned_bed` is aligned_tight filled: below d_min
-# its daughters become capillary trees of two generations whose stems run as
-# four blocks, and its capillary vessels are cross-connected by rungs at least
-# 60 degrees from x. `capillary_bed` is an unguided arteriovenous pair, every
-# tip seeking a partner, filled with capillary trees of three generations
-# whose stems run as two blocks, its capillaries cross-connected by rungs at
-# least 60 degrees from their tangent. The persistence values, and the
-# guidance, capillary and rung values of the families from `aligned` on, are
-# provisional calibrations (see docs/geometry and the README); released
-# presets are frozen, so a changed value takes a new family name.
+# and 80% of its tips seek an arteriovenous partner. The persistence values, and the guidance values of
+# `aligned`, are provisional calibrations (see docs/geometry and the README).
 # A preset listed as None is a family this version does not offer.
 FAMILIES = {
     "tree": {},
@@ -121,28 +106,6 @@ FAMILIES = {
                 "guidance": [{"below": 2.0, "field": "axis", "axis": [1, 0, 0], "sense": "polar",
                               "polarity": "partner", "length": 4.9, "onset": 2.0},
                              {"below": None, "field": "plane", "normal": [1, 0, 0], "length": 5.0}]},
-    "aligned_tight": {"tortuosity": "walk", "persistence": 10.0, "avoid_collisions": True, "anastomose": True,
-                      "anastomose_mode": "arteriovenous", "anastomosis_fraction": 0.8, "grow_in_volume": True,
-                      "root_offsets": [[-20.0, 0.0, 0.0], [20.0, 0.0, 0.0]],
-                      "guidance": [{"below": 2.0, "field": "axis", "axis": [1, 0, 0], "sense": "polar",
-                                    "polarity": "partner", "length": 2.0, "onset": 0.0},
-                                   {"below": None, "field": "plane", "normal": [1, 0, 0], "length": 5.0,
-                                    "onset": 0.0}]},
-    "aligned_bed": {"tortuosity": "walk", "persistence": 10.0, "avoid_collisions": True, "anastomose": True,
-                    "anastomose_mode": "arteriovenous", "anastomosis_fraction": 0.8, "grow_in_volume": True,
-                    "root_offsets": [[-20.0, 0.0, 0.0], [20.0, 0.0, 0.0]],
-                    "guidance": [{"below": 2.0, "field": "axis", "axis": [1, 0, 0], "sense": "polar",
-                                  "polarity": "partner", "length": 2.0, "onset": 0.0},
-                                 {"below": None, "field": "plane", "normal": [1, 0, 0], "length": 5.0,
-                                  "onset": 0.0}],
-                    "capillary_generations": 2, "capillary_runs": 4,
-                    "cross_connect": True, "rung_below": 2.0, "rung_spacing": 40.0, "rung_radius": 8.0,
-                    "rung_lateral_deg": 60.0, "rung_axis": [1, 0, 0], "rung_min_separation": 2},
-    "capillary_bed": {"tortuosity": "walk", "persistence": 10.0, "avoid_collisions": True, "anastomose": True,
-                      "anastomose_mode": "arteriovenous", "anastomosis_fraction": 1.0, "grow_in_volume": True,
-                      "capillary_generations": 3, "capillary_runs": 2,
-                      "cross_connect": True, "rung_below": 2.0, "rung_spacing": 20.0, "rung_radius": 8.0,
-                      "rung_lateral_deg": 60.0, "rung_axis": None, "rung_min_separation": 2},
 }
 
 # The default turtle frame of the first tree; the second tree of a pair heads back.
@@ -262,9 +225,7 @@ def grow_network(niter, d0, properties, tVol, fit="isotropic", clip_axes=(2,), v
                  avoid_collisions=False, collision_margin=1.0, collision_attempts=10,
                  collision_index="auto", anastomose=False, anastomosis_radius=25.0,
                  anastomosis_fraction=0.5, anastomose_mode="any", anastomosis_min_separation=3,
-                 seed=None, guidance=None, root_offsets=None, capillary_generations=0, capillary_runs=1,
-                 cross_connect=False, rung_below=2.0, rung_spacing=20.0, rung_radius=8.0, rung_lateral_deg=60.0,
-                 rung_axis=None, rung_min_separation=2):
+                 seed=None, guidance=None, root_offsets=None):
     """
     Grows one network and returns its geometry and graph, without rendering it.
 
@@ -306,21 +267,6 @@ def grow_network(niter, d0, properties, tVol, fit="isotropic", clip_axes=(2,), v
             d_min, added to the default root positions on the faces of the
             growth box; needs grow_in_volume and d_min, and every root must
             stay inside the box. None leaves the roots where they are.
-        capillary_generations (int): m; with m > 0 a daughter that d_min would
-            end becomes a capillary tree of m generations at d_min (see
-            vSystem.capillary_tree), unless the iteration count ends it first.
-            Needs d_min. 0 leaves the grammar as it was.
-        capillary_runs (int): E; every capillary stem, and every stem whose
-            daughters both end, is drawn as E consecutive stem blocks. 1
-            leaves the grammar as it was.
-        cross_connect (bool): after anastomosis, join capillary vessels to
-            nearby capillary vessels by rungs (see connections.cross_connect),
-            on the random stream of tag RNG_STREAMS["rungs"]; needs d_min
-            and a seed. Off creates no generator and changes nothing.
-        rung_below, rung_spacing, rung_radius, rung_lateral_deg, rung_axis,
-            rung_min_separation: the rungs' settings, passed to
-            connections.cross_connect as below, spacing, radius,
-            lateral_deg, axis and min_separation.
 
     Returns:
         dict: "nodes" the (4, N) centreline; "program" the grammar string (of
@@ -332,16 +278,14 @@ def grow_network(niter, d0, properties, tVol, fit="isotropic", clip_axes=(2,), v
         "frame" the frame record (see guidance.Guidance.frame_record): the
         axis or plane the finest guided class was steered towards, with the
         rules, the growth frame and the origin (the box centre, else the first
-        root) in the coordinates of "nodes"; kind "none" without guidance;
-        "rungs" the cross-connections made, [] when they are off.
+        root) in the coordinates of "nodes"; kind "none" without guidance.
 
     Raises:
         ValueError: for guidance without the walk, a malformed guidance or
         root_offsets, root_offsets without grow_in_volume or d_min, a
         "partner" polarity without a second tree or root offsets that differ
-        along its axis, (RootOutsideBox) an offset that puts a root outside
-        the growth box, malformed capillary or rung settings, and
-        capillary generations or cross-connections without d_min.
+        along its axis, and (RootOutsideBox) an offset that puts a root
+        outside the growth box.
     """
     libGenerator.setProperties(properties)
     if anastomose_mode not in ANASTOMOSE_MODES:
@@ -353,18 +297,7 @@ def grow_network(niter, d0, properties, tVol, fit="isotropic", clip_axes=(2,), v
     trees = 2 if anastomose and anastomose_mode == "arteriovenous" else 1
     offsets = _root_offsets(root_offsets, trees, grow_in_volume, d_min)
     guide, bound = _bind_guidance(guidance, trees, direction, offsets, d_min, tortuosity)
-    check_fill(d_min, capillary_generations, capillary_runs)
-    if not isinstance(cross_connect, bool):
-        raise ValueError(f"cross_connect must be True or False, got {cross_connect!r}")
-    check_rung_settings(below=rung_below, spacing=rung_spacing, radius=rung_radius, lateral_deg=rung_lateral_deg,
-                        axis=rung_axis, min_separation=rung_min_separation)
-    if cross_connect and seed is None:
-        raise ValueError("cross-connection needs a seed so that the network is reproducible")
-    if cross_connect and d_min is None:
-        raise ValueError("cross-connection joins vessels below rung_below x d_min, so it needs d_min")
-    programs = [F(niter, d0, d_min, capillary_generations=capillary_generations, capillary_runs=capillary_runs)
-                for _ in range(trees)]
-    filled = capillary_generations > 0 or capillary_runs > 1 or cross_connect
+    programs = [F(niter, d0, d_min) for _ in range(trees)]
     events = {key: 0 for key in EVENT_KEYS}
     direction = np.asarray(direction, dtype=float)
     perpendicular = np.asarray(perpendicular, dtype=float)
@@ -376,10 +309,7 @@ def grow_network(niter, d0, properties, tVol, fit="isotropic", clip_axes=(2,), v
     clip = tuple(clip_axes)
     need_extent = grow_in_volume and fit != "voxel_size"
     extent = along = None
-    # a pair grown in the volume uses neither the extent nor the reach; the
-    # pass is skipped only for the options of 3.6, since the walk generator it
-    # creates is part of what the released families record
-    if need_extent or (trees == 2 and not (filled and grow_in_volume)):
+    if need_extent or trees == 2:
         # Interpreting the grammar consumes no randomness -- every token F emits
         # carries its operands -- and the walk's stream is re-seeded below, so
         # measuring the free extent first changes nothing about the drawn tree.
@@ -457,14 +387,6 @@ def grow_network(niter, d0, properties, tVol, fit="isotropic", clip_axes=(2,), v
                                            events=events, attempts=collision_attempts,
                                            index_kind=resolved_index,
                                            min_separation=anastomosis_min_separation)
-    rungs = []
-    if cross_connect:
-        rng = np.random.default_rng([int(seed), RNG_STREAMS["rungs"]])
-        nodes, tree, rungs = connect_rungs(nodes, tree, rng, d_min=d_min, below=rung_below, spacing=rung_spacing,
-                                           radius=rung_radius, lateral_deg=rung_lateral_deg, axis=rung_axis,
-                                           min_separation=rung_min_separation, persistence=persistence,
-                                           collision_margin=collision_margin, attempts=collision_attempts,
-                                           events=events, index_kind=resolved_index)
     built = graph.build(nodes)
     origin = box / 2.0 if box is not None else positions[0]
     if guide is not None:
@@ -477,7 +399,7 @@ def grow_network(niter, d0, properties, tVol, fit="isotropic", clip_axes=(2,), v
         "events": events, "growth_box_um": None if box is None else [float(v) for v in box],
         "root_positions_um": [[float(v) for v in p] for p in positions],
         "clip_axes": clip, "bridges": bridges, "collision_index": index_kind,
-        "frame": frame, "rungs": rungs,
+        "frame": frame,
     }
 
 
@@ -682,10 +604,6 @@ def shaping_options(args):
         "anastomosis_fraction": args.anastomosis_fraction, "anastomose_mode": args.anastomose_mode,
         "anastomosis_min_separation": args.anastomosis_min_separation,
         "guidance": args.guidance, "root_offsets": args.root_offsets,
-        "capillary_generations": args.capillary_generations, "capillary_runs": args.capillary_runs,
-        "cross_connect": args.cross_connect, "rung_below": args.rung_below, "rung_spacing": args.rung_spacing,
-        "rung_radius": args.rung_radius, "rung_lateral_deg": args.rung_lateral_deg, "rung_axis": args.rung_axis,
-        "rung_min_separation": args.rung_min_separation,
     }
 
 
@@ -719,15 +637,7 @@ def build_parser(family="tree"):
     parser.add_argument("--d-min", type=float, default=None, dest="d_min",
                         help="smallest drawn vessel diameter in grammar units; a branch stops "
                              "bifurcating once it falls below it (default: none, stop on "
-                             "--iterations alone). A stenosis still narrows a drawn sub-segment below it; "
-                             "with --capillary-generations a branch below it becomes a capillary tree")
-    parser.add_argument("--capillary-generations", type=int, default=0, metavar="M",
-                        help="replace a daughter that --d-min would end by a symmetric capillary tree of M "
-                             "generations drawn at --d-min, unless --iterations ends it first (default 0: "
-                             "none); needs --d-min")
-    parser.add_argument("--capillary-runs", type=int, default=1, metavar="E",
-                        help="draw every capillary stem, and every stem whose daughters both end, as E "
-                             "consecutive stem blocks (default 1)")
+                             "--iterations alone). A stenosis still narrows a drawn sub-segment below it")
     parser.add_argument("--epsilon", type=float, nargs=2, default=(4.0, 10.0), metavar=("MIN", "MAX"),
                         help="length-to-diameter ratio range (default 4 10)")
     parser.add_argument("--randmarg", type=float, nargs=2, default=(0.1, 0.3), metavar=("MIN", "MAX"),
@@ -775,11 +685,8 @@ def build_parser(family="tree"):
                             "the volume; tumour = low persistence, dense anastomosis, wide --d0 and "
                             "raised anomaly probabilities; aligned = the mesh layout with the roots "
                             "offset along x and the vessels below 2 d_min steered along x towards the "
-                            "other root, the larger ones kept in planes across it (needs --d-min); "
-                            "aligned_tight = aligned steered harder from the first step with its roots "
-                            "40 d_min apart; aligned_bed = aligned_tight filled with capillary trees and "
-                            "cross-connected; capillary_bed = an arteriovenous pair filled with capillary "
-                            "trees and cross-connected, unguided. Options given explicitly override the preset")
+                            "other root, the larger ones kept in planes across it (needs --d-min). "
+                            "Options given explicitly override the preset")
     shape.add_argument("--tortuosity", choices=TORTUOSITIES, default="stems",
                        help="stems: each stem is the grammar's five sub-segments smoothed by a "
                             "B-spline (default); walk: each stem is a persistent random walk of the "
@@ -830,24 +737,6 @@ def build_parser(family="tree"):
                        help="move the roots from their default positions on the faces of the growth "
                             "box, staying inside it: a JSON list of one [x, y, z] per tree in units of "
                             "--d-min; needs --grow-in-volume and --d-min (default: none)")
-    shape.add_argument("--cross-connect", action=argparse.BooleanOptionalAction, default=False,
-                       help="after anastomosis, join capillary vessels to nearby capillary vessels by "
-                            "rungs at exponential gaps along them; needs --d-min")
-    shape.add_argument("--rung-below", type=float, default=2.0,
-                       help="vessels whose median diameter is below this many --d-min carry rungs (default 2)")
-    shape.add_argument("--rung-spacing", type=float, default=20.0,
-                       help="mean gap between rung sites along a vessel, in its diameters (default 20)")
-    shape.add_argument("--rung-radius", type=float, default=8.0,
-                       help="partner search radius, in site diameters (default 8)")
-    shape.add_argument("--rung-lateral-deg", type=float, default=60.0,
-                       help="smallest angle between a rung's chord and the site's tangent, or --rung-axis "
-                            "when given, in degrees (default 60)")
-    shape.add_argument("--rung-axis", type=parse_json_option, default=None, metavar="JSON",
-                       help="a 3-vector the rung chords keep --rung-lateral-deg from instead of the site "
-                            "tangent, as inline JSON (default: none)")
-    shape.add_argument("--rung-min-separation", type=int, default=2,
-                       help="smallest number of tree segments between a rung's site and its partner "
-                            "(default 2: never on the site's own vessel)")
     preset = FAMILIES.get(family)
     if preset:
         parser.set_defaults(**preset)
@@ -875,18 +764,6 @@ def validate_shaping(args):
     except ValueError as error:
         option = "--root-offsets" if args.guidance is None or "root_offsets" in str(error) else "--guidance"
         raise SystemExit(f"{option}: {error}")
-    try:
-        check_fill(args.d_min, args.capillary_generations, args.capillary_runs)
-    except ValueError as error:
-        raise SystemExit(f"--capillary-generations/--capillary-runs: {error}")
-    try:
-        check_rung_settings(below=args.rung_below, spacing=args.rung_spacing, radius=args.rung_radius,
-                            lateral_deg=args.rung_lateral_deg, axis=args.rung_axis,
-                            min_separation=args.rung_min_separation)
-    except ValueError as error:
-        raise SystemExit(f"--rung-*: {error}")
-    if args.cross_connect and args.d_min is None:
-        raise SystemExit("--cross-connect joins vessels below --rung-below x --d-min, so it needs --d-min")
     if offsets is not None and args.fit == "voxel_size" and args.voxel_size is not None:
         # the box is known here only at a fixed voxel size; otherwise it is the tree's
         box = np.asarray(args.volume, dtype=float) * float(args.voxel_size)
@@ -966,7 +843,6 @@ def main(argv=None):
         record.update(shaping)
         record["collision_index"] = grown["collision_index"]      # the kind used, not "auto"
         record["frame"] = grown["frame"]
-        record["rungs"] = len(grown["rungs"])
         with open(os.path.join(args.out, stem + ".json"), "w") as handle:
             json.dump(record, handle, indent=2)
         save_network(os.path.join(args.out, stem + ".npz"), nodes, program=grown["program"],
