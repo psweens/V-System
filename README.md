@@ -135,7 +135,7 @@ Useful options (`python main.py --help` lists them all):
 | `--grow-in-volume` | off | confine growth to the volume's proportions so no vessel is cut |
 | `--no-connect` | off | rasterise bare capsules, leaving sub-voxel vessels dotted |
 | `--units` | `um` | the unit one grammar unit stands for, recorded in the sidecar |
-| `--family` | `tree` | preset bundle of the geometry options: `tree`, `mesh`, `tumour`, `aligned`, `aligned_tight`, `aligned_bed`, `capillary_bed` (the last four need `--d-min`) |
+| `--family` | `tree` | preset bundle of the geometry options: `tree`, `mesh`, `tumour`, `aligned`, `aligned_tight`, `aligned_bed`, `capillary_bed`, `foam` (the last five need `--d-min`) |
 | `--tortuosity` | `stems` | `stems`: five sub-segments smoothed by a B-spline; `walk`: a persistent random walk of the same arc length |
 | `--persistence` | none | persistence length of the walk in vessel diameters; required by `walk` |
 | `--avoid-collisions` | off | keep branches apart by at least `--collision-margin` (default 1 µm), redrawing or shortening, and count what could not be placed |
@@ -143,6 +143,7 @@ Useful options (`python main.py --help` lists them all):
 | `--guidance JSON` | none | steer the walk towards an axis or a plane per calibre class: a list of rules, each with a bound `below` in d_min (null for none), a `field` (`axis`, `plane` or null), its `axis` or `normal`, a `length` G in diameters, an `onset` (2) and, for an axis, a `sense` and `polarity`, for a plane `bank`; needs `--tortuosity walk` |
 | `--root-offsets JSON` | none | move the roots from their default positions on the faces of the growth box, staying inside it: one `[x, y, z]` per tree in units of d_min; needs `--grow-in-volume` and `--d-min` |
 | `--cross-connect` / `--no-cross-connect` | off | after anastomosis, join capillary vessels side to side by rungs at gaps of about `--rung-spacing` (20) diameters, to partners within `--rung-radius` (8) site diameters whose chord stands at least `--rung-lateral-deg` (60°) off the vessel (or off `--rung-axis`); vessels below `--rung-below` (2) d_min are capillaries; needs `--d-min` |
+| `--bed JSON` | none | grow an explicit capillary bed between the tips of two feeder trees in the mesh layout instead of anastomosing them: a JSON object of bed settings (`kind`, `spacing`, `girth`, `min_angle`, `reach`, `diameter`, `persistence`, `feeder_stop`, `tip_edges`, `stretch`, `density`, `jitter`, `step`), the ones left out at their defaults; `null` turns a preset's bed off; needs `--grow-in-volume` and `--d-min` |
 
 `--d-min` and `--iterations` are both stopping criteria and whichever comes first
 wins. `--d-min` is the one a modality states directly, as its smallest resolvable
@@ -549,6 +550,199 @@ exactly one outcome: `rung_sites` = `rung_sites_near_junction` +
 counters. With `--cross-connect` off no generator is created and every
 counter stays at zero.
 
+### Explicit capillary bed: `--bed`
+
+Anastomosis, the fill and the rungs make a capillary bed out of the trees'
+own branches. `--bed JSON` builds one explicitly instead: two feeder trees
+grow in the mesh layout, from opposite faces of the growth box, with their
+grammar stopping below `feeder_stop` × d_min, and a bed of vessels
+`diameter` × d_min across is built in the box and joined to their tips. The
+construction is a greedy degree-3 graph with a girth bound, after Smith
+2019's organising requirements (not Smith's Voronoi construction): a nearly
+isotropic, connected, space-filling capillary mesh whose junctions mostly
+join three vessels and whose tissue domains share one characteristic size
+(Smith, Doyeux, Berg, Peyrounette, Haft-Javaherian, Larue, Slater, Lauwers,
+Blinder, Tsai, Kleinfeld, Schaffer, Nishimura, Davit and Lorthois, *Brain
+capillary networks across species: a few simple organizational requirements
+are sufficient to reproduce both structure and function*, Frontiers in
+Physiology 10:233 (2019),
+[DOI 10.3389/fphys.2019.00233](https://doi.org/10.3389/fphys.2019.00233)).
+The settings are a JSON object whose keys left out take their defaults,
+given in brackets below, lengths in d_min unless stated; `--bed null` turns
+a preset's bed off. `bed.py` states every rule, draw and law in its
+docstring.
+
+**Seeds.** Seeds are placed by hard-core random sequential addition, one
+proposal at a time, uniformly in the growth box inset by half a bed
+diameter d. A proposal is refused when it lies within a feeder column's
+vertex radius plus d / 2 plus `--collision-margin` of that column, and
+otherwise when it lies within h = `spacing` (7.5) of a seed already placed;
+the placement stops at the target count N_t = ⌊`density` (0.5) × V / h³⌋,
+V the volume of the inset box, which is known before anything is drawn. A
+placement that has considered ⌈64 V / h³⌉ proposals short of N_t is refused
+(`bed.SeedsNotPlaced`); nothing is shrunk. With `stretch` s above 1 (1, at
+most 4), distances between seeds are taken with their component along the
+growth direction divided by s, so that seeds and candidate edges stand up
+to s times further apart along it, V is divided by s, and the network's
+frame is recorded with kind `axis` along that direction (nematic, with no
+rules); at s = 1 the frame is that of an unguided pair, of kind `none`.
+
+**Tips and candidates.** A feeder tip is a vertex of degree one other than
+a root. A tip inside the overlap zone of a junction of its own polyline is a
+stub, as in anastomosis, and takes no edge; every other tip is eligible,
+whatever its calibre. Every pair of seeds, and every pair of a seed and an
+eligible tip, closer than `reach` (2.5) × h is a candidate edge; two tips
+never are, since that would be an anastomosis. The candidates form one list,
+taken shortest first with jitter: in increasing order of the chord × (1 +
+`jitter` (0.25) × u), u one uniform draw per pair.
+
+**The greedy pass.** A candidate becomes an edge unless it fails one of four
+rules, and is counted under the first it fails, in this order: the degree
+cap (three bed edges at a seed, `tip_edges` (2) at a tip, whose feeder stem
+makes it three); the angle (the edge would make less than `min_angle` (60°)
+with an edge already at either end, or at a tip with the feeder's direction
+into its vessel); the girth (the ends are already joined within `girth` − 2
+edges, so the edge would close a cycle shorter than `girth` (8, at most 16),
+counted in edges of the bed together with the feeders, each feeder path
+between junctions and tips one edge); and the clearance (two bed edges
+meeting at an end at less than 72.06°, a chord passing within d +
+`--collision-margin` of a bed chord it shares no end with, or a point of the
+chord, sampled every `step` (0.5) bed diameters, colliding with a feeder).
+Two straight chords meeting below 2 asin(1 / 1.7) = 72.06° overlap beyond
+the junction excuse of `collisions.py`, so the smallest angle between two
+bed edges is in effect 72.06° at `min_angle` 60, and the candidates refused
+between the two count as clearance, in `bed_refused_clearance_at_end`; at a
+tip the feeder is a curved vessel, not a chord, and the angle against it is
+`min_angle`'s. Seeds are not obstacles to chords: a seed that an accepted
+chord passes close to may be left with no edge that clears it, and is
+pruned.
+
+**Pruning and the walk.** Every seed with at most one edge is removed with
+its edge until none is left (dead ends), then every component that holds no
+feeder tip (islands). Tips are never removed, so a bed that reaches one tree
+only is kept. What remains is cut into chains, each running through seeds of
+degree two between vertices of other degree or tips, and each chain is
+walked as one vessel: one `tortuosity.bridge_path` per edge, the pinned walk
+of an anastomosis bridge, at a persistence of `persistence` (8) bed
+diameters and a step of `step` bed diameters, through each interior seed
+along the direction from the seed before it to the seed after it, and
+leaving and reaching the chain's ends along the chord. A walk is checked
+against the feeders, the chains placed before it, the chords of those not
+yet placed and itself, and redrawn up to `--collision-attempts` times; when
+every attempt collides, the straight chain the greedy pass checked is placed
+instead (a chord), and when that collides too the chain is dropped, its
+edges removed and the bed pruned again. The check is the rule of
+`describe.clearance`, as the rungs apply it, so that a bed that passes it
+passes `describe.py`'s clearance; a chain that returns to its junction (a
+lasso) is written from its middle seed, so that its closing points are
+excused at the junction. Walked chains are not confined to the growth box,
+as bridges and rungs are not.
+
+**Attachment and records.** The feeders' columns are kept as they are, and
+each placed chain is appended after a NaN separator, d across and labelled 2
+in `tree`, as bridges and rungs are, with its end and seed columns written
+from the stored coordinates, so that the graph rebuilt from coordinates
+joins it bitwise to the feeder tips and to the other chains; a tip with k
+bed edges ends with degree 1 + k. `bridges` in the return, the sidecar and
+the library index stays anastomose's, empty (0) for a bed, and the sidecar's
+`bridge_persistence` stays that of anastomosis bridges: the bed's
+persistence, like each of its settings, is in the shaping key `bed`, which
+the sidecar, the archive's metadata and a library member's kwargs record
+normalised, all thirteen values whichever were given. No return, describe or
+index key is added.
+
+**Draws.** The feeders' two programs, F(niter, d0, `feeder_stop` (2) ×
+d_min), are the only draws from the global generators. The bed draws on
+sub-streams of its own, `numpy.random.default_rng([seed, 7, k])`: k = 1 the
+proposals, k = 2 the jitter and k = 3 the walks, each created only when it
+draws. Tag 7 is `bed.RNG_TAG`, kept in `bed.py` as join's 3 and the
+library's 4 are kept in theirs, so `main.RNG_STREAMS` is unchanged; the
+sidecar of a run with a bed records `"bed": [seed, 7]` under `rng_streams`,
+and no other sidecar does. With the feeders fixed, changing the bed's
+`persistence` or the walk's redraws (`bed.build`'s `attempts`) leaves the
+seeds and the edges of the greedy pass as they were, and changing the
+jitter or the step leaves the seeds. `--collision-attempts` also sets the
+redraws of the feeders' collision avoidance, which foam turns on, so
+changing it changes the feeders, and with them the seeds and the edges.
+Every distance and dot product the seeds, the candidates and the greedy
+pass decide on is computed elementwise
+(`np.linalg.norm(..., axis=1)`, and products summed in order), never through
+`@`, `np.dot` or a one-dimensional `np.linalg.norm`, whose last bit depends
+on the BLAS kernel, so the seeds, the candidates and the greedy pass of a
+bed alone are the same on every kernel; the walks and the greedy pass's
+test against the feeders go through `bridge_path`, which depends on the
+kernel as every walked vessel does.
+
+**Refusals.** `bed.parse_settings` refuses an unknown key, a `kind` other
+than `foam`, a `spacing`, `diameter` or `persistence` that is not positive,
+a `reach` not above 1, a `girth` that is not a whole number in [3, 16], a
+`min_angle` outside [0, 120], a `tip_edges` other than 1 or 2, a
+`feeder_stop` below 1, a `stretch` outside [1, 4], a `density` outside
+(0, 0.6], a negative `jitter` and a `step` below 0.1; `bed.check_settings`
+refuses a spacing that does not exceed the diameter plus the margin, at
+which seeds would touch. With a bed, `grow_network` and the command line
+also refuse anastomosis, `--cross-connect`, a capillary fill, `--guidance`,
+a run without `--grow-in-volume` or `--d-min`, a negative seed (the bed's
+streams take none; `grow_network` also refuses a missing one) and a
+collision margin that is not finite and at least 0, all before anything is
+drawn or written. A root diameter below `feeder_stop` × d_min, which would
+grow feeders without a tip, is refused when it is sampled. Under
+`--fit voxel_size` the box is known, so a `--voxel-size` that is not
+positive and finite, a box that holds no seed (`main.BedBoxTooSmall`, a
+`ValueError` beside `RootOutsideBox`) and a root offset outside the box are
+refused before the feeders' grammar draws; under the other fits (isotropic
+or stretch) the box is the first feeder's, so the last two are refused
+once the grammar has drawn, after the earlier networks of a `--count` run
+have been written. `bed.SeedsNotPlaced` comes after the seeds have drawn.
+On the command line
+the refusals that depend on a network's sampled root or grown feeders (a
+root below `feeder_stop` × d_min, a box too small or an offset outside it
+under the other fits, and `bed.SeedsNotPlaced`) exit naming the seed, and
+the others exit before anything is written; with `--generate`,
+`check_connectivity.py` skips a seed whose root lies below `feeder_stop` ×
+d_min, as it skips one below d_min.
+
+**Counters.** Twenty-nine counters are appended to the events after the
+rung counters, all zero without a bed. `bed_proposals` =
+`bed_proposals_on_feeders` + `bed_proposals_overlapping` + `bed_seeds`, and
+`bed_seeds` is N_t. `bed_tips` counts the feeder vertices of degree one
+other than roots, `bed_tips_inside_junction` the stubs among them.
+`bed_candidates` = `bed_refused_degree` + `bed_refused_angle` +
+`bed_refused_girth` + `bed_refused_clearance` + `bed_edges`, `bed_edges`
+being the edges the greedy pass accepted; `bed_candidates_tip` counts the
+candidates with a tip and `bed_refused_clearance_at_end` the clearance
+refusals at a shared end. `bed_edges` = the kept edges +
+`bed_edges_dead_end` + `bed_edges_island` + `bed_edges_dropped`, and
+`bed_seeds` = the kept seeds + `bed_seeds_dead_end` + `bed_seeds_island`.
+`bed_segments`, the chains whose walk was attempted, =
+`bed_segments_walked` + `bed_segments_chord` + `bed_segments_dropped`;
+`bed_segments_removed` counts placed chains that the pruning after a later
+drop removed, and `bed_walk_redraws` is at most `--collision-attempts` per
+chain. `bed_tips_attached` counts the eligible
+tips with a kept edge and `bed_tip_edges` their kept edges; `bed_components`
+counts the components of the kept bed and `bed_components_one_tree` those
+whose tips all belong to one tree.
+
+The girth bounds cycles in edges of the bed graph. `describe.py` counts
+loops in segments, and a chain merges its seeds of degree two into one
+segment, so loops shorter than the girth in segments do occur: in foam
+networks at R 4, 8 and 16 (seeds 1 to 3 pooled), 71%, 43% and 28% of the
+loops through a segment are shorter than 8 segments (the shortest has 3),
+while no cycle of a bed is shorter than 8 edges. A pair whose feeders have
+few eligible tips may stay unjoined: when no kept component reaches both
+trees, as `bed_components_one_tree` shows, `check_connectivity.py` reports
+the network as two components. Over these nine networks, 513 of the 535
+eligible tips (96%) attach, 432 of them by two bed edges, and the bed joins
+both trees in 8 of them. At R 4, 8 and 16 (means over the seeds) their
+bed's capillary segments have a median length of 11.6, 10.1 and 9.8 d_min
+(10th to 90th percentiles 8.3 to 30.7, 8.2 to 22.9 and 8.1 to 20.6 d_min,
+coefficients of variation 0.64, 0.55 and 0.50), the mean distance from
+tissue in the growth box to the nearest vessel wall is 3.37, 3.08 and
+2.98 d_min (3.61, 3.26 and 3.15 d_min to the bed's vessels alone), and the
+median smallest, middle and largest angles at junctions of three vessels
+are 83°, 107° and 139° at R 4, 84°, 107° and 138° at R 8 and 85°, 107° and
+138° at R 16 (`tests/test_topology_benchmark.py`).
+
 ### Families: `--family`
 
 `tree` is the plain grammar. `mesh` is walk (P = 10) + collision avoidance +
@@ -581,7 +775,16 @@ partner of the other tree, filled with capillary trees of three generations
 whose stems run as two blocks and cross-connected at a spacing of 20 diameters
 off the vessel tangent, for a homogeneous capillary mesh fed and drained by
 trees (Lorthois and Cassot 2010; Blinder et al. 2013; Ji et al. 2021). Both
-need `--d-min`; their fill and rung values are provisional. Released presets
+need `--d-min`; their fill and rung values are provisional. `foam` is two
+feeder trees in the mesh layout, walked (P = 10) with collision avoidance and
+grown in the volume, whose grammar stops below 2 d_min, joined by the
+explicit bed of the section above, a greedy degree-3 graph with a girth
+bound after the organising requirements of Smith et al. (2019), with every
+bed setting written out in the preset: spacing 7.5, girth 8, min_angle 60,
+reach 2.5, diameter 1, persistence 8, feeder_stop 2, tip_edges 2, stretch 1,
+density 0.5, jitter 0.25 and step 0.5. Its frame is of kind `none`, about
+the centre of the growth box, and a library grows it in a cube of side
+15 R. It needs `--d-min`; its bed values are provisional. Released presets
 are frozen, so a changed value takes a new family name. Options given
 explicitly override the preset. The persistence
 values of the presets are provisional calibrations from the sweep in
@@ -611,7 +814,19 @@ points, peak RSS 0.93 GB). `capillary_bed` takes 34 and 335 s at R 4 and 8
 (17 and 107 thousand points) and 55 minutes for one network at R 16 (634
 thousand points, peak RSS 0.83 GB); on one network at R 4, four fifths of
 its time went on anastomosis, most of it walking bridges between its many
-tips. Both vary several-fold between seeds at one R.
+tips. Both vary several-fold between seeds at one R. Grown the same way with
+3.7 on a 4-core 2.8 GHz Xeon, `foam` has 6.8, 58 and 476 thousand points at
+R 4, 8 and 16 (means over seeds 1 to 3) and 1.81 million at R 25 (seed 1,
+peak RSS 1.24 GB, archive 47 MB). Its cost follows its bed,
+whose seeds number about 4 R³ in the library's cube of side 15 R (243,
+1 997, 16 180 and 62 001 at R 4, 8, 16 and 25, before pruning, a number
+fixed by the box): a bed's time is linear in its seeds, and walking the bed
+takes 80% of it at R 4 and 85% at R 8 and 16. A bed grown alone with the
+foam settings, one process at a time, takes 5.8 and 67 s at 10³ and 10⁴
+seeds (means over seeds 1 to 3) and 675 s at 10⁵ (seed 1), the walk taking
+89% of it at 10⁵, with a peak RSS of 21 MB, 137 MB and 1.25 GB above that of
+its imports; its time grows with an exponent of 1.03 in the seeds (1.02 for
+the walk), and its peak RSS with one of 0.88.
 
 ### Measuring: `describe.py`
 
@@ -998,15 +1213,16 @@ vsystem-library --out lib --count 2000 --seed 1 --workers 8
 | --- | --- | --- |
 | `--out DIR` | required | output directory; a run into a directory holding a manifest resumes it |
 | `--count N` | required | number of networks |
-| `--families` | `tree mesh tumour` | families to grow, in id order (`aligned`, `aligned_tight`, `aligned_bed` and `capillary_bed` when listed); only presets that exist are accepted, so a family without one and unknown names are refused before anything is grown |
+| `--families` | `tree mesh tumour` | families to grow, in id order (`aligned`, `aligned_tight`, `aligned_bed`, `capillary_bed` and `foam` when listed); only presets that exist are accepted, so a family without one and unknown names are refused before anything is grown |
 | `--family-shares` | `1 1 1` | relative share of each family, by largest remainder with ties to the family listed first (2000 at `1 1 1` gives 667 667 666) |
 | `--ratio-range R_LO R_HI` | `2.52 25` | range of R, log-uniform and stratified; 2^(4/3) gives at least about four generations |
 | `--seed S` | required | library seed |
 | `--workers W` | `1` | worker processes |
 | `--collision-margin` | `1.0` | clearance between vessel surfaces, units of d_min |
 | `--mesh-box-c` | `15` | a mesh grows in a cube of side this many times its root diameter, which keeps its two trees within reach of each other |
-| `--box-c FAMILY C` | `mesh 15`, `aligned 15`, `aligned_tight 20`, `aligned_bed 20`, `capillary_bed 15` | the cube side of a box family (mesh and every aligned or bed family) in root diameters (repeatable); refused for a family that grows free, and with `--mesh-box-c` for mesh; an aligned member whose root offsets leave a small cube is recorded as a failure |
+| `--box-c FAMILY C` | `mesh 15`, `aligned 15`, `aligned_tight 20`, `aligned_bed 20`, `capillary_bed 15`, `foam 15` | the cube side of a box family (mesh and every aligned or bed family) in root diameters (repeatable); refused for a family that grows free, and with `--mesh-box-c` for mesh; an aligned member whose root offsets leave a small cube is recorded as a failure |
 | `--iteration-cap` | `64` | generations allowed; d_min stops growth first |
+| `--bed-max-candidates N` | `2e6` | refuse, and record as a failure, a member with an explicit bed whose planned candidate edges exceed N, before anything is drawn; a whole number of at least 1, given as integer or float text; it bounds the candidates only, not the walk |
 | `--avoid-collisions` / `--no-avoid-collisions` | on | collision avoidance for the tree family; the mesh and tumour presets avoid collisions already |
 
 Ids run 0 .. N-1 in contiguous family blocks in `--families` order and the
@@ -1035,20 +1251,32 @@ preset's root calibre is replaced by R; its aneurysm and stenosis
 probabilities reach the properties through the parser's defaults as on the
 command line. Tree and tumour growth never read the volume; a mesh and the
 aligned and bed families grow in a cube of side 3 × voxel size = c R, with c
-from `library.BOX_C` (15 for mesh, aligned and capillary_bed, 20 for
+from `library.BOX_C` (15 for mesh, aligned, capillary_bed and foam, 20 for
 aligned_tight and aligned_bed, whose roots are 40 d_min apart; `--mesh-box-c`
-for mesh, `--box-c FAMILY C` for any box family, not both for mesh). A library in another unit is the same
-library rescaled: growth at (2R, d_min 2, margin 2, box 2 × 15 R) equals
-twice the library network to float rounding. The default library holds
-`tree`, `mesh` and `tumour` (`library.DEFAULT_FAMILIES`); the other families
+for mesh, `--box-c FAMILY C` for any box family, not both for mesh). A member
+whose family grows an explicit bed is refused before anything is drawn, and
+recorded as a failure, when its planned candidate edges, ⌈N_t × `density` ×
+(4π / 3) × `reach`³ / 2⌉ for the N_t seeds its cube plans (seed pairs only,
+since the tips are not known before the grammar draws), exceed
+`--bed-max-candidates`: at the default 2 × 10⁶ and the cube of side 15 R
+that admits every foam member up to R 31.3, beyond the default range, and a
+foam member at R 25 plans 62 001 seeds and about 1.0 × 10⁶ candidate edges.
+The cap bounds the candidates, not the walk, whose cost follows the seeds.
+A library in another unit is the same library rescaled: growth at (2R,
+d_min 2, margin 2, box 2 × 15 R) equals twice the library network to float
+rounding. The default library holds `tree`, `mesh` and `tumour` (`library.DEFAULT_FAMILIES`); the other families
 are grown when listed, a box family's constant then recorded under
-`growth.box_c` in the manifest, and every archive's metadata carries the network's `frame` and its
-`d_min`. The index holds the 3.4 columns, then `frame_kind`,
+`growth.box_c` in the manifest (and the cap on a bed's candidates under
+`growth.bed_max_candidates` when a family with a bed is listed, so that a
+library of the default families records its growth as before), and every
+archive's metadata carries the network's `frame` and its `d_min`. The index
+holds the 3.4 columns, then `frame_kind`,
 `capillary_order` and `larger_order` (S about the frame axis), `capillary_polar_order`,
 `capillary_length_share`, `capillary_volume_share`, `capillary_segment_median`
 and `transverse_spacing_median` (in d_min), empty where a network has no frame
 axis or no polar sense, then from 3.6 `rungs`, the number of cross-connections;
-archive metadata lists the rungs themselves.
+archive metadata lists the rungs themselves. 3.7 adds no column: a foam
+network's `bridges` is 0, and its bed's counters are in `events`.
 
 Every archive is written atomically (`save_network` to a temporary file,
 then renamed) with metadata recording `"units": "d_min"`, the family, R, bin,
@@ -1283,12 +1511,48 @@ leave everything drawn before them unchanged, and the new families; and
 `tests/test_describe.py` checks the topology keys on ladders, square,
 hexagonal and cubic lattices, trees, a symmetric Y and a straight cylinder,
 against independent brute-force searches. `tests/test_pinned_release_3_5.py`
-pins 3.5 as the 3.4 pin pins 3.4. `tests/test_topology_benchmark.py`, with
+pins 3.5 as the 3.4 pin pins 3.4. `tests/test_pinned_release_3_6.py` pins
+3.6, as released in 3.6.1 (`tests/fixtures/reference_code_3_6`), the same
+way: it keeps one case of each kind of growth from the 3.5 pin and adds the
+cases 3.6 opened (the fill, the rungs, the three families 3.6 added, and the
+tissue distance from each of its sources), and it checks that with the bed
+off every record holds `bed` as None, no sidecar records the bed's stream,
+no bed counter counts and no stage creates a generator; it took about 90 s
+in one run on a 4-core 2.8 GHz Xeon, and its hashes are recorded on Linux
+x86_64 with the two sets of kernels of the 3.5 pin. From 3.7,
+`tests/test_bed.py` checks the bed's settings and every refusal before a bed generator exists
+(from `bed.parse_settings`, `grow_network` and the command line), the seeds
+against a loop over the proposals one at a time, the rules re-evaluated
+from the record (degree, angle, girth, no dead end, no island) on beds
+alone, on foam and on constructed lassos and tips with two edges, bitwise
+ends and interior seeds, no clearance violation and agreement with
+`describe.clearance`, the chord fallback, the laws of the counters, the
+independence of the sub-streams, that nothing of the bed is created or
+counted without one, that `grow_network`'s body after the bed's return is
+the released source, scale, the frame record and the order about the axis
+rising with the stretch, the cap on planned candidates, and foam end to end
+on the command line, in `check_connectivity.py` and as a library member;
+`tests/test_join.py` checks that tag 7 is the bed's alone and recorded only
+by a bed run, and `tests/test_library.py` foam's box, cap, index row and
+resume. `tests/test_topology_benchmark.py`, with
 `VSYSTEM_SLOW_TESTS=1`, grows every family at three root ratios (the filled
-families in their own invocation, through `VSYSTEM_BENCHMARK_FAMILIES` and
-`VSYSTEM_BENCHMARK_RATIOS`) and the aligned preset over its guidance length
-and onset, prints the descriptors and the cost, and projects a 2000-network
-library.
+families and foam in their own invocations, through
+`VSYSTEM_BENCHMARK_FAMILIES` and `VSYSTEM_BENCHMARK_RATIOS`) and the aligned
+preset over its guidance length and onset, prints the descriptors and the
+cost, and projects a 2000-network library. Foam's invocation,
+
+```bash
+VSYSTEM_SLOW_TESTS=1 VSYSTEM_BENCHMARK_FAMILIES=foam python -m unittest tests.test_topology_benchmark
+```
+
+also reports each member's bed (its counters and their laws, the walk's
+outcomes, the attachment of the feeders' tips by tree and calibre,
+describe's loops in segments, the descriptors of the bed alone) and runs
+`BedCostBenchmark`: a bed grown alone with the foam settings at 10³ to 10⁵
+seeds, each in a fresh process, timed per stage with its peak memory, and
+its girth and density swept at 10⁴ seeds, where the bed's cycles in edges
+are reported beside describe's loops in segments. That no cycle of a foam
+network's bed is shorter than the girth is checked by `tests/test_bed.py`.
 
 ---
 

@@ -1,5 +1,214 @@
 # Changelog
 
+## 3.7.0
+
+Version 3.7 grows a capillary bed explicitly. `--bed` replaces the
+anastomosis of an arteriovenous pair by a bed built between the tips of its
+two feeder trees: hard-core seeds joined greedily into a degree-3 graph with
+a girth bound, after the organising requirements of Smith et al. (Frontiers
+in Physiology 10:233, 2019, doi:10.3389/fphys.2019.00233; not their Voronoi
+construction), pruned of dead ends and islands, walked, and attached to the
+tips by bitwise end columns. The family `foam` is offered. With the bed
+off, every family 3.6 offered draws, writes and measures what 3.6.1 did,
+which the tests check by running the 3.6.1 modules, kept under
+`tests/fixtures/reference_code_3_6`, alongside the current ones.
+
+### Geometry
+
+- `bed.py` (new, in main's import closure): `bed.build(domain, settings, *,
+  d_min, seed, collision_margin, feeders=None, frame=None, attempts=10,
+  index_kind="grid", events=None, timings=None)`. Seeds are placed by
+  hard-core random sequential addition in the box inset by half a bed
+  diameter d, at least h = spacing × d_min apart and clear of the feeder
+  columns, until N_t = ⌊density V / h³⌋ stand, a count known before
+  anything is drawn; a placement short of N_t after ⌈64 V / h³⌉ proposals
+  raises `bed.SeedsNotPlaced`, and nothing is shrunk. The pairs of seeds,
+  and of a seed and an eligible feeder tip (degree one, not a root, not a
+  stub in a junction zone), closer than reach × h are taken in one list,
+  shortest first with jitter (chord × (1 + jitter u)), and each becomes an
+  edge unless it fails, in this order, the degree cap (three bed edges at a
+  seed, tip_edges at a tip), the smallest angle min_angle (at a tip also
+  against the feeder), the girth (in edges of the bed together with the
+  feeders, each feeder path one edge) or the clearance (bed edges meeting
+  at an end below 72.06°, chords within d + margin of each other, a chord's
+  points colliding with a feeder). Seeds with at most one edge are peeled
+  until none is left and components holding no tip removed. The chains
+  between vertices of degree other than two are walked with
+  `tortuosity.bridge_path`, one walk per edge through Catmull-Rom tangents
+  at interior seeds, checked under `describe.clearance`'s rule against the
+  feeders, the chains placed, the chords of those to come and themselves,
+  redrawn up to `attempts` times, then placed as the straight chord the
+  greedy pass checked, or dropped and the bed pruned again; a lasso is
+  written from its middle seed, so that its closing points are excused at
+  its junction. Each placed chain is appended after the feeders' columns
+  with the bridge label, d across, its end and seed columns written from
+  the stored coordinates; no feeder column moves. Walked chains are not
+  confined to the box.
+- `bed.BedSettings` and `bed.parse_settings` take thirteen settings, `kind`
+  (`foam`), `spacing` (7.5 d_min), `girth` (8, at most 16), `min_angle`
+  (60°), `reach` (2.5 spacings), `diameter` (1 d_min), `persistence` (8 bed
+  diameters), `feeder_stop` (2 d_min), `tip_edges` (1 or 2, default 2),
+  `stretch` (1, at most 4), `density` (ρh³ 0.5, at most 0.6), `jitter`
+  (0.25) and `step` (0.5 bed diameters, at least 0.1), and refuse an unknown
+  key or a value out of bounds; `check_settings` refuses a spacing that
+  lets seeds touch. `planned_seeds` and `planned_candidates` give the
+  counts a box plans before anything is drawn, `place_seeds` the placement
+  and `frame_record` the frame: at a stretch s above 1 the seed metric is
+  compressed by 1/s along the frame's growth direction and the frame is
+  recorded with kind `axis` along it. `bed.BedTooLarge` and
+  `bed.SeedsNotPlaced` are `ValueError`s.
+- Two straight chords meeting below 2 asin(1 / 1.7) = 72.06° overlap beyond
+  the junction excuse of `collisions.py`, so at the provisional `min_angle`
+  60 the smallest angle between two bed edges is in effect 72.06°; the
+  candidates refused between the two count as clearance, in
+  `bed_refused_clearance_at_end`. The value is shipped unchanged.
+- The bed draws nothing from the global generators. It draws on sub-streams
+  `default_rng([seed, 7, k])`: k = 1 the proposals, k = 2 the jitter, k = 3
+  the walks, each created only when it draws. Tag 7 is `bed.RNG_TAG`, kept
+  in `bed.py` as join's and the library's tags are kept in theirs, and
+  recorded as `rng_streams.bed` in the sidecar of a run with a bed. Every
+  decision of the seeds, the candidates and the greedy pass is computed
+  elementwise, never through BLAS, so that the seeds, the candidates and
+  the greedy pass of a bed alone are the same on every kernel; the walks
+  and the test against the feeders go through `bridge_path`, which depends
+  on the kernel as every walked vessel does.
+- `main.grow_network(..., bed=None)`, and on the command line `--bed JSON`,
+  whose keys left out take their defaults and whose `null` turns a preset's
+  bed off; `shaping_options` carries the settings normalised, all thirteen.
+  With a bed, `grow_network` returns right after setting the grammar's
+  properties: it grows two feeder trees in the mesh layout from
+  F(niter, d0, feeder_stop × d_min), its only global draws, and joins them
+  by `bed.build`, returning the same keys with `bridges` and `rungs` empty;
+  `bridges` and `bridge_persistence` stay anastomose's, and the bed's
+  persistence is in `bed`.
+- Refused with a bed, from `grow_network` and the command line before
+  anything is drawn or written: settings `bed.parse_settings` or
+  `bed.check_settings` refuses, anastomosis, cross-connections, a capillary
+  fill, guidance, growth not confined to the volume, no d_min, a negative
+  seed and a collision margin that is not finite and at least 0;
+  `grow_network` also refuses, before anything is drawn, a missing seed and
+  a root diameter below feeder_stop × d_min, where the command line draws a
+  missing `--seed`. `main.BedBoxTooSmall`, a `ValueError` beside
+  `RootOutsideBox`, refuses a growth box that holds no seed; at a fixed
+  voxel size it is raised, with a voxel size that is not positive and
+  finite and a root offset outside the box, before the feeders' grammar
+  draws, and under the other fits (isotropic or stretch) once it has
+  drawn. `bed.SeedsNotPlaced` comes after the seeds have drawn. The command
+  line exits naming the seed for each refusal that depends on a network's
+  sampled root or grown feeders (a root diameter below feeder_stop × d_min,
+  refused once the root is sampled; a box too small or an offset outside it
+  under the other fits; `bed.SeedsNotPlaced`), after the earlier networks
+  of a `--count` run have been written, and with `--bed` also refuses,
+  before anything is written, a `--voxel-size` that is not positive and
+  finite under `--fit voxel_size`.
+- Counters appended after the rung counters, all zero without a bed:
+  `bed_proposals`, `bed_proposals_on_feeders`, `bed_proposals_overlapping`,
+  `bed_seeds`, `bed_tips`, `bed_tips_inside_junction`, `bed_candidates`,
+  `bed_candidates_tip`, `bed_refused_degree`, `bed_refused_angle`,
+  `bed_refused_girth`, `bed_refused_clearance`,
+  `bed_refused_clearance_at_end`, `bed_edges`, `bed_edges_dead_end`,
+  `bed_edges_island`, `bed_edges_dropped`, `bed_seeds_dead_end`,
+  `bed_seeds_island`, `bed_segments`, `bed_segments_walked`,
+  `bed_segments_chord`, `bed_segments_dropped`, `bed_segments_removed`,
+  `bed_walk_redraws`, `bed_tips_attached`, `bed_tip_edges`,
+  `bed_components` and `bed_components_one_tree`. The proposals partition
+  into those on the feeders, those overlapping and the seeds; the
+  candidates into the four refusals, each at its first failing rule, and
+  the edges; the edges accepted into those kept, those peeled, those in
+  islands and those dropped; the seeds into those kept, peeled and in
+  islands; and the chains attempted into those walked, those placed as a
+  chord and those dropped.
+- The `foam` family: two feeder trees in the mesh layout, walked at
+  persistence 10 with collision avoidance and grown in the volume, whose
+  grammar stops below 2 d_min, joined by a bed with every setting written
+  out (spacing 7.5, girth 8, min_angle 60, reach 2.5, diameter 1,
+  persistence 8, feeder_stop 2, tip_edges 2, stretch 1, density 0.5,
+  jitter 0.25, step 0.5); its frame is of kind `none`. It needs d_min, and
+  its bed values are provisional. A pair whose feeders have few eligible
+  tips may stay unjoined, the bed reaching one tree only
+  (`bed_components_one_tree`), and `check_connectivity.py` then reports two
+  components.
+
+### Measurement
+
+- `describe.py` is unchanged and adds no key; the bed is measured with the
+  keys 3.6 offers. Its vessels are 1 d_min across, so they are of the
+  capillary class under the default class bound of 2, and a bed is
+  described on its own by setting every finite feeder column to NaN. The
+  library index adds no column; a foam network's `bridges` is 0 and its
+  bed's counters are in `events`.
+- `tests/test_topology_benchmark.py` (slow) grows foam in an invocation of
+  its own (`VSYSTEM_BENCHMARK_FAMILIES=foam`), at R 4, 8 and 16 over seeds 1
+  to 3 and at R 25 for cost, and reports for each member the bed's counters
+  and their laws, the walk's outcomes, the attachment of the feeders' tips
+  by tree and calibre, describe's loops in segments, and the descriptors of
+  all vessels and of the bed alone; `BedCostBenchmark` grows a bed alone
+  with the foam settings at 10³ to 10⁵ seeds, each in a fresh process, and
+  sweeps the girth (6, 8, 10) and the density (0.4, 0.5, 0.6) at 10⁴ seeds,
+  reporting at each girth the bed's cycles in edges beside describe's loops
+  in segments. On a 4-core 2.8 GHz Xeon (Linux, Python 3.12, numpy 2.5) a
+  foam member at R 25 has 1.81 million points, a peak RSS of 1.24 GB and an
+  archive of 47 MB. Its cost follows its bed, whose seeds number about 4 R³
+  (243, 1 997, 16 180 and 62 001 at R 4, 8, 16 and 25): a bed's time is
+  linear in its seeds, and the walk takes 80 to 85% of a foam member's bed
+  time. A bed alone takes 5.8, 67 and 675 s at 10³, 10⁴ and 10⁵ seeds (an
+  exponent of 1.03), with a peak of 21 MB, 137 MB and 1.25 GB above its
+  imports. Of the 535 eligible feeder tips of the nine members at R 4 to 16,
+  513 (96%) attach, and the bed joins both trees in 8 of them. The bed's
+  capillary segments have a median length of 11.6, 10.1 and 9.8 d_min at
+  R 4, 8 and 16 and the mean tissue distance over the growth box is 3.37,
+  3.08 and 2.98 d_min (means over seeds 1 to 3); at those ratios 71%, 43%
+  and 28% of describe's loops through a segment (seeds 1 to 3 pooled) are
+  shorter than the girth of 8, while no cycle of a bed is shorter than 8
+  edges.
+
+### Tools
+
+- `vsystem-library` grows `foam` when listed, in a cube of side 15 R
+  (`library.BOX_C["foam"]`, provisional). `--bed-max-candidates N` (default
+  2e6; a whole number of at least 1, as integer or float text) refuses a
+  member with a bed whose planned candidate edges
+  (`bed.planned_candidates`, seed pairs only) exceed N, before anything is
+  drawn, as `bed.BedTooLarge`, recorded as a failure; it bounds the
+  candidates, not the walk, and at the default it admits every foam member
+  up to R 31.3. The manifest records the cap under
+  `growth.bed_max_candidates` only when a family with a bed is listed, so a
+  default library's manifest content differs from 3.6.1's in `code_sha256`
+  and `library_version` only. `library_version` is 3.7.0 and `CODE_MODULES`
+  gains `bed`, so libraries grown with 3.6 refuse to resume under 3.7, as
+  any change of the generator does.
+- `check_connectivity.py --generate` skips a seed whose root diameter is
+  below the bed's feeder_stop × d_min, as it skips one below d_min; without
+  a bed the condition is unchanged.
+
+### Compatibility
+
+- With the bed off, tree, mesh, tumour, aligned, aligned_tight, aligned_bed
+  and capillary_bed reproduce 3.6.1 exactly: nodes, programs, tree, edges,
+  node_kind, bridges, rungs, frames, the 3.6 counters, the global and
+  per-stage generator states, the command line's archives, sidecars and
+  TIFFs, the library's members, index rows, manifest content and archives,
+  description, placement and joining. `tests/test_pinned_release_3_6.py`
+  runs the 3.6.1 modules beside the current ones, restricts every record to
+  the keys 3.6 wrote, and checks that the bed is off in every record, that
+  no stage creates a generator and no sidecar records the bed's stream, and
+  that every bed counter is zero; it took about 90 s in one run on a 4-core
+  2.8 GHz Xeon. Its hashes are recorded on Linux x86_64 twice, as the 3.5 pin's
+  are, with the default kernels and numpy's AVX-512 loops and with
+  OpenBLAS's Zen kernels and numpy's AVX2 loops, and the 3.4 and 3.5 pins
+  pass unchanged. `grow_network`'s body after the bed's early return is the
+  released source, which `tests/test_bed.py` checks against the 3.6.1 copy.
+- Additions only: the shaping key `bed` in `grow_network`'s keywords, the
+  sidecar, archive metadata and a library member's kwargs (None with the
+  bed off); the 29 counters; `rng_streams.bed` in the sidecar and archive
+  metadata of a run with a bed, and in no other; `main.BedBoxTooSmall`; the
+  library's `--bed-max-candidates`; and the manifest key
+  `growth.bed_max_candidates` when a family with a bed is listed. No
+  return, describe or index key is added, and `main.RNG_STREAMS` is
+  unchanged.
+- pyproject version 3.7.0; `py-modules` gains `bed`. Python 3.9 syntax,
+  numpy and tifffile only.
+
 ## 3.6.1
 
 Version 3.6.1 makes the walk faster and changes no output.
