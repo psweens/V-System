@@ -609,9 +609,9 @@ and 15 in `capillary_bed`. `aligned_bed` takes 13, 54 and 690 s at R 4, 8 and
 16 (11, 43 and 300 thousand points) and 28 minutes at R 25 (708 thousand
 points, peak RSS 0.93 GB). `capillary_bed` takes 34 and 335 s at R 4 and 8
 (17 and 107 thousand points) and 55 minutes for one network at R 16 (634
-thousand points, peak RSS 0.83 GB); at R 4, four fifths of its time goes on
-walking anastomosis bridges between its many tips. Both vary several-fold
-between seeds at one R.
+thousand points, peak RSS 0.83 GB); on one network at R 4, four fifths of
+its time went on anastomosis, most of it walking bridges between its many
+tips. Both vary several-fold between seeds at one R.
 
 ### Measuring: `describe.py`
 

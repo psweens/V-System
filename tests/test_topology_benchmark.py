@@ -1,5 +1,5 @@
 """
-Benchmark of the families against each other: growth cost and the Phase 1
+Benchmark of the families against each other: growth cost and the
 descriptors of every available family at three root ratios, the aligned
 preset over its guidance length and onset, and a projection of the cost of
 a 2000-network library.
