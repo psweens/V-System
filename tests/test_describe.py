@@ -7,6 +7,7 @@ Run from the repository root with
 import contextlib
 import glob
 import io
+import itertools
 import json
 import math
 import os
@@ -14,6 +15,7 @@ import random
 import sys
 import tempfile
 import unittest
+from unittest import mock
 
 import numpy as np
 
@@ -21,10 +23,13 @@ ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 if ROOT not in sys.path:
     sys.path.insert(0, ROOT)
 
+import computeVoxel  # noqa: E402
+import describe as describe_module  # noqa: E402
 import graph  # noqa: E402
 from collisions import KIN_REACH  # noqa: E402
 from describe import (FLAG_KEYS, POLAR_BINS, AZIMUTH_BINS, describe, clearance,  # noqa: E402
-                      load_archive, describe_archive, main)
+                      load_archive, describe_archive, main, LOOP_SAMPLES, LOOP_DEPTH, LOOP_VERTICES,
+                      EVD_MAX_POINTS)
 import main as main_module  # noqa: E402
 
 FIXTURES = sorted(glob.glob(os.path.join(ROOT, "tests", "fixtures", "*.npz")))
@@ -627,6 +632,8 @@ OLD_KEYS = ("units", "points", "polylines", "vertices", "edges", "components", "
             "events", "flags", "per_tree")
 NEW_KEYS = ("frame", "classes", "frame_orientation", "polar_order", "orientation_by_class",
             "calibre_shares", "segments_by_class", "transverse_spacing")
+# and those appended in 3.6
+NEW_KEYS_3_6 = ("junctions", "branch_angles_deg", "loops", "segment_diameter_variation", "tissue_distance")
 EMPTY_LENGTHS = {"count": 0, "median": None, "p10": None, "p90": None, "cv": None,
                  "median_d": None, "p10_d": None, "p90_d": None}
 PROPERTIES = {"k": 3, "epsilon": 7.0, "randmarg": 0.2, "sigma": 5, "stochparams": True}
@@ -1112,10 +1119,14 @@ class ClassAndFrameSourceTests(unittest.TestCase):
 
     def test_archive_without_a_frame_has_no_frame_relative_keys(self):
         r = describe(Y_NODES)
-        self.assertEqual(tuple(r), OLD_KEYS + NEW_KEYS)
+        self.assertEqual(tuple(r), OLD_KEYS + NEW_KEYS + NEW_KEYS_3_6)
         for key in NEW_KEYS:
             if key != "classes":
                 self.assertIsNone(r[key], key)
+        # the topology keys need neither a frame nor d_ref; the tissue distance is asked for
+        for key in NEW_KEYS_3_6[:-1]:
+            self.assertIsNotNone(r[key], key)
+        self.assertIsNone(r["tissue_distance"])
         self.assertEqual(r["classes"], {"bound": 2.0, "d_ref": None, "d_ref_source": None})
         self.assertEqual(json.loads(json.dumps(r, allow_nan=False)), r)
         # the fixtures predate frames and record no d_min
@@ -1213,6 +1224,14 @@ class ClassAndFrameSourceTests(unittest.TestCase):
                             class_bound=1.5)
         self.assertEqual(tuple(plain)[:len(OLD_KEYS)], OLD_KEYS)
         self.assertEqual({key: plain[key] for key in OLD_KEYS}, {key: extended[key] for key in OLD_KEYS})
+        # the tissue distance changes nothing else, the keys of 3.5 included
+        with_tissue = describe(grown["nodes"], grown["edges"], tree=grown["tree"], frame=frame, d_ref=5.0,
+                               class_bound=1.5, evd_spacing=8.0)
+        self.assertEqual(tuple(with_tissue), OLD_KEYS + NEW_KEYS + NEW_KEYS_3_6)
+        self.assertEqual({key: value for key, value in with_tissue.items() if key != "tissue_distance"},
+                         {key: value for key, value in extended.items() if key != "tissue_distance"})
+        self.assertIsNone(extended["tissue_distance"])
+        self.assertGreater(with_tissue["tissue_distance"]["outside_points"], 0)
         # the arguments only fill the keys after them
         self.assertIsNone(plain["frame"])
         self.assertEqual(plain["classes"], {"bound": 2.0, "d_ref": None, "d_ref_source": None})
@@ -1222,6 +1241,1017 @@ class ClassAndFrameSourceTests(unittest.TestCase):
         self.assertIsNotNone(extended["polar_order"]["all"])
         self.assertEqual(extended["transverse_spacing"]["area_source"], "capillary_bounding_box")
         self.assertEqual(json.loads(json.dumps(extended, allow_nan=False)), extended)
+
+
+# ---------------------------------------------------------------------------
+# 3.6: junctions, branch angles, loops, diameter variation and tissue distance
+# ---------------------------------------------------------------------------
+
+def graph_archive(points, edges, diameter=1.0):
+    """
+    An archive with one polyline per edge (i, j) of a graph on `points`,
+    through the edge's midpoint, so that every edge of the graph is a
+    segment of two archive edges; columns coincide where edges meet.
+    """
+    runs = []
+    for i, j in edges:
+        p, q = np.asarray(points[i], dtype=float), np.asarray(points[j], dtype=float)
+        runs.append([tuple(p), tuple((p + q) / 2.0), tuple(q)])
+    return archive(*runs, diameter=diameter)
+
+
+def ladder_graph(rungs, spacing=1.0, width=1.5):
+    """
+    A ladder of rungs `width` long, `spacing` apart along x, its rails
+    continued by a pendant edge past each end rung so that every rung end is
+    a junction of degree three.
+    """
+    points = [(k * spacing, y, 0.0) for k in range(rungs) for y in (0.0, width)]
+    edges = [(2 * k, 2 * k + 1) for k in range(rungs)]
+    edges += [(2 * k + side, 2 * k + 2 + side) for k in range(rungs - 1) for side in (0, 1)]
+    for k, x in ((0, -spacing), (rungs - 1, rungs * spacing)):
+        for side, y in ((0, 0.0), (1, width)):
+            edges.append((2 * k + side, len(points)))
+            points.append((x, y, 0.0))
+    return points, edges
+
+
+def lattice_graph(shape, spacing=1.0):
+    """
+    A square (two extents) or cubic (three) lattice, each boundary vertex
+    given a pendant tip half a spacing long towards every missing neighbour,
+    so that every lattice vertex has the bulk degree. Returns the points,
+    the edges and the number of lattice edges, which come first.
+    """
+    index, points = {}, []
+    for cell in itertools.product(*(range(n) for n in shape)):
+        index[cell] = len(points)
+        points.append(tuple(spacing * float(c) for c in cell) + (0.0,) * (3 - len(shape)))
+    edges = [(index[cell], index[cell[:axis] + (cell[axis] + 1,) + cell[axis + 1:]])
+             for cell in index for axis in range(len(shape)) if cell[axis] + 1 < shape[axis]]
+    n_lattice = len(edges)
+    for cell in index:
+        for axis in range(len(shape)):
+            for sign in (-1, 1):
+                if not 0 <= cell[axis] + sign < shape[axis]:
+                    tip = list(points[index[cell]])
+                    tip[axis] += sign * spacing / 2.0
+                    edges.append((index[cell], len(points)))
+                    points.append(tuple(tip))
+    return points, edges, n_lattice
+
+
+def honeycomb_graph(bricks, rows, side=1.0):
+    """
+    A sheet of regular hexagons of the given side, `rows` rows of `bricks`
+    in the brick-wall layout, so that every edge lies on a hexagon; each
+    vertex of degree two is given a pendant tip along z. Returns the points,
+    the edges, and the numbers of hexagon edges, which come first, and of
+    hexagon vertices.
+    """
+    index, points, edges = {}, [], []
+
+    def vertex(i, j):
+        if (i, j) not in index:
+            index[(i, j)] = len(points)
+            points.append((i * side * math.sqrt(3.0) / 2.0, 1.5 * j * side - (0.5 * side if (i + j) % 2 else 0.0),
+                           0.0))
+        return index[(i, j)]
+
+    for j in range(rows):
+        for i in range(j % 2, 2 * bricks + j % 2, 2):
+            ring = [(i, j), (i + 1, j), (i + 2, j), (i + 2, j + 1), (i + 1, j + 1), (i, j + 1)]
+            for p, q in zip(ring, ring[1:] + ring[:1]):
+                edge = tuple(sorted((vertex(*p), vertex(*q))))
+                if edge not in edges:
+                    edges.append(edge)
+    n_hexagon, n_vertices = len(edges), len(points)
+    degree = np.bincount(np.array(edges).ravel(), minlength=n_vertices)
+    for v in np.flatnonzero(degree == 2):
+        edges.append((int(v), len(points)))
+        points.append(points[v][:2] + (side / 2.0,))
+    return points, edges, n_hexagon, n_vertices
+
+
+def binary_tree_graph(depth, length=4.0, angle=0.6):
+    """A planar binary tree of the given depth, each daughter 0.8 times its parent's length."""
+    points, edges = [(0.0, 0.0, 0.0), (0.0, length, 0.0)], [(0, 1)]
+    ends = [(1, np.array([0.0, length, 0.0]), np.array([0.0, 1.0, 0.0]), length)]
+    for _ in range(depth):
+        following = []
+        for v, position, heading, size in ends:
+            for turn in (angle, -angle):
+                c, s = math.cos(turn), math.sin(turn)
+                direction = np.array([c * heading[0] - s * heading[1], s * heading[0] + c * heading[1], 0.0])
+                end = position + 0.8 * size * direction
+                edges.append((v, len(points)))
+                points.append(tuple(end))
+                following.append((len(points) - 1, end, direction, 0.8 * size))
+        ends = following
+    return points, edges
+
+
+def ring_graph(n, radius=10.0):
+    """n vertices on a circle joined in a ring, each with a pendant tip outwards: a loop of n segments."""
+    angle = 2.0 * np.pi * np.arange(n) / n
+    ring = [(radius * math.cos(a), radius * math.sin(a), 0.0) for a in angle]
+    tips = [(1.1 * x, 1.1 * y, 0.0) for x, y, _ in ring]
+    return ring + tips, [(k, (k + 1) % n) for k in range(n)] + [(k, n + k) for k in range(n)]
+
+
+# Theta: junctions U and V joined by one long segment of length 10, by U-X-V
+# (two segments of sqrt(0.5)) and by U-Y-Z-V (sqrt(1.0625), 0.5 and
+# sqrt(1.0625)); X, Y and Z carry pendant tips. The shortest loop through U
+# counted in segments is the long segment and U-X-V, three segments 11.41
+# long; the shortest by length is U-X-V-Z-Y-U, five segments 3.98 long.
+_U, _V, _X, _Y, _Z = (0.0, 0.0, 0.0), (1.0, 0.0, 0.0), (0.5, -0.5, 0.0), (0.25, -1.0, 0.0), (0.75, -1.0, 0.0)
+THETA_NODES = archive([_U, (0.0, 4.5, 0.0), (1.0, 4.5, 0.0), _V], [_U, _X], [_X, _V], [_U, _Y], [_Y, _Z], [_Z, _V],
+                      [_X, (0.5, -0.5, 1.0)], [_Y, (0.25, -1.0, 1.0)], [_Z, (0.75, -1.0, 1.0)], diameter=0.2)
+THETA_LOOP = 2.0 * math.sqrt(0.5) + 2.0 * math.sqrt(1.0625) + 0.5
+
+
+def star_archive(directions, length=10.0, n_points=6, diameter=1.0):
+    """Straight arms from the origin along each direction, each a polyline of n_points equally spaced columns."""
+    runs = []
+    for direction in directions:
+        unit = np.asarray(direction, dtype=float) / np.linalg.norm(direction)
+        runs.append([tuple(t * unit) for t in np.linspace(0.0, length, n_points)])
+    return archive(*runs, diameter=diameter)
+
+
+def _sphere_points(n, centre, radius):
+    """n points spread evenly over a sphere (a Fibonacci lattice)."""
+    k = np.arange(n) + 0.5
+    polar = np.arccos(1.0 - 2.0 * k / n)
+    azimuth = np.pi * (1.0 + math.sqrt(5.0)) * k
+    return np.asarray(centre) + radius * np.stack([np.sin(polar) * np.cos(azimuth), np.sin(polar) * np.sin(azimuth),
+                                                   np.cos(polar)], axis=1)
+
+
+def _spokes(hub, ends, lift):
+    """
+    Two polylines from the hub to each end, bowed apart by `lift` (a pair of
+    parallel segments, a loop of two), and a small closed loop at each end,
+    which makes the end a junction whose own shortest loop is found at once.
+    """
+    runs = []
+    for p in ends:
+        side = np.cross(p - hub, [0.0, 0.0, 1.0])
+        side = side / np.linalg.norm(side) * lift if np.linalg.norm(side) > 1e-9 else np.array([lift, 0.0, 0.0])
+        runs += [[hub, (hub + p) / 2.0 + side, p], [hub, (hub + p) / 2.0 - side, p]]
+    for p in ends:
+        out = (p - hub) / np.linalg.norm(p - hub) * lift
+        runs.append([p, p + out, p + out + np.array([0.0, 0.0, lift]), p])
+    return [[tuple(point) for point in run] for run in runs]
+
+
+def segment_cap_archive(n_spokes):
+    """
+    A hub a with n_spokes neighbours on the unit sphere, each joined to it
+    by a pair of parallel segments, and a segment e from a to b, which joins
+    the nearest of them and carries a tip. The search through e reaches all
+    n_spokes neighbours of a, its two ends besides, before it meets b's side.
+    """
+    a, b = np.zeros(3), np.array([4.0, 0.0, 0.0])
+    ends = _sphere_points(n_spokes, a, 1.0)
+    nearest = ends[np.argmax(ends[:, 0])]
+    runs = [[tuple(a), tuple((a + b) / 2.0), tuple(b)], [tuple(b), tuple((b + nearest) / 2.0), tuple(nearest)],
+            [tuple(b), (4.0, -1.0, 0.0)]] + _spokes(a, ends, 0.002)
+    return archive(*runs, diameter=1e-3)
+
+
+def node_cap_archive(n_spokes):
+    """
+    A junction s joined to u nearby and to z far away, u joined to z, and
+    n_spokes neighbours of u on a small sphere about it, each joined to it by
+    a pair of parallel segments. From s every one of them is nearer than z,
+    which closes the only loop through s, s-u-z-s.
+    """
+    s, u, z = np.zeros(3), np.array([1.0, 0.0, 0.0]), np.array([0.0, 60.0, 0.0])
+    runs = [[tuple(s), (5.0, 30.0, 0.0), tuple(z)], [tuple(s), (0.5, 0.0, 0.0), tuple(u)],
+            [tuple(u), tuple((u + z) / 2.0), tuple(z)], [tuple(s), (0.0, -1.0, 0.0)], [tuple(z), (0.0, 61.0, 0.0)]]
+    runs += _spokes(u, _sphere_points(n_spokes, u, 0.3), 0.001)
+    return archive(*runs, diameter=1e-3)
+
+
+def frontier_archive(n_spokes):
+    """
+    A segment e from a hub a to b, b joined to c and c to the last of
+    n_spokes neighbours of a on the unit sphere, which closes a loop of four
+    through e. Each neighbour p is joined to a, and to a vertex 2p of its
+    own beyond it, by a pair of parallel segments. After one level from each
+    end of e, a's side holds the n_spokes neighbours and b's side c alone:
+    going on from the smaller side meets a's side at once, while going on
+    from a's side would reach the vertices beyond its neighbours first.
+    """
+    a, b, c = np.zeros(3), np.array([4.0, 0.0, 0.0]), np.array([3.0, -1.0, 0.0])
+    ends = _sphere_points(n_spokes, a, 1.0)
+    runs = [[tuple(a), tuple(b)], [tuple(b), tuple(c)], [tuple(b), (5.0, 0.0, 0.0)], [tuple(c), (3.0, -2.0, 0.0)]]
+    # the neighbours come in order, so the last one is the last a's side reaches
+    runs += _spokes(a, ends, 0.002)
+    for p in ends:
+        runs += _spokes(p, [2.0 * p], 0.002)
+    runs.append([tuple(c), tuple(ends[-1])])
+    return archive(*runs, diameter=1e-3)
+
+
+def depth_cap_archive():
+    """
+    A junction s whose shortest loop closes at a vertex its search reaches
+    on the depth cap: a chain of 16 segments 0.01 long from s to x, a
+    segment 0.1 long from x to y and one about 2.99 long from y back to s,
+    a loop of 18 segments about 3.25 long. s is also joined to q by a pair
+    of parallel segments about 2.57 long, a loop of two about 5.14 long,
+    which the search from s closes before it reaches y. Every junction but
+    s carries a tip.
+
+    Returns:
+        tuple: (nodes, pairs, lengths, n_junctions), as random_multigraph
+        returns them, s numbered 0.
+    """
+    points = [(0.01 * k, 0.0, 0.0) for k in range(17)] + [(0.16, 0.1, 0.0), (0.0, -2.5, 0.0)]
+    s, x, y, q = points[0], points[16], points[17], points[18]
+    runs = [[points[k - 1], points[k]] for k in range(1, 17)]
+    runs += [[x, y], [s, (0.0, 0.0, -1.4), (0.16, 0.1, -1.4), y], [s, (0.3, -1.25, 0.0), q],
+             [s, (-0.3, -1.25, 0.0), q]]
+    pairs = [(k - 1, k) for k in range(1, 17)] + [(16, 17), (0, 17), (0, 18), (0, 18)]
+    for v in range(1, 19):
+        runs.append([points[v], points[v][:2] + (0.005,)])
+        pairs.append((v, 18 + v))
+    lengths = [sum(math.dist(u, w) for u, w in zip(run, run[1:])) for run in runs]
+    return archive(*runs), pairs, lengths, 19
+
+
+def random_multigraph(rng, n_vertices=14, n_edges=22, n_parallel=3, n_loops=2):
+    """
+    A random multigraph with parallel edges and self-loops, every vertex
+    brought to degree three or more with pendant tips, drawn as an archive
+    whose segments are exactly its edges: an edge is a polyline through a
+    point off its chord, a self-loop a closed polyline through two points.
+
+    Returns:
+        tuple: (nodes, pairs, lengths, n_vertices), the edges as vertex
+        pairs (a tip's far end numbered from n_vertices up) and their arc
+        lengths; the vertices 0..n_vertices-1 are the junctions.
+    """
+    points = list(rng.uniform(0.0, 10.0, (n_vertices, 3)))
+    pairs = [tuple(rng.choice(n_vertices, 2, replace=False)) for _ in range(n_edges)]
+    pairs += [pairs[k] for k in rng.choice(len(pairs), n_parallel, replace=False)]
+    pairs += [(v, v) for v in rng.choice(n_vertices, n_loops, replace=False)]
+    degree = np.zeros(n_vertices, dtype=np.int64)
+    for i, j in pairs:
+        degree[i] += 1
+        degree[j] += 1
+    for v in range(n_vertices):
+        for _ in range(max(0, 3 - int(degree[v]))):
+            pairs.append((v, len(points)))
+            points.append(points[v] + rng.normal(0.0, 1.0, 3))
+    runs, lengths = [], []
+    for i, j in pairs:
+        p, q = points[i], points[j]
+        if i == j:
+            run = [p, p + rng.normal(0.0, 1.0, 3), p + rng.normal(0.0, 1.0, 3), p]
+        elif j >= n_vertices:
+            run = [p, q]
+        else:
+            run = [p, (p + q) / 2.0 + rng.normal(0.0, 1.0, 3), q]
+        runs.append([tuple(point) for point in run])
+        lengths.append(sum(float(np.linalg.norm(np.subtract(b, a))) for a, b in zip(run, run[1:])))
+    return archive(*runs), pairs, lengths, n_vertices
+
+
+def brute_force_loops(pairs, lengths, n_junctions):
+    """
+    Reference for "loops", without caps, on a multigraph given by its edges:
+    the size of the shortest loop through each edge, by a plain one-way
+    breadth-first search (0 for none), and the (length, segments) of the
+    shortest loop through each junction by length, then by segments, as the
+    least over the edges e = (s, u) at s of e followed by a shortest path
+    from u back to s that avoids e, and over the self-loops at s, each path
+    found by a plain Dijkstra search on (length, segments); (inf, 0) for none.
+    """
+    by_segment = []
+    for e, (i, j) in enumerate(pairs):
+        if i == j:
+            by_segment.append(1)
+            continue
+        if any({k, m} == {i, j} for f, (k, m) in enumerate(pairs) if f != e):
+            by_segment.append(2)
+            continue
+        level = {i: 0}
+        queue = [i]
+        while queue and j not in level:
+            following = []
+            for x in queue:
+                for f, (k, m) in enumerate(pairs):
+                    if f == e or k == m or x not in (k, m):
+                        continue
+                    y = m if x == k else k
+                    if y not in level:
+                        level[y] = level[x] + 1
+                        following.append(y)
+            queue = following
+        by_segment.append(level[j] + 1 if j in level else 0)
+    by_node = []
+    for s in range(n_junctions):
+        best = (math.inf, 0)
+        for e, (i, j) in enumerate(pairs):
+            if s not in (i, j):
+                continue
+            if i == j:
+                best = min(best, (lengths[e], 1))
+                continue
+            start = j if i == s else i
+            distance = {start: (lengths[e], 1)}
+            done = set()
+            while True:
+                waiting = [v for v in distance if v not in done]
+                if not waiting:
+                    break
+                x = min(waiting, key=lambda v: distance[v])
+                done.add(x)
+                if x == s:
+                    best = min(best, distance[s])
+                    break
+                for f, (k, m) in enumerate(pairs):
+                    if f == e or k == m or x not in (k, m):
+                        continue
+                    y = m if x == k else k
+                    candidate = (distance[x][0] + lengths[f], distance[x][1] + 1)
+                    if y not in done and (y not in distance or candidate < distance[y]):
+                        distance[y] = candidate
+        by_node.append(best if math.isfinite(best[0]) else (math.inf, 0))
+    return by_segment, by_node
+
+
+def random_capsule_archive(rng, n_polylines=8):
+    """Random polylines of random diameters, some of them zero, for the tissue distance."""
+    runs = []
+    for _ in range(n_polylines):
+        position = rng.uniform(0.0, 20.0, 3)
+        run = []
+        for _ in range(int(rng.integers(2, 10))):
+            diameter = rng.choice([np.nan, 0.0, rng.uniform(0.2, 3.0)], p=[0.05, 0.05, 0.9])
+            run.append(tuple(position) + (float(diameter),))
+            position = position + rng.normal(0.0, 2.5, 3)
+        runs.append(run)
+    return archive(*runs)
+
+
+def brute_force_tissue(nodes, axes):
+    """
+    Reference for "tissue_distance" on the grid with the given axes: the
+    value of every capsule of the voxeliser at every grid point, minimised.
+    """
+    x, y, z = np.meshgrid(*axes, indexing="ij")
+    grid = np.stack([x.ravel(), y.ravel(), z.ravel()], axis=1)
+    best = np.full(grid.shape[0], np.inf)
+    for c in range(nodes.shape[1] - 1):
+        if not (np.all(np.isfinite(nodes[:3, c])) and np.all(np.isfinite(nodes[:3, c + 1]))):
+            continue
+        p0, p1 = nodes[:3, c], nodes[:3, c + 1]
+        if np.array_equal(p0, p1):
+            continue
+        r0, r1 = (max(0.0, float(np.nan_to_num(nodes[3, k] / 2.0))) for k in (c, c + 1))
+        axis = p1 - p0
+        t = np.clip((grid - p0) @ axis / (axis @ axis), 0.0, 1.0)
+        best = np.minimum(best, np.linalg.norm(grid - (p0 + t[:, None] * axis), axis=1) - (r0 + t * (r1 - r0)))
+    return best
+
+
+def grid_axes(low, high, spacing):
+    """The grid "tissue_distance" documents, when the spacing is not raised."""
+    low, high = np.asarray(low, dtype=float), np.asarray(high, dtype=float)
+    counts = [max(1, int(math.floor((h - l) / spacing + 1e-9))) for l, h in zip(low, high)]
+    centre = (low + high) / 2.0
+    return [centre[i] + (np.arange(counts[i]) - (counts[i] - 1) / 2.0) * spacing for i in range(3)]
+
+
+def loop_histogram(sizes):
+    """The "histogram" describe reports for a list of loop sizes, 0 meaning no loop."""
+    found = [size for size in sizes if size]
+    return {str(size): found.count(size) for size in sorted(set(found))}
+
+
+def cylinder_mean_distance(a, r):
+    """
+    The mean distance to the wall of a cylinder of radius r on the axis of a
+    square prism of side a, over the prism outside the cylinder: the mean
+    distance from the centre of a square, a (sqrt 2 + ln(1 + sqrt 2)) / 6,
+    taken over the square less the disc, less r.
+    """
+    square = a ** 3 * (math.sqrt(2.0) + math.log(1.0 + math.sqrt(2.0))) / 6.0
+    outside = a * a - math.pi * r * r
+    return (square - 2.0 * math.pi * r ** 3 / 3.0 - r * outside) / outside
+
+
+class TopologyDescriptorTests(unittest.TestCase):
+    def test_loops_of_a_ladder_are_four_segments(self):
+        rungs, spacing, width = 20, 1.0, 1.5
+        r = describe(graph_archive(*ladder_graph(rungs, spacing, width)))
+        # the rungs, the rail edges between them and four pendant tips
+        n_segments = rungs + 2 * (rungs - 1) + 4
+        by_segment = r["loops"]["by_segment"]
+        self.assertEqual({key: by_segment[key] for key in ("segments", "every", "sampled", "found", "cycles")},
+                         {"segments": n_segments, "every": 1, "sampled": n_segments, "found": n_segments - 4,
+                          "cycles": rungs - 1})
+        self.assertEqual(by_segment["histogram"], {"4": n_segments - 4})
+        self.assertEqual((by_segment["median"], by_segment["mean"]), (4.0, 4.0))
+        self.assertAlmostEqual(by_segment["none_fraction"], 4.0 / n_segments, delta=1e-15)
+        total = rungs * width + 2 * (rungs - 1) * spacing + 4 * spacing
+        self.assertAlmostEqual(by_segment["cycles_per_length"], (rungs - 1) / total, delta=1e-15)
+        self.assertIsNone(by_segment["cycles_per_length_d"])
+        by_node = r["loops"]["by_node"]
+        self.assertEqual({key: by_node[key] for key in ("junctions", "every", "sampled", "found", "none_fraction")},
+                         {"junctions": 2 * rungs, "every": 1, "sampled": 2 * rungs, "found": 2 * rungs,
+                          "none_fraction": 0.0})
+        self.assertEqual(by_node["histogram"], {"4": 2 * rungs})
+        for key in ("length_median", "length_mean"):
+            self.assertAlmostEqual(by_node[key], 2.0 * spacing + 2.0 * width, delta=1e-12, msg=key)
+        self.assertIsNone(by_node["length_median_d"])
+        self.assertEqual(r["junctions"], {"count": 2 * rungs, "degree_3": 1.0, "degree_4": 0.0, "degree_5_plus": 0.0,
+                                          "mean_degree": 3.0, "segments_per_junction": n_segments / (2 * rungs)})
+        # the entries in d_ref
+        loops = describe(graph_archive(*ladder_graph(rungs, spacing, width)), d_ref=0.5)["loops"]
+        self.assertAlmostEqual(loops["by_segment"]["cycles_per_length_d"], 0.5 * (rungs - 1) / total, delta=1e-15)
+        self.assertAlmostEqual(loops["by_node"]["length_median_d"], (2.0 * spacing + 2.0 * width) / 0.5, delta=1e-12)
+
+    def test_loops_of_a_square_lattice_are_four_segments(self):
+        side, spacing = 5, 2.0
+        points, edges, n_lattice = lattice_graph((side, side), spacing)
+        r = describe(graph_archive(points, edges))
+        by_segment, by_node = r["loops"]["by_segment"], r["loops"]["by_node"]
+        self.assertEqual(n_lattice, 2 * side * (side - 1))
+        self.assertEqual((by_segment["segments"], by_segment["histogram"]), (len(edges), {"4": n_lattice}))
+        self.assertEqual(by_segment["cycles"], (side - 1) ** 2)
+        self.assertEqual((by_node["junctions"], by_node["histogram"]), (side * side, {"4": side * side}))
+        self.assertAlmostEqual(by_node["length_median"], 4.0 * spacing, delta=1e-12)
+        self.assertEqual((r["junctions"]["degree_4"], r["junctions"]["mean_degree"]), (1.0, 4.0))
+
+    def test_loops_of_a_hexagonal_sheet_are_six_segments(self):
+        bricks, rows, side = 3, 3, 1.5
+        points, edges, n_hexagon, n_vertices = honeycomb_graph(bricks, rows, side)
+        r = describe(graph_archive(points, edges))
+        by_segment, by_node = r["loops"]["by_segment"], r["loops"]["by_node"]
+        self.assertEqual((by_segment["histogram"], by_segment["cycles"]), ({"6": n_hexagon}, bricks * rows))
+        self.assertEqual((by_node["junctions"], by_node["histogram"]), (n_vertices, {"6": n_vertices}))
+        self.assertAlmostEqual(by_node["length_median"], 6.0 * side, delta=1e-12)
+        self.assertEqual(r["junctions"]["degree_3"], 1.0)
+
+    def test_loops_of_a_cubic_lattice_are_four_segments(self):
+        side = 3
+        points, edges, n_lattice = lattice_graph((side, side, side))
+        r = describe(graph_archive(points, edges))
+        by_segment, by_node = r["loops"]["by_segment"], r["loops"]["by_node"]
+        self.assertEqual(n_lattice, 3 * side * side * (side - 1))
+        self.assertEqual((by_segment["histogram"], by_segment["cycles"]), ({"4": n_lattice}, n_lattice - side ** 3 + 1))
+        self.assertEqual((by_node["junctions"], by_node["histogram"]), (side ** 3, {"4": side ** 3}))
+        self.assertAlmostEqual(by_node["length_median"], 4.0, delta=1e-12)
+        self.assertEqual((r["junctions"]["degree_5_plus"], r["junctions"]["mean_degree"]), (1.0, 6.0))
+
+    def test_a_tree_has_no_loops(self):
+        depth = 6
+        r = describe(graph_archive(*binary_tree_graph(depth)))
+        n_segments, n_junctions = 2 ** (depth + 1) - 1, 2 ** depth - 1
+        self.assertEqual(r["loops"]["by_segment"],
+                         {"segments": n_segments, "every": 1, "sampled": n_segments, "found": 0, "none_fraction": 1.0,
+                          "median": None, "mean": None, "histogram": {}, "cycles": 0, "cycles_per_length": 0.0,
+                          "cycles_per_length_d": None})
+        self.assertEqual(r["loops"]["by_node"],
+                         {"junctions": n_junctions, "every": 1, "sampled": n_junctions, "found": 0,
+                          "none_fraction": 1.0, "median": None, "mean": None, "histogram": {}, "length_median": None,
+                          "length_mean": None, "length_median_d": None, "length_mean_d": None})
+        self.assertEqual(r["junctions"]["segments_per_junction"], n_segments / n_junctions)
+
+    def test_by_node_picks_the_shortest_loop_by_length_not_by_count(self):
+        r = describe(THETA_NODES)["loops"]
+        # counted in segments, the long segment closes a loop of three with U-X-V
+        # and the segments through Y and Z lie on loops of four
+        self.assertEqual(r["by_segment"]["histogram"], {"3": 3, "4": 3})
+        # by length, every junction's shortest loop is U-X-V-Z-Y, five segments
+        self.assertEqual(r["by_node"]["histogram"], {"5": 5})
+        for key in ("length_median", "length_mean"):
+            self.assertAlmostEqual(r["by_node"][key], THETA_LOOP, delta=1e-12, msg=key)
+
+    def test_self_loops_and_parallel_segments_close_one_and_two_segment_loops(self):
+        # junction j: a closed loop through two points, two parallel segments
+        # to k (lengths 2 sqrt(0.26) and 2 sqrt(0.29)) and a tip; k has a tip
+        j, k = (0.0, 0.0, 0.0), (1.0, 0.0, 0.0)
+        pair = 2.0 * math.sqrt(0.26) + 2.0 * math.sqrt(0.29)
+        for size, through_j in ((1.0, 2), (0.5, 1)):
+            loop = (1.0 + math.sqrt(5.0)) * size
+            with self.subTest(loop=loop):
+                nodes = archive([j, (-size, size / 2.0, 0.0), (-size, -size / 2.0, 0.0), j], [j, (0.5, 0.1, 0.0), k],
+                                [j, (0.5, -0.2, 0.0), k], [j, (0.0, 0.0, 1.0)], [k, (1.0, 0.0, 1.0)])
+                r = describe(nodes)
+                self.assertEqual(r["loops"]["by_segment"]["histogram"], {"1": 1, "2": 2})
+                self.assertEqual(r["junctions"]["degree_5_plus"], 0.5)
+                # j takes the shorter of its own loop and the pair, k the pair
+                self.assertEqual(r["loops"]["by_node"]["histogram"], {"1": 1, "2": 1} if through_j == 1 else {"2": 2})
+                self.assertAlmostEqual(r["loops"]["by_node"]["length_mean"], (min(loop, pair) + pair) / 2.0,
+                                       delta=1e-12)
+
+    def test_loops_agree_with_an_independent_search(self):
+        # development measurement, seeds 0-9: every histogram and count equal,
+        # loop lengths within 2.2e-16 relatively, loops of up to 8 segments
+        for seed in range(10):
+            with self.subTest(seed=seed):
+                rng = np.random.default_rng(seed)
+                nodes, pairs, lengths, n_junctions = random_multigraph(rng)
+                r = describe(nodes)["loops"]
+                by_segment, by_node = brute_force_loops(pairs, lengths, n_junctions)
+                # small enough that no search reaches a cap, so the capped
+                # searches must agree with the uncapped reference
+                self.assertLessEqual(max(by_segment), LOOP_DEPTH + 1)
+                self.assertLessEqual(max(size for _, size in by_node), LOOP_DEPTH + 1)
+                self.assertEqual(r["by_segment"]["segments"], len(pairs))
+                self.assertEqual(r["by_segment"]["histogram"], loop_histogram(by_segment))
+                self.assertEqual(r["by_segment"]["found"], sum(1 for size in by_segment if size))
+                self.assertEqual(r["by_node"]["junctions"], n_junctions)
+                self.assertEqual(r["by_node"]["histogram"], loop_histogram([size for _, size in by_node]))
+                found = [length for length, size in by_node if size]
+                self.assertEqual(r["by_node"]["found"], len(found))
+                for key, value in (("length_median", float(np.median(found))), ("length_mean", float(np.mean(found)))):
+                    self.assertAlmostEqual(r["by_node"][key], value, delta=1e-12 * value, msg=key)
+                # the median and mean of the loop sizes, which differ on every
+                # one of seeds 0-9 in both entries
+                for key, sizes in (("by_segment", by_segment), ("by_node", [size for _, size in by_node])):
+                    sizes = [size for size in sizes if size]
+                    self.assertEqual((r[key]["median"], r[key]["mean"]),
+                                     (float(np.median(sizes)), float(np.mean(sizes))), msg=key)
+
+    def test_loop_caps(self):
+        self.assertEqual((LOOP_SAMPLES, LOOP_DEPTH, LOOP_VERTICES), (2000, 16, 4096))
+        # depth: a ring of n segments; from a segment the two sides meet
+        # after at most 16 segments between them, from a junction each side
+        # goes at most 16 segments out
+        for n, through_segment, through_junction in ((17, True, True), (18, False, True), (33, False, True),
+                                                     (34, False, False)):
+            with self.subTest(ring=n):
+                r = describe(graph_archive(*ring_graph(n)))["loops"]
+                self.assertEqual(r["by_segment"]["histogram"], {str(n): n} if through_segment else {})
+                self.assertEqual(r["by_node"]["histogram"], {str(n): n} if through_junction else {})
+
+        # vertices: from the segment e of segment_cap_archive, its hub's side
+        # reaches the hub's neighbours before the far side can meet it, so
+        # e's loop of three is found with 4094 of them (4096 vertices with
+        # e's ends) and not with 4095
+        for n_spokes, found in ((4094, True), (4095, False)):
+            with self.subTest(spokes=n_spokes):
+                nodes = segment_cap_archive(n_spokes)
+                canonical = graph.canonical_columns(nodes)
+                edges = graph.edges_from_nodes(nodes, canonical=canonical)
+                degree = graph.degree(edges, nodes.shape[1])
+                paths = graph.segments(nodes, edges, canonical)
+                # e runs from the hub, column 0, to b, column 2, and comes first
+                self.assertEqual((paths[0][0], paths[0][-1]), (0, 2))
+                ends = [frozenset((path[0], path[-1])) for path in paths]
+                r = describe(nodes)["loops"]["by_segment"]
+                expected = []
+                for k in range(0, len(paths), r["every"]):
+                    path = paths[k]
+                    if path[0] == path[-1]:
+                        expected.append(1)
+                    elif ends.count(ends[k]) > 1:
+                        expected.append(2)
+                    elif degree[path[0]] == 1 or degree[path[-1]] == 1:
+                        expected.append(0)
+                    else:
+                        # e, or the segment from b to the hub's nearest neighbour
+                        expected.append(3 if k or found else 0)
+                self.assertEqual(r["histogram"], loop_histogram(expected))
+                self.assertEqual(r["histogram"].get("3", 0) >= 1, found)
+        # and from a junction: every one of node_cap_archive's 4093 or 4094
+        # spokes is settled before z, which closes the only loop through s
+        for n_spokes, found in ((4093, True), (4094, False)):
+            with self.subTest(spokes=n_spokes):
+                r = describe(node_cap_archive(n_spokes))["loops"]["by_node"]
+                # s is the first junction and so sampled; every spoke end
+                # sampled finds the small loop on itself, of one segment
+                self.assertEqual(r["every"], 3)
+                self.assertEqual(r["histogram"], {"1": r["sampled"] - 1, "3": 1} if found else {"1": r["sampled"] - 1})
+
+    def test_by_segment_goes_on_from_the_smaller_frontier(self):
+        # from e, a's side holds 2100 neighbours after one level and b's side
+        # one vertex; going on from b's side meets a's side at c's neighbour
+        # with 2103 vertices reached, where going on from a's side, as
+        # alternating by depth would, reaches 4096 among the vertices beyond
+        nodes = frontier_archive(2100)
+        canonical = graph.canonical_columns(nodes)
+        edges = graph.edges_from_nodes(nodes, canonical=canonical)
+        degree = graph.degree(edges, nodes.shape[1])
+        paths = graph.segments(nodes, edges, canonical)
+        # e runs from a, column 0, to b, column 1, and comes first
+        self.assertEqual((paths[0][0], paths[0][-1]), (0, 1))
+        ends = [frozenset((path[0], path[-1])) for path in paths]
+        r = describe(nodes)["loops"]["by_segment"]
+        expected = []
+        for k in range(0, len(paths), r["every"]):
+            path = paths[k]
+            if path[0] == path[-1]:
+                expected.append(1)
+            elif ends.count(ends[k]) > 1:
+                expected.append(2)
+            elif degree[path[0]] == 1 or degree[path[-1]] == 1:
+                expected.append(0)
+            else:
+                # e, b-c or c's segment to a's last neighbour, all on the loop of four
+                expected.append(4)
+        self.assertEqual(r["histogram"], loop_histogram(expected))
+
+    def test_by_node_goes_on_past_a_vertex_on_the_depth_cap(self):
+        # x is settled 16 segments from s and not searched beyond, so the
+        # loop through it, 18 segments 3.25 long, closes only when y, 2.99
+        # from s, is settled: after the pair has closed a loop of 5.14, less
+        # than twice 2.99. Every junction's loop is that of the uncapped
+        # search; development measurement: lengths within 6.7e-16 relatively
+        nodes, pairs, lengths, n_junctions = depth_cap_archive()
+        _, by_node = brute_force_loops(pairs, lengths, n_junctions)
+        self.assertEqual(by_node[0][1], 18)
+        self.assertAlmostEqual(by_node[0][0], 0.26 + 2.8 + math.hypot(0.16, 0.1), delta=1e-12)
+        r = describe(nodes)["loops"]["by_node"]
+        self.assertEqual(r["histogram"], {"2": 1, "18": 18})
+        self.assertEqual(r["histogram"], loop_histogram([size for _, size in by_node]))
+        found = [length for length, size in by_node if size]
+        for key, value in (("length_median", float(np.median(found))), ("length_mean", float(np.mean(found)))):
+            self.assertAlmostEqual(r[key], value, delta=1e-12 * value, msg=key)
+
+    def test_loop_sampling_takes_every_kth_up_to_2000(self):
+        rungs = 1100
+        nodes = graph_archive(*ladder_graph(rungs))
+        r = describe(nodes)["loops"]
+        n_segments, n_junctions = 3 * rungs + 2, 2 * rungs
+        self.assertEqual((r["by_segment"]["every"], r["by_segment"]["sampled"]), (2, (n_segments + 1) // 2))
+        self.assertEqual((r["by_node"]["every"], r["by_node"]["sampled"]), (2, n_junctions // 2))
+        self.assertEqual(r["by_node"]["histogram"], {"4": n_junctions // 2})
+        # every other segment in the order of graph.segments, the tips among them without a loop
+        canonical = graph.canonical_columns(nodes)
+        edges = graph.edges_from_nodes(nodes, canonical=canonical)
+        degree = graph.degree(edges, nodes.shape[1])
+        sample = graph.segments(nodes, edges, canonical)[::2]
+        tips = sum(1 for path in sample if degree[path[0]] == 1 or degree[path[-1]] == 1)
+        self.assertEqual(r["by_segment"]["histogram"], {"4": len(sample) - tips})
+
+    def test_junction_fractions_and_angles_of_a_symmetric_y(self):
+        third = 2.0 * math.pi / 3.0
+        r = describe(star_archive([(math.cos(k * third), math.sin(k * third), 0.0) for k in range(3)]))
+        self.assertEqual(r["junctions"], {"count": 1, "degree_3": 1.0, "degree_4": 0.0, "degree_5_plus": 0.0,
+                                          "mean_degree": 3.0, "segments_per_junction": 3.0})
+        angles = r["branch_angles_deg"]
+        self.assertEqual((angles["count"], angles["skipped"]), (1, 0))
+        for key in ("min", "median", "max"):
+            self.assertAlmostEqual(angles[key], 120.0, delta=1e-9, msg=key)
+        # a parent and two daughters each 40 degrees off its continuation
+        off = math.radians(40.0)
+        angles = describe(star_archive([(0.0, -1.0, 0.0), (math.sin(off), math.cos(off), 0.0),
+                                        (-math.sin(off), math.cos(off), 0.0)]))["branch_angles_deg"]
+        for key, value in (("min", 80.0), ("median", 140.0), ("max", 140.0)):
+            self.assertAlmostEqual(angles[key], value, delta=1e-9, msg=key)
+        # junctions of every degree class, the segments counted once
+        r = describe(star_archive([(1, 0, 0), (-1, 0, 0), (0, 1, 0), (0, -1, 0)]))["junctions"]
+        self.assertEqual((r["degree_3"], r["degree_4"], r["mean_degree"], r["segments_per_junction"]),
+                         (0.0, 1.0, 4.0, 4.0))
+        self.assertIsNone(describe(star_archive([(1, 0, 0), (-1, 0, 0)]))["junctions"]["degree_3"])
+
+    def test_branch_angles_of_a_t_and_the_arc_rule(self):
+        # arms of diameter 1 along -x and +x and a stem along +y; at 2 diameters
+        # out the arms point along their first edges
+        def angles(stem, diameter=1.0):
+            nodes = archive([(0, 0, 0), (-5, 0, 0)], [(0, 0, 0), (5, 0, 0)], stem, diameter=diameter)
+            r = describe(nodes)["branch_angles_deg"]
+            return r["count"], r["skipped"], r["min"], r["median"], r["max"]
+
+        t = angles([(0, 0, 0), (0, 5, 0)])
+        self.assertEqual(t[:2], (1, 0))
+        for value, expected in zip(t[2:], (90.0, 90.0, 180.0)):
+            self.assertAlmostEqual(value, expected, delta=1e-12)
+        # a bend beyond 2 diameters does not change the angles, one before it does
+        self.assertEqual(angles([(0, 0, 0), (0, 2.5, 0), (4, 2.5, 0)]), t)
+        bent = angles([(0, 0, 0), (0, 1, 0), (4, 1, 0)])
+        for value, expected in zip(bent[2:], (45.0, 135.0, 180.0)):
+            self.assertAlmostEqual(value, expected, delta=1e-12)
+        # a stem shorter than 4 diameters is measured halfway along it
+        self.assertEqual(angles([(0, 0, 0), (0, 1, 0), (1, 1, 0)]), t)
+        # a junction of unknown diameter is skipped
+        self.assertEqual(angles([(0, 0, 0), (0, 5, 0)], diameter=float("nan")), (0, 1, None, None, None))
+
+    def test_branch_angles_are_medians_over_the_junctions(self):
+        # four junctions 30 apart, each a parent and two daughters the given
+        # angle a off its continuation, whose sorted angles are 2 a and twice
+        # 180 - a below 60 degrees, twice 180 - a and 2 a above: the medians
+        # over the junctions are 85, 135 and 152.5, the means 80, 132.5 and
+        # 147.5; development measurement: within 5.7e-14 degrees
+        offs = (20.0, 35.0, 55.0, 80.0)
+        runs = []
+        for k, off in enumerate(offs):
+            a = math.radians(off)
+            for dx, dy in ((0.0, -1.0), (math.sin(a), math.cos(a)), (-math.sin(a), math.cos(a))):
+                runs.append([(30.0 * k + t * dx, t * dy, 0.0) for t in np.linspace(0.0, 10.0, 6)])
+        r = describe(archive(*runs))["branch_angles_deg"]
+        self.assertEqual((r["count"], r["skipped"]), (4, 0))
+        angles = np.sort([[2.0 * off, 180.0 - off, 180.0 - off] for off in offs], axis=1)
+        for k, key in enumerate(("min", "median", "max")):
+            self.assertAlmostEqual(r[key], float(np.median(angles[:, k])), delta=1e-12, msg=key)
+
+    def test_segment_diameter_variation_of_one_stenosis(self):
+        diameters = [1.0, 1.0, 1.0, 0.5, 1.0, 1.0, 1.0]
+        nodes = archive([(float(k), 0.0, 0.0, d) for k, d in enumerate(diameters)])
+        r = describe(nodes, d_ref=1.0)["segment_diameter_variation"]
+        # (1 - 0.5) / (6.5 / 7) = 7 / 13, a capillary at d_ref 1
+        stenosis = {"count": 1, "excluded": 0, "median": 7.0 / 13.0, "p90": 7.0 / 13.0}
+        self.assertEqual(r, {"all": stenosis, "capillary": stenosis,
+                             "larger": {"count": 0, "excluded": 0, "median": None, "p90": None}})
+        self.assertEqual(describe(nodes)["segment_diameter_variation"], {"all": stenosis, "capillary": None,
+                                                                         "larger": None})
+
+    def test_junction_ends_are_left_out_of_diameter_variation(self):
+        # a Murray Y: a parent of diameter 2 and daughters of 2 / 2^(1/3); the
+        # junction takes the parent's diameter, which is left out of the daughters
+        daughter, off = 2.0 / 2.0 ** (1.0 / 3.0), math.radians(37.5)
+        parent = [(0.0, -5.0 + k, 0.0, 2.0) for k in range(6)]
+        nodes = archive(parent, [(t * math.sin(off), t * math.cos(off), 0.0, daughter) for t in range(6)],
+                        [(-t * math.sin(off), t * math.cos(off), 0.0, daughter) for t in range(6)])
+        r = describe(nodes)["segment_diameter_variation"]["all"]
+        self.assertEqual(r, {"count": 3, "excluded": 0, "median": 0.0, "p90": 0.0})
+        # the same step inside one vessel counts
+        nodes = archive(parent + [(0.0, float(t), 0.0, daughter) for t in range(1, 6)])
+        r = describe(nodes)["segment_diameter_variation"]["all"]
+        self.assertAlmostEqual(r["median"], (2.0 - daughter) / ((12.0 + 5.0 * daughter) / 11.0), delta=1e-15)
+        # a segment between two junctions with nothing between them has no value
+        r = describe(graph_archive(*ladder_graph(3)))["segment_diameter_variation"]["all"]
+        self.assertEqual((r["count"], r["excluded"]), (4, 7))
+        # a ring's first vertex, repeated at its end, counts once: (2 - 1) / 1.75
+        ring = archive([(10.0, 0.0, 0.0, 1.0), (0.0, 10.0, 0.0, 2.0), (-10.0, 0.0, 0.0, 2.0), (0.0, -10.0, 0.0, 2.0),
+                        (10.0, 0.0, 0.0, 1.0)])
+        r = describe(ring)["segment_diameter_variation"]["all"]
+        self.assertAlmostEqual(r["median"], 4.0 / 7.0, delta=1e-15)
+
+    def test_segment_diameter_variation_takes_the_median_and_p90_over_the_segments(self):
+        # five vessels of diameter 1 each narrowed to `dip` at one of seven
+        # vertices, (1 - dip) / ((6 + dip) / 7), and a vessel of diameter 2,
+        # which at d_ref 1 lies on the class bound and so is larger-class.
+        # Over the five, the median is 0.424 and the p90 0.804, where the
+        # mean is 0.469 and the p80 0.706; development measurement: equal
+        # to the expressions here
+        dips = (0.9, 0.75, 0.6, 0.4, 0.2)
+        runs = [[(float(i), 10.0 * k, 0.0, dip if i == 3 else 1.0) for i in range(7)] for k, dip in enumerate(dips)]
+        runs.append([(float(i), -10.0, 0.0, 2.0) for i in range(7)])
+        r = describe(archive(*runs), d_ref=1.0)["segment_diameter_variation"]
+        values = [(1.0 - dip) / ((6.0 + dip) / 7.0) for dip in dips]
+        self.assertEqual(r["larger"], {"count": 1, "excluded": 0, "median": 0.0, "p90": 0.0})
+        for key, expected in (("capillary", values), ("all", values + [0.0])):
+            self.assertEqual((r[key]["count"], r[key]["excluded"]), (len(expected), 0), msg=key)
+            for statistic, value in zip(("median", "p90"), np.percentile(expected, [50.0, 90.0])):
+                self.assertAlmostEqual(r[key][statistic], float(value), delta=1e-15, msg=key + " " + statistic)
+
+    def test_a_straight_cylinder_has_the_analytic_tissue_distance(self):
+        radius = 1.0
+        side = 4.0 * radius
+        nodes = archive([(0.0, 0.0, 0.0), (side, 0.0, 0.0)], diameter=2.0 * radius)
+        r = describe(nodes, volume=(side, side, side), evd_spacing=side / 64.0)["tissue_distance"]
+        self.assertEqual((r["shape"], r["points"], r["raised"], r["capsules"]), ([64, 64, 64], 64 ** 3, False, 1))
+        self.assertEqual(r["domain"], {"min": [0.0, -side / 2.0, -side / 2.0], "max": [side, side / 2.0, side / 2.0],
+                                       "source": "argument"})
+        # measured +0.214 % on the mean and +0.964 % on the inside fraction,
+        # the error of counting a disc 16 grid spacings across on a lattice
+        self.assertLess(abs(r["mean"] / cylinder_mean_distance(side, radius) - 1.0), 0.01)
+        self.assertLess(abs(r["inside_fraction"] / (math.pi * radius ** 2 / side ** 2) - 1.0), 0.02)
+        self.assertEqual(r["outside_points"], round(64 ** 3 * (1.0 - r["inside_fraction"])))
+        # the farthest point is a corner cell of the grid
+        corner = math.hypot(side / 2.0 - side / 128.0, side / 2.0 - side / 128.0) - radius
+        self.assertAlmostEqual(r["max"], corner, delta=1e-12)
+
+    def test_tissue_distance_equals_brute_force(self):
+        # development measurement, seeds 0-9: the five statistics within
+        # 2.5e-16 relatively and the counts of points outside equal
+        spacing = 1.0
+        for seed in range(10):
+            with self.subTest(seed=seed):
+                nodes = random_capsule_archive(np.random.default_rng(seed))
+                r = describe(nodes, evd_spacing=spacing)["tissue_distance"]
+                points = nodes[:3, np.isfinite(nodes[0])].T
+                r_max = float(np.nanmax(nodes[3])) / 2.0
+                axes = grid_axes(points.min(axis=0) - r_max, points.max(axis=0) + r_max, spacing)
+                self.assertEqual((r["shape"], r["raised"]), ([axis.size for axis in axes], False))
+                values = brute_force_tissue(nodes, axes)
+                outside = values[values > 0.0]
+                self.assertEqual(r["outside_points"], outside.size)
+                self.assertEqual(r["inside_fraction"], float(values.size - outside.size) / values.size)
+                for key, value in (("mean", outside.mean()), ("median", np.percentile(outside, 50.0)),
+                                   ("p90", np.percentile(outside, 90.0)), ("p99", np.percentile(outside, 99.0)),
+                                   ("max", outside.max())):
+                    self.assertAlmostEqual(r[key], float(value), delta=1e-12 * float(value), msg=key)
+
+    def test_a_pass_of_the_tissue_search_holds_at_most_its_budget_of_pairs(self):
+        # development measurement, seed 5 at spacing 0.5: a pass of 4096
+        # points held up to 72126 pairs of a point and a cell or piece; with a
+        # budget of 4096 the passes shrank to as few as 128 points, and the
+        # result was the same
+        nodes = random_capsule_archive(np.random.default_rng(5))
+        expected = describe(nodes, evd_spacing=0.5)["tissue_distance"]
+        held = []
+        run_minimum = describe_module._run_minimum
+
+        def recording(index, values, n):
+            held.append((index.size, n))
+            return run_minimum(index, values, n)
+
+        with mock.patch.object(describe_module, "_EVD_PAIRS", 4096):
+            with mock.patch.object(describe_module, "_run_minimum", recording):
+                r = describe(nodes, evd_spacing=0.5)["tissue_distance"]
+        self.assertEqual(r, expected)
+        self.assertLessEqual(max(size for size, _ in held), 4096)
+        self.assertLess(min(n for _, n in held), describe_module._EVD_CHUNK)
+        # and at the finest level: 3000 copies of one short capsule share a
+        # cell, so that two grid points beside them would hold 6000 pairs of
+        # a point and a piece, and are searched one at a time instead
+        start, end = np.zeros((3000, 3)), np.tile([0.001, 0.0, 0.0], (3000, 1))
+        radii = np.full(3000, 0.1)
+        axes = [np.array([1.0, 2.0]), np.zeros(1), np.zeros(1)]
+        expected = describe_module._tissue_values(axes, start, end, radii, radii, 1.0)
+        held.clear()
+        with mock.patch.object(describe_module, "_EVD_PAIRS", 4096):
+            with mock.patch.object(describe_module, "_run_minimum", recording):
+                values = describe_module._tissue_values(axes, start, end, radii, radii, 1.0)
+        np.testing.assert_array_equal(values, expected)
+        self.assertEqual(max(size for size, _ in held), 3000)
+
+    def test_inside_is_the_voxelisers_rule(self):
+        # grid points on a vessel's wall are inside: a vessel of radius 0.5
+        # along x, sampled every 0.5 across it from -1 to 1, has 3 of every 5
+        # points inside and the other 2 at 0.5 from its wall
+        nodes = archive([(0.0, 0.0, 0.0), (4.0, 0.0, 0.0)], diameter=1.0)
+        r = describe(nodes, volume=(4.0, 2.5, 0.5), evd_spacing=0.5)["tissue_distance"]
+        self.assertEqual((r["shape"], r["outside_points"], r["mean"], r["max"]), ([8, 5, 1], 16, 0.5, 0.5))
+        self.assertEqual(r["inside_fraction"], 0.6)
+        # the points inside are the voxels computeVoxel sets for the same
+        # capsules at the same centres; development measurement, seeds 0-9:
+        # equal counts on every seed, 700 to 1384 points inside in the growth
+        # box and 710 to 1551 in the voxel_size field
+        shape = (40, 36, 30)
+        for seed in range(10):
+            with self.subTest(seed=seed):
+                rng = np.random.default_rng(seed)
+                runs = []
+                for _ in range(6):
+                    position = rng.uniform(5.0, 25.0, 3)
+                    run = []
+                    for _ in range(int(rng.integers(2, 8))):
+                        run.append(tuple(position) + (float(rng.uniform(0.5, 6.0)),))
+                        position = position + rng.normal(0.0, 3.0, 3)
+                    runs.append(run)
+                nodes = archive(*runs)
+                # the growth box's grid points sit at the voxel centres shifted by half a voxel
+                r = describe(nodes, metadata={"growth_box_um": list(shape)}, evd_spacing=1.0)["tissue_distance"]
+                self.assertEqual(r["shape"], list(shape))
+                voxels = computeVoxel.rasterise_segments(nodes[:3] - 0.5, nodes[3] / 2.0, shape, connect=False)
+                self.assertEqual(r["points"] - r["outside_points"], int(voxels.sum()))
+                # the voxel_size field's grid points, at its voxel size, are its voxel centres
+                metadata = {"fit": "voxel_size", "volume": list(shape), "voxel_size": 1.0}
+                r = describe(nodes, metadata=metadata, evd_spacing=1.0)["tissue_distance"]
+                self.assertEqual(r["shape"], list(shape))
+                voxels = computeVoxel.process_network(nodes, shape, fit="voxel_size", voxel_size=1.0, connect=False)
+                self.assertEqual(r["points"] - r["outside_points"], int(voxels.sum()))
+        # a missing or negative diameter counts as zero, where the voxeliser
+        # would draw nothing of a capsule with a missing diameter and less of
+        # one with a negative diameter
+        for diameters in ((6.0, float("nan")), (float("nan"), 6.0), (6.0, -2.0)):
+            with self.subTest(diameters=diameters):
+                nodes = archive([(5.0, 10.0, 10.0, diameters[0]), (35.0, 10.0, 10.0, diameters[1])])
+                r = describe(nodes, metadata={"growth_box_um": [40.0, 20.0, 20.0]}, evd_spacing=1.0)["tissue_distance"]
+                radii = np.where(nodes[3] > 0.0, nodes[3] / 2.0, 0.0)
+                voxels = computeVoxel.rasterise_segments(nodes[:3] - 0.5, radii, (40, 20, 20), connect=False)
+                self.assertEqual(r["points"] - r["outside_points"], int(voxels.sum()))
+
+    def test_tissue_distance_raises_the_spacing_to_the_point_cap(self):
+        self.assertEqual(EVD_MAX_POINTS, 64 ** 3)
+        nodes = archive([(0.0, 0.0, 0.0), (1.0, 0.0, 0.0)], diameter=0.5)
+        # stepping on through the spacings E_i / (n_i - 1) at which an axis
+        # loses a point can pass the least E_i / m that fits: from the
+        # requested spacing it reaches 1474 / 175 in the second box, and from
+        # where a bisection on the spacing stops, 1903.404 / 140 in the third
+        for extents, spacing, expected in (((1000.0, 100.0, 10.0), 1.0, None),
+                                           ((1389.0, 1474.0, 84.0), 0.75, (1389.0 / 165.0, [165, 175, 9])),
+                                           ((1048.052, 1903.404, 331.111), 1.346, (1903.404 / 141.0, [77, 141, 24]))):
+            with self.subTest(extents=extents):
+                r = describe(nodes, volume=extents, evd_spacing=spacing)["tissue_distance"]
+                box = np.subtract(r["domain"]["max"], r["domain"]["min"]).tolist()
+
+                def size(h):
+                    return int(np.prod([max(1, math.floor(e / h + 1e-9)) for e in box]))
+
+                # the least E_i / m above the requested spacing at which the grid fits
+                candidates = sorted({e / m for e in box for m in range(1, int(e / spacing) + 2) if e / m > spacing})
+                least = next(h for h in candidates if size(h) <= EVD_MAX_POINTS)
+                self.assertEqual((r["spacing_requested"], r["raised"]), (spacing, True))
+                self.assertEqual(r["spacing"], least)
+                self.assertEqual(r["shape"], [max(1, math.floor(e / least + 1e-9)) for e in box])
+                self.assertEqual(r["points"], size(least))
+                self.assertLessEqual(r["points"], EVD_MAX_POINTS)
+                if expected is not None:
+                    self.assertEqual((r["spacing"], r["shape"]), expected)
+        # a spacing the cap allows is kept
+        r = describe(nodes, volume=(1000.0, 100.0, 10.0), evd_spacing=50.0)["tissue_distance"]
+        self.assertEqual((r["spacing"], r["raised"], r["shape"]), (50.0, False, [20, 2, 1]))
+
+    def test_tissue_distance_domain_follows_the_volume_source(self):
+        nodes = archive([(0.0, 0.0, 0.0), (10.0, 0.0, 0.0), (10.0, 4.0, 0.0)], diameter=1.0)
+        cases = [({}, {}, [-0.5, -0.5, -0.5], [10.5, 4.5, 0.5], "bounding_box", [11, 5, 1]),
+                 ({"volume": (20.0, 10.0, 6.0)}, {}, [-5.0, -3.0, -3.0], [15.0, 7.0, 3.0], "argument", [20, 10, 6]),
+                 ({}, {"growth_box_um": [12.0, 6.0, 2.0]}, [0.0, 0.0, 0.0], [12.0, 6.0, 2.0], "growth_box_um",
+                  [12, 6, 2]),
+                 ({}, {"fit": "voxel_size", "volume": [24, 12, 4], "voxel_size": 0.5}, [-1.25, -1.25, -1.25],
+                  [10.75, 4.75, 0.75], "voxel_size", [12, 6, 2])]
+        for arguments, metadata, low, high, source, shape in cases:
+            with self.subTest(source=source):
+                r = describe(nodes, metadata=metadata, evd_spacing=1.0, **arguments)
+                self.assertEqual(r["tissue_distance"]["domain"], {"min": low, "max": high, "source": source})
+                self.assertEqual(r["tissue_distance"]["shape"], shape)
+                self.assertEqual(r["volume_source"], source)
+
+    def test_tissue_distance_is_opt_in_and_draws_nothing(self):
+        self.assertIsNone(describe(Y_NODES)["tissue_distance"])
+        for spacing in (0.0, -1.0, float("nan"), float("inf"), True, "1"):
+            with self.subTest(spacing=spacing), self.assertRaises(ValueError):
+                describe(Y_NODES, evd_spacing=spacing)
+        random.seed(11)
+        np.random.seed(11)
+        python_state, numpy_state = random.getstate(), np.random.get_state()
+        nodes = THETA_NODES.copy()
+        r = describe(nodes, evd_spacing=0.05, d_ref=0.2)
+        self.assertEqual(random.getstate(), python_state)
+        after = np.random.get_state()
+        self.assertEqual((after[0],) + after[2:], (numpy_state[0],) + numpy_state[2:])
+        np.testing.assert_array_equal(after[1], numpy_state[1])
+        np.testing.assert_array_equal(nodes, THETA_NODES)
+        self.assertEqual(describe(nodes, evd_spacing=0.05, d_ref=0.2), r)
+        self.assertEqual(json.loads(json.dumps(r, allow_nan=False)), r)
+        tissue = r["tissue_distance"]
+        for key in ("mean", "median", "p90", "p99", "max", "spacing"):
+            self.assertAlmostEqual(tissue[key + "_d"], tissue[key] / 0.2, delta=1e-12 * tissue[key], msg=key)
+        # describe_archive passes the spacing through
+        with tempfile.TemporaryDirectory() as folder:
+            path = os.path.join(folder, "theta.npz")
+            np.savez(path, nodes=nodes)
+            self.assertEqual(describe_archive(path, evd_spacing=0.05, d_ref=0.2), r)
+        # no points, no grid; points but no capsule, every grid point outside
+        self.assertIsNone(describe(np.empty((4, 0)), evd_spacing=1.0)["tissue_distance"])
+        r = describe(archive([(0.0, 0.0, 0.0)], [(4.0, 0.0, 0.0)], diameter=1.0), evd_spacing=1.0)["tissue_distance"]
+        self.assertEqual((r["capsules"], r["inside_fraction"], r["outside_points"], r["mean"]),
+                         (0, 0.0, r["points"], None))
+
+    def test_topology_and_tissue_keys_are_unit_invariant(self):
+        grown = small_tree()
+        theta = THETA_NODES.copy()
+        theta[:3] += 1000.0
+        theta[3] *= 50.0
+        nodes = np.concatenate([grown["nodes"], np.full((4, 1), np.nan), theta], axis=1)
+        # d_ref 5.3 keeps every segment's diameter clear of the class bound,
+        # which the theta's 10 would sit on at d_ref 5; the merging distance
+        # scales with the unit too
+        base = describe(nodes, d_ref=5.3, evd_spacing=12.0)
+        scaled = describe(nodes * 3.0, d_ref=15.9, evd_spacing=36.0, tol=3.0 * graph.DEFAULT_TOL)
+        self.assertGreater(base["branch_angles_deg"]["count"], 1)
+        self.assertGreater(base["loops"]["by_node"]["found"], 0)
+        self.assertGreater(base["segment_diameter_variation"]["capillary"]["count"], 1)
+        self.assertGreater(base["tissue_distance"]["outside_points"], 0)
+        # lengths scale with the unit, cycles per length with its inverse, and
+        # everything else (counts, fractions, angles, loop sizes, quantities
+        # in d_ref) stays the same; development measurement over ten scale
+        # factors from 0.32 to 7.4: at most 1.3e-13 relatively. The count of
+        # capsules is left out: a few consecutive columns of a grown network
+        # differ only in their last bit, and scaling can round that away
+        lengths = {".loops.by_node.length_median", ".loops.by_node.length_mean"}
+        lengths |= {".tissue_distance." + key
+                    for key in ("spacing_requested", "spacing", "mean", "median", "p90", "p99", "max")}
+        base_leaves = dict(numeric_leaves({key: base[key] for key in NEW_KEYS_3_6}))
+        scaled_leaves = dict(numeric_leaves({key: scaled[key] for key in NEW_KEYS_3_6}))
+        self.assertEqual(set(base_leaves), set(scaled_leaves))
+        for key, value in base_leaves.items():
+            if key == ".tissue_distance.capsules":
+                continue
+            if key in lengths or key.startswith(".tissue_distance.domain."):
+                factor = 3.0
+            elif key == ".loops.by_segment.cycles_per_length":
+                factor = 1.0 / 3.0
+            else:
+                factor = 1.0
+            self.assertAlmostEqual(scaled_leaves[key], factor * value, delta=1e-9 * max(1.0, abs(factor * value)),
+                                   msg=key)
+
+    def test_empty_and_unbranched_networks(self):
+        r = describe(np.empty((4, 0)))
+        self.assertEqual(r["junctions"]["count"], 0)
+        self.assertEqual(r["branch_angles_deg"], {"count": 0, "skipped": 0, "min": None, "median": None, "max": None})
+        self.assertEqual((r["loops"]["by_segment"]["sampled"], r["loops"]["by_segment"]["none_fraction"],
+                          r["loops"]["by_segment"]["cycles_per_length"]), (0, None, None))
+        self.assertEqual(r["segment_diameter_variation"]["all"], {"count": 0, "excluded": 0, "median": None,
+                                                                  "p90": None})
+        r = describe(archive(straight()))
+        self.assertEqual((r["junctions"]["count"], r["junctions"]["mean_degree"]), (0, None))
+        self.assertEqual((r["loops"]["by_segment"]["segments"], r["loops"]["by_segment"]["none_fraction"]), (1, 1.0))
+        self.assertEqual(r["loops"]["by_node"]["sampled"], 0)
+        self.assertEqual(r["segment_diameter_variation"]["all"]["median"], 0.0)
 
 
 if __name__ == "__main__":

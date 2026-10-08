@@ -725,34 +725,38 @@ class PinnedRelease34Tests(unittest.TestCase):
         self.assertEqual((facts["library"]["rows"], facts["library"]["failures"]), (3, 0))
 
     def test_with_the_later_options_off_the_frame_is_none_and_the_new_kwargs_are_none(self):
-        # what 3.5 appends while its options are off: a frame of kind "none" in
-        # every return, sidecar and archive, and guidance and root offsets of None
+        # what 3.5 appended while its options are off: a frame of kind "none" in
+        # every return, sidecar and archive, and guidance and root offsets of
+        # None. Later versions append more, which their own pins check, so only
+        # the keys 3.5 added are checked here.
+        import library
         extras = self.current["extras"]
         grown = [case for case in extras if isinstance(extras[case].get("returned"), dict)]
         self.assertGreater(len(grown), 10)
         for case in grown:
             with self.subTest(case=case):
                 returned = extras[case]["returned"]
-                self.assertEqual(set(returned), {"frame"})
+                self.assertIn("frame", returned)
                 self.assertEqual(returned["frame"]["kind"], "none")
                 self.assertEqual(returned["frame"]["rules"], [])
                 if "kwargs" in extras[case]:
-                    self.assertEqual(extras[case]["kwargs"], {"guidance": None, "root_offsets": None})
+                    self.assertEqual({key: extras[case]["kwargs"][key] for key in ("guidance", "root_offsets")},
+                                     {"guidance": None, "root_offsets": None})
         for case in ("cli_tree", "cli_mesh", "cli_options"):
             for stem, entry in extras[case].items():
                 with self.subTest(case=case, stem=stem):
                     for record in (entry["sidecar"], entry["metadata"]):
-                        self.assertEqual(set(record), {"guidance", "root_offsets", "frame"})
+                        self.assertLessEqual({"guidance", "root_offsets", "frame"}, set(record))
                         self.assertIsNone(record["guidance"])
                         self.assertIsNone(record["root_offsets"])
                         self.assertEqual(record["frame"]["kind"], "none")
                     self.assertEqual(entry["arrays"], [])
         for name, keys in extras["library"]["metadata"].items():
             with self.subTest(archive=name):
-                self.assertEqual(keys, ["d_min", "frame", "peak_rss_mb", "seconds"])
+                self.assertLessEqual({"d_min", "frame", "peak_rss_mb", "seconds"}, set(keys))
         self.assertEqual(extras["library"]["arrays"], {name: [] for name in extras["library"]["arrays"]})
         self.assertEqual(extras["library"]["index"], [])
-        self.assertEqual(extras["library"]["library_version"], "3.5.0")
+        self.assertEqual(extras["library"]["library_version"], library.LIBRARY_VERSION)
 
     def test_a_3_4_library_loads_and_describes_as_it_did_with_the_new_keys_inert(self):
         # the library the 3.4 modules wrote in the reference run, read by the current modules
@@ -788,6 +792,10 @@ class PinnedRelease34Tests(unittest.TestCase):
                 for key, item in value.items():
                     if key == "events" and all(not isinstance(count, dict) for count in item.values()):
                         yield from item.items()
+                    elif key == "events":
+                        # a library's are kept by archive
+                        for per_archive in item.values():
+                            yield from per_archive.items()
                     else:
                         yield from appended(item)
 

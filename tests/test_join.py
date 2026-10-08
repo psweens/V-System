@@ -140,7 +140,7 @@ class RegistryTests(unittest.TestCase):
 
     def test_main_does_not_import_frames_join_or_library(self):
         for name in ("main", "vSystem", "libGenerator", "analyseGrammar", "utils", "computeVoxel",
-                     "tortuosity", "collisions", "anastomosis", "graph", "spatial", "guidance"):
+                     "tortuosity", "collisions", "anastomosis", "graph", "spatial", "guidance", "connections"):
             with open(os.path.join(ROOT, name + ".py")) as handle:
                 source = handle.read()
             for other in ("frames", "join", "library"):
@@ -148,7 +148,7 @@ class RegistryTests(unittest.TestCase):
                 self.assertNotIn(f"from {other} ", source, name)
 
     def test_the_stream_tags_of_the_generator_are_what_they_were(self):
-        self.assertEqual(main.RNG_STREAMS, {"walk": 1, "anastomosis": 2})
+        self.assertEqual(main.RNG_STREAMS, {"walk": 1, "anastomosis": 2, "rungs": 5})
 
 
 class CropTests(unittest.TestCase):

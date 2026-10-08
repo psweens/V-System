@@ -7,14 +7,18 @@ or
     python -m pytest
 """
 import contextlib
+import hashlib
 import importlib
+import importlib.util
 import io
 import math
 import os
 import random
+import re
 import sys
 import tempfile
 import unittest
+from unittest import mock
 
 import numpy as np
 
@@ -24,8 +28,9 @@ if ROOT not in sys.path:
 
 import libGenerator as lg  # noqa: E402
 from libGenerator import setProperties, calBifurcation, getLength  # noqa: E402
-from vSystem import F, I, A, example_grammar  # noqa: E402
-from analyseGrammar import branching_turtle_to_coords, tokenise  # noqa: E402
+import vSystem  # noqa: E402
+from vSystem import F, I, A, example_grammar, capillary_tree  # noqa: E402
+from analyseGrammar import WalkSettings, branching_turtle_to_coords, tokenise  # noqa: E402
 from utils import interpolate_segments, bspline, rotate_about  # noqa: E402
 from computeVoxel import (process_network, rasterise_segments, fit_to_volume,  # noqa: E402
                           normalise_axes, rasterise_line)
@@ -34,6 +39,7 @@ from check_connectivity import (label, check_volume, check_centreline,  # noqa: 
                                 generate_and_check, report_centreline)
 
 PROPERTIES = {"k": 3, "epsilon": 7.0, "randmarg": 0.2, "sigma": 5, "stochparams": True}
+SLOW = unittest.skipUnless(os.environ.get("VSYSTEM_SLOW_TESTS"), "set VSYSTEM_SLOW_TESTS=1 to run the slow tests")
 
 
 def seed_all(seed):
@@ -1079,6 +1085,598 @@ class StoppingCriterionTests(unittest.TestCase):
                                              (64, 64, 32), d_min=8.0)
         self.assertGreaterEqual(float(np.nanmin(nodes[3])), 8.0 - 1e-9)
         self.assertIn("f(", program)
+
+
+REFERENCE_CODE_3_5 = os.path.join(ROOT, "tests", "fixtures", "reference_code_3_5")
+
+# a move with both operands, f(length, diameter)
+_MOVE = re.compile(r"f\(([^,()]+),([^,()]+)\)")
+
+
+def generator_states():
+    """The states of both global generators, in a form that compares with ==."""
+    state = np.random.get_state()
+    return random.getstate(), (state[0], state[1].tobytes()) + tuple(state[2:])
+
+
+def digest(program):
+    return hashlib.sha256(program.encode()).hexdigest()
+
+
+def stem_tree(program):
+    """
+    Reads a program of F's shape, X -> F | {stem} [+(th) /(roll) X] [-(th) /(roll) X],
+    into nested stems: None for "F", else a dict of the stem's moves (length,
+    diameter), its signed turns, and its two daughters (turn, roll, X). Any
+    other shape raises AssertionError.
+    """
+    tokens = list(tokenise(program))
+    at = 0
+
+    def take(command):
+        nonlocal at
+        got, params = tokens[at]
+        if got != command:
+            raise AssertionError(f"expected {command!r} at token {at}, found {got!r}")
+        at += 1
+        return params
+
+    def node():
+        nonlocal at
+        if tokens[at][0] == "F":
+            at += 1
+            return None
+        take("{")
+        moves, turns = [], []
+        while tokens[at][0] != "}":
+            command, params = tokens[at]
+            at += 1
+            if command == "f":
+                moves.append(params)
+            elif command == "+":
+                turns.append(params[0])
+            elif command == "-":
+                turns.append(-params[0])
+            else:
+                raise AssertionError(f"unexpected {command!r} inside a stem")
+        take("}")
+        daughters = []
+        for side in "+-":
+            take("[")
+            (turn,) = take(side)
+            (roll,) = take("/")
+            daughters.append((turn, roll, node()))
+            take("]")
+        return {"moves": moves, "turns": turns, "daughters": daughters}
+
+    tree = node()
+    if at != len(tokens):
+        raise AssertionError(f"{len(tokens) - at} tokens left after the tree")
+    return tree
+
+
+def stems_of(tree, depth=0, parent=None):
+    """Yields (stem, depth, parent) for every stem of a stem_tree, parents first."""
+    if tree is None:
+        return
+    yield tree, depth, parent
+    for _, _, daughter in tree["daughters"]:
+        yield from stems_of(daughter, depth + 1, tree)
+
+
+def program_shares(program, bound):
+    """Shares of the length and of the volume (l d^2) of a program's moves at d < bound."""
+    total = below = total_volume = below_volume = 0.0
+    for length, diameter in _MOVE.findall(program):
+        length, diameter = float(length), float(diameter)
+        volume = length * diameter * diameter
+        total += length
+        total_volume += volume
+        if diameter < bound:
+            below += length
+            below_volume += volume
+    return below / total, below_volume / total_volume
+
+
+def murray_shares(ratio, n, m, runs):
+    """
+    The closed form of CapillaryGrammarTests: the shares of length and of
+    volume below 2 d_min in F(n, ratio * d_min, d_min, m, runs) with symmetric
+    Murray daughters (k 3), no length margin and no anomalies, and the number
+    of capillary stems.
+    """
+    x = 3.0 * math.log2(ratio)
+    last = min(n - 1, math.floor(x))
+    filled = m > 0 and n - 1 > last
+    blocks = [1] * (last + 1)
+    if not filled:
+        blocks[last] = runs
+    capillary = 2 ** (last + 1) * (2 ** m - 1) if filled else 0
+    q = 2.0 ** (2.0 / 3.0)
+    below = [g for g in range(last + 1) if g > x - 3.0]
+    length = ((ratio * sum(blocks[g] * q ** g for g in below) + capillary * runs)
+              / (ratio * sum(blocks[g] * q ** g for g in range(last + 1)) + capillary * runs))
+    volume = ((ratio ** 3 * sum(blocks[g] for g in below) + capillary * runs)
+              / (ratio ** 3 * sum(blocks) + capillary * runs))
+    return length, volume, capillary
+
+
+def stated_fill(n, d0, d_min, m, runs):
+    """
+    F's capillary fill as its docstring states it, written from vSystem.S and
+    calBifurcation alone and in the order F draws: calBifurcation, the stem's
+    blocks, the first daughter, then the second. A daughter below d_min, while
+    the iteration count lasts, is a capillary tree entered by the parent's
+    turn and roll; a stem is `runs` blocks when both its daughters end.
+    """
+    if n <= 0 or (d_min is not None and d0 < d_min):
+        return "F"
+    p = calBifurcation(d0)
+    daughters = (p["d1"], p["d2"])
+    replaced = [n > 1 and d_min is not None and d < d_min and m > 0 for d in daughters]
+    ends = [not r and (n <= 1 or (d_min is not None and d < d_min)) for r, d in zip(replaced, daughters)]
+    program = "{" + "".join(vSystem.S(d0) for _ in range(runs if all(ends) else 1)) + "}"
+    roll = repr(float(lg.roll_angle))
+    for side, turn, d, r in zip("+-", (p["th1"], p["th2"]), daughters, replaced):
+        daughter = stated_capillary_tree(m, d_min, runs) if r else stated_fill(n - 1, d, d_min, m, runs)
+        program += "[" + side + "(" + repr(float(turn)) + ")/(" + roll + ")" + daughter + "]"
+    return program
+
+
+def stated_capillary_tree(m, d, runs):
+    """capillary_tree as its docstring states it, from vSystem.S and the angle a test of its own pins."""
+    if m <= 0:
+        return "F"
+    turn, roll = repr(vSystem._SYMMETRIC_ZAMIR_ANGLE), repr(float(lg.roll_angle))
+    program = "{" + "".join(vSystem.S(d) for _ in range(runs)) + "}"
+    for side in "+-":
+        program += "[" + side + "(" + turn + ")/(" + roll + ")" + stated_capillary_tree(m - 1, d, runs) + "]"
+    return program
+
+
+@contextlib.contextmanager
+def recorded_bifurcations():
+    """Records what vSystem's calls of calBifurcation return, in call order."""
+    results = []
+
+    def record(d0):
+        results.append(calBifurcation(d0))
+        return results[-1]
+
+    with mock.patch.object(vSystem, "calBifurcation", record):
+        yield results
+
+
+class CapillaryGrammarTests(unittest.TestCase):
+    """
+    F's capillary fill: capillary_tree, runs of S blocks and the iteration cap.
+
+    The closed form. Take d_min = 1 and a root of diameter R, with
+    deterministic daughters (stochparams off: d1 = d2 = d 2^(-1/3) at k 3), no
+    length margin (each block of a stem at diameter d is epsilon d long) and no
+    anomalies. Generation g holds 2^g stems at d_g = R 2^(-g/3); F draws it
+    while d_g >= 1 and the iteration count lasts, so g = 0..G with
+    G = min(n - 1, floor(x)) and x = 3 log2 R. Generation G's daughters become
+    capillary trees when s = (m > 0 and n - 1 > G), giving
+    C = s 2^(G+1) (2^m - 1) capillary stems of E blocks at diameter 1.
+    Otherwise they end (below d_min with m = 0, or at the iteration cap), so
+    generation G's stems are runs: e_G = E when s is false, and every other
+    e_g = 1. Generation g holds length epsilon e_g 2^g d_g = epsilon e_g R q^g
+    with q = 2^(2/3), and volume (pi/4) epsilon e_g 2^g d_g^3 =
+    (pi/4) epsilon e_g R^3, the same in every generation (Murray's law at
+    k = 3). The generations below 2 d_min are B = {g <= G : g > x - 3}, and
+    epsilon and pi/4 cancel:
+
+        length share = (R sum_B e_g q^g + C E) / (R sum_{g<=G} e_g q^g + C E)
+        volume share = (R^3 sum_B e_g + C E) / (R^3 sum_{g<=G} e_g + C E)
+
+    The program's shares weight each move f(l, d) by l and by l d^2.
+    Recorded at R 10 and n 64 (length / volume): (m, E) = (0, 1)
+    0.757455737721 / 0.3; (0, 3) 0.861199921738 / 5/12; (2, 4)
+    0.970332378649 / 0.685929648242; (3, 2) 0.974118352963 / 0.712360289284.
+
+    Development measurement, seeds 0-9:
+      * the program's shares against the closed form at R 5, 6.3, 10, 11 and
+        25 with n 64, and at R 10 with n 9, 10 and 11, for every (m, E) in
+        {0, 1, 2, 3} x {1, 2, 4}: worst difference 2.5e-11 (R 25, m 3, E 4),
+        asserted to 1e-9;
+      * anomaly probabilities 0.2, F(64, R, 1, m, E) at R 6.3 and 10 for
+        (m, E) = (0, 3) and every m in {1, 2, 3} with E in {1, 2, 4}: 369796
+        and 1469806 diameters below d_min, every one a stenosis middle, and
+        none without stenoses. The worst relative deviation of a middle's
+        length from three end lengths was 2.2e-16 (one ulp above 1). Three
+        roundings in the grammar and two here bound it by about 5.6e-16, which
+        the ratio's own rounding can carry to three ulps above 1 (6.7e-16);
+        the tolerance is 1e-15.
+    """
+
+    PROPERTY_SETS = (None, {"stochparams": False}, {"aneurysm_prob": 0.3, "stenosis_prob": 0.3},
+                     {"k": 2.5, "epsilon": 4.0, "randmarg": 0.3})
+    DEFAULT_CASES = ((6, 20.0, None), (12, 20.0, 1.0), (64, 8.0, 1.0), (3, 20.0, 2.0))
+    FILLS = tuple((m, runs) for m in (0, 1, 2, 3) for runs in (1, 2, 4))
+    MURRAY = {"k": 3, "epsilon": 7.0, "randmarg": 0.0, "sigma": 5, "stochparams": False,
+              "aneurysm_prob": 0.0, "stenosis_prob": 0.0}
+    MIDDLE_TOLERANCE = 1e-15
+
+    def setUp(self):
+        self.properties = {key: getattr(lg, key) for key in lg.default}
+        self.states = random.getstate(), np.random.get_state()
+
+    def tearDown(self):
+        setProperties(self.properties)
+        random.setstate(self.states[0])
+        np.random.set_state(self.states[1])
+
+    def released_F(self):
+        """F as released in 3.5, loaded from the pinned copy under a name of its own."""
+        with open(os.path.join(ROOT, "libGenerator.py"), "rb") as current, \
+                open(os.path.join(REFERENCE_CODE_3_5, "libGenerator.py"), "rb") as pinned:
+            # the pinned vSystem imports the current libGenerator, so it is the
+            # released rule only while the two are the same file
+            self.assertEqual(current.read(), pinned.read())
+        spec = importlib.util.spec_from_file_location("vSystem_released_3_5",
+                                                      os.path.join(REFERENCE_CODE_3_5, "vSystem.py"))
+        module = importlib.util.module_from_spec(spec)
+        writes = sys.dont_write_bytecode
+        sys.dont_write_bytecode = True      # leave the pinned copy as it is
+        try:
+            spec.loader.exec_module(module)
+        finally:
+            sys.dont_write_bytecode = writes
+        return module.F
+
+    def assert_the_default_rule_is_the_released_rule(self, cases, seeds):
+        released = self.released_F()
+        for properties in self.PROPERTY_SETS:
+            setProperties(properties)
+            for n, d0, d_min in cases:
+                for seed in seeds:
+                    seed_all(seed)
+                    want = digest(released(n, d0, d_min)), generator_states()
+                    for fill in ((), (0, 1), (np.int64(0), np.int64(1))):
+                        with self.subTest(properties=properties, case=(n, d0, d_min), seed=seed, fill=fill):
+                            seed_all(seed)
+                            self.assertEqual((digest(F(n, d0, d_min, *fill)), generator_states()), want)
+
+    def test_the_default_rule_draws_what_the_released_rule_draws(self):
+        self.assert_the_default_rule_is_the_released_rule(self.DEFAULT_CASES, seeds=(0, 1, 2))
+
+    @SLOW
+    def test_the_default_rule_draws_what_the_released_rule_draws_over_ten_seeds_and_at_ratio_25(self):
+        self.assert_the_default_rule_is_the_released_rule(self.DEFAULT_CASES + ((64, 25.0, 1.0),),
+                                                          seeds=range(10))
+
+    def test_the_symmetric_zamir_angle_is_calbifurcations_angle_for_equal_daughters(self):
+        angle = vSystem._SYMMETRIC_ZAMIR_ANGLE
+        compared = 0
+        for k in (2, 2.5, 3):
+            setProperties({"k": k, "stochparams": False})
+            for d0 in (0.001, 2.0, 3.7, 5.0, 8.0, 10.0, 20.0, 25.0):
+                p = calBifurcation(d0)
+                if p["d2"] / p["d1"] == 1.0:      # alpha exactly 1 (11 of these 24 here)
+                    compared += 1
+                    self.assertEqual((p["th1"], p["th2"]), (angle, angle))
+        self.assertGreater(compared, 0)
+        # measured difference 0; the allowance is about 14 ulps of the angle
+        self.assertAlmostEqual(angle, math.degrees(math.acos(2.0 ** (-1.0 / 3.0))), delta=1e-13)
+
+    def test_capillary_tree_is_the_stated_rule_with_every_block_drawn_afresh(self):
+        setProperties({**PROPERTIES, "aneurysm_prob": 0.0, "stenosis_prob": 0.0, "roll_angle": 65.0})
+        a = lg.stem_angle
+        for m in (1, 2, 3):
+            for runs in (1, 2, 4):
+                with self.subTest(m=m, runs=runs):
+                    seed_all(m + 10 * runs)
+                    stems = list(stems_of(stem_tree(capillary_tree(m, 1.5, runs))))
+                    self.assertEqual(len(stems), 2 ** m - 1)
+                    for stem, depth, _ in stems:
+                        self.assertEqual(len(stem["moves"]), 5 * runs)
+                        self.assertEqual({d for _, d in stem["moves"]}, {1.5})
+                        self.assertEqual(len(stem["turns"]), 4 * runs)
+                        for b in range(runs):
+                            self.assertIn(tuple(stem["turns"][4 * b:4 * b + 4]),
+                                          ((a, -a, -a, a), (-a, a, a, -a)))   # S1 or S2
+                        blocks = {tuple(stem["moves"][5 * b:5 * b + 5]) for b in range(runs)}
+                        self.assertEqual(len(blocks), runs)   # lengths drawn for each block
+                        self.assertEqual([(turn, roll) for turn, roll, _ in stem["daughters"]],
+                                         [(vSystem._SYMMETRIC_ZAMIR_ANGLE, 65.0)] * 2)
+                        self.assertEqual([daughter is None for _, _, daughter in stem["daughters"]],
+                                         [depth == m - 1] * 2)
+
+    def test_capillary_tree_draws_six_uniforms_and_five_lengths_per_block_and_nothing_else(self):
+        setProperties({**PROPERTIES, "aneurysm_prob": 0.1, "stenosis_prob": 0.1})
+        for m, runs in ((0, 3), (-1, 2), (1, 1), (2, 4), (3, 2), (4, 3)):
+            with self.subTest(m=m, runs=runs):
+                seed_all(3)
+                program = capillary_tree(m, 1.0, runs)
+                drawn = generator_states()
+                if m <= 0:
+                    self.assertEqual(program, "F")
+                blocks = (2 ** m - 1) * runs if m > 0 else 0
+                seed_all(3)
+                for _ in range(6 * blocks):
+                    random.random()
+                for _ in range(5 * blocks):
+                    np.random.random_sample()
+                self.assertEqual(drawn, generator_states())
+
+    def test_the_fill_draws_only_its_stems_and_their_extra_blocks(self):
+        # with stochparams off, a stem of F draws one np.random.uniform (calBifurcation's
+        # length) besides its blocks, and a capillary stem draws its blocks alone
+        setProperties({**PROPERTIES, "stochparams": False, "aneurysm_prob": 0.1, "stenosis_prob": 0.1})
+        for n, d0, m, runs in ((64, 6.3, 0, 3), (64, 6.3, 2, 4), (64, 5.0, 3, 2), (8, 6.3, 2, 4), (64, 6.3, 1, 1)):
+            for seed in (0, 1, 2):
+                with self.subTest(n=n, d0=d0, m=m, runs=runs, seed=seed):
+                    seed_all(seed)
+                    stems = [stem for stem, _, _ in stems_of(stem_tree(F(n, d0, 1.0, m, runs)))]
+                    drawn = generator_states()
+                    capillary = sum(1 for stem in stems if stem["moves"][0][1] == 1.0)
+                    blocks = sum(len(stem["turns"]) // 4 for stem in stems)
+                    seed_all(seed)
+                    for _ in range(6 * blocks):
+                        random.random()
+                    for _ in range(len(stems) - capillary + 5 * blocks):
+                        np.random.random_sample()
+                    self.assertEqual(drawn, generator_states())
+
+    def assert_diameters_stay_at_or_above_d_min(self, ratios, fills, seeds):
+        """Returns the number of operands below d_min and the worst middle-length deviation."""
+        middles, worst = 0, 0.0
+        for ratio in ratios:
+            for m, runs in fills:
+                for seed in seeds:
+                    setProperties({**PROPERTIES, "aneurysm_prob": 0.2, "stenosis_prob": 0.2})
+                    seed_all(seed)
+                    moves = [params for command, params in tokenise(F(64, ratio, 1.0, m, runs))
+                             if command == "f"]
+                    for i, (length, diameter) in enumerate(moves):
+                        if diameter >= 1.0:
+                            continue
+                        # a stenosis: equal ends at a drawn diameter, the middle narrowed
+                        # by stenosis_factor over three times an end's length
+                        self.assertGreater(i, 0)
+                        end = moves[i - 1]
+                        self.assertEqual(moves[i + 1], end)
+                        self.assertGreaterEqual(end[1], 1.0)
+                        self.assertEqual(diameter, end[1] * lg.stenosis_factor)
+                        deviation = abs(length / (3.0 * end[0]) - 1.0)
+                        self.assertLessEqual(deviation, self.MIDDLE_TOLERANCE)
+                        middles += 1
+                        worst = max(worst, deviation)
+                    setProperties({**PROPERTIES, "aneurysm_prob": 0.2, "stenosis_prob": 0.0})
+                    seed_all(seed)
+                    program = F(64, ratio, 1.0, m, runs)
+                    self.assertGreaterEqual(min(float(d) for _, d in _MOVE.findall(program)), 1.0)
+        return middles, worst
+
+    def test_diameters_stay_at_or_above_d_min_except_stenosis_middles(self):
+        middles, _ = self.assert_diameters_stay_at_or_above_d_min((6.3,), ((0, 3), (2, 4), (3, 2)), (0, 1, 2))
+        self.assertGreater(middles, 0)
+
+    @SLOW
+    def test_diameters_stay_at_or_above_d_min_except_stenosis_middles_over_ten_seeds(self):
+        fills = tuple((m, runs) for m in (1, 2, 3) for runs in (1, 2, 4))
+        middles, _ = self.assert_diameters_stay_at_or_above_d_min((10.0,), fills, range(10))
+        self.assertGreater(middles, 0)
+
+    def test_capillary_stems_are_runs_of_five_E_moves_and_so_are_stems_whose_daughters_both_end(self):
+        # a roll other than the default 70, so that a roll written as a constant shows
+        setProperties({**PROPERTIES, "aneurysm_prob": 0.0, "stenosis_prob": 0.0, "roll_angle": 65.0})
+        symmetric = [(vSystem._SYMMETRIC_ZAMIR_ANGLE, 65.0)] * 2
+        for m, runs in ((1, 1), (2, 4), (3, 2), (0, 3)):
+            for seed in (0, 1, 2):
+                with self.subTest(m=m, runs=runs, seed=seed):
+                    seed_all(seed)
+                    with recorded_bifurcations() as recorded:
+                        program = F(64, 6.3, 1.0, m, runs)
+                    bifurcations = iter(recorded)
+                    capillary = substituted = run_stems = 0
+                    for stem, depth, parent in stems_of(stem_tree(program)):
+                        diameter = stem["moves"][0][1]
+                        ends = [daughter is None for _, _, daughter in stem["daughters"]]
+                        turns = [(turn, roll) for turn, roll, _ in stem["daughters"]]
+                        if m > 0 and diameter == 1.0:
+                            capillary += 1
+                            self.assertEqual(len(stem["moves"]), 5 * runs)
+                            self.assertEqual(turns, symmetric)
+                            if parent["moves"][0][1] > 1.0:
+                                substituted += 1
+                                self.assertEqual(sum(1 for _ in stems_of(stem)), 2 ** m - 1)
+                            continue
+                        # the stems of F come in the order of their calBifurcation calls, and
+                        # each turns into both its daughters, a capillary tree or not, by
+                        # that call's angles and rolls by roll_angle
+                        p = next(bifurcations)
+                        self.assertEqual(diameter, p["d0"])
+                        self.assertEqual(turns, [(p["th1"], 65.0), (p["th2"], 65.0)])
+                        self.assertGreater(diameter, 1.0)
+                        # a stem of F is a run exactly when both its daughters end; with
+                        # capillary generations no daughter below d_min ends
+                        self.assertEqual(len(stem["moves"]), 5 * runs if all(ends) else 5)
+                        self.assertFalse(m > 0 and any(ends))
+                        run_stems += all(ends)
+                    self.assertIsNone(next(bifurcations, None))     # a stem for every call
+                    self.assertEqual(capillary, (2 ** m - 1) * substituted)
+                    self.assertGreater(substituted if m > 0 else run_stems, 0)
+        # without d_min, runs fall where the iteration count ends the tree
+        seed_all(0)
+        for stem, depth, _ in stems_of(stem_tree(F(4, 20.0, None, 0, 3))):
+            self.assertEqual(len(stem["moves"]), 15 if depth == 3 else 5)
+
+    def test_only_daughters_are_replaced_so_a_root_below_d_min_still_ends(self):
+        setProperties(PROPERTIES)
+        seed_all(0)
+        before = generator_states()
+        self.assertEqual(F(5, 0.5, 1.0, 2, 4), "F")
+        self.assertEqual(generator_states(), before)
+
+    def test_a_branch_exactly_at_d_min_is_drawn_and_only_a_thinner_daughter_is_replaced(self):
+        setProperties(self.MURRAY)
+        # d_min is set to the larger daughter of a root of 8, so that one daughter sits on
+        # it exactly, whatever the platform's rounding makes of the other (on the
+        # development machine the two are equal, and both sit on it)
+        p = calBifurcation(8.0)
+        d_min = max(p["d1"], p["d2"])
+        for m, runs in ((2, 4), (0, 3)):
+            with self.subTest(m=m, runs=runs):
+                seed_all(0)
+                root = stem_tree(F(64, 8.0, d_min, m, runs))
+                # neither daughter ends with capillary generations, and the one on d_min is
+                # drawn without them, so the root is never a run
+                self.assertEqual(len(root["moves"]), 5)
+                for d, (_, _, daughter) in zip((p["d1"], p["d2"]), root["daughters"]):
+                    if d < d_min and m == 0:
+                        self.assertIsNone(daughter)
+                        continue
+                    stems = list(stems_of(daughter))
+                    self.assertEqual({diameter for stem, _, _ in stems for _, diameter in stem["moves"]},
+                                     {d_min})
+                    if d < d_min:       # a capillary tree
+                        self.assertEqual([len(stem["moves"]) for stem, _, _ in stems], [5 * runs] * (2 ** m - 1))
+                    elif m > 0:         # a stem of F whose two daughters are capillary trees
+                        self.assertEqual([len(stem["moves"]) for stem, _, _ in stems],
+                                         [5] + [5 * runs] * (2 ** (m + 1) - 2))
+                    else:               # a stem of F whose two daughters end: a run
+                        self.assertEqual([len(stem["moves"]) for stem, _, _ in stems], [5 * runs])
+        # a root exactly at d_min is drawn too
+        seed_all(0)
+        stems = list(stems_of(stem_tree(F(64, 1.0, 1.0, 2, 4))))
+        self.assertEqual([len(stem["moves"]) for stem, _, _ in stems], [5] + [20] * 6)
+
+    def test_the_fill_is_the_stated_rule_string_for_string_and_draw_for_draw(self):
+        # stochastic daughters with anomalies and a roll other than 70: at n 64; at n 7 from
+        # R 5, where the cap ends some branches while others are replaced (development
+        # measurement, seeds 0-9 and m 1-3: 11 to 28 daughters replaced and 28 to 51 stems
+        # at the cap); at n 3, where the cap comes first everywhere; and without d_min. Then
+        # deterministic daughters from R 8, which leave stems exactly on d_min = 1. Every
+        # case and fill gave the same string and states at seeds 0-9 (170 comparisons).
+        stochastic = {**PROPERTIES, "roll_angle": 65.0, "aneurysm_prob": 0.1, "stenosis_prob": 0.1}
+        fills = ((1, 1), (2, 4), (3, 2), (0, 3))
+        cases = ((stochastic, 64, 6.3, 1.0, fills), (stochastic, 7, 5.0, 1.0, fills),
+                 (stochastic, 3, 20.0, 1.0, fills), (stochastic, 4, 20.0, None, ((0, 3),)),
+                 ({**self.MURRAY, "roll_angle": 65.0}, 64, 8.0, 1.0, fills))
+        for properties, n, d0, d_min, case_fills in cases:
+            setProperties(properties)
+            for seed, (m, runs) in enumerate(case_fills):
+                with self.subTest(n=n, d0=d0, d_min=d_min, m=m, runs=runs):
+                    seed_all(seed)
+                    want = digest(stated_fill(n, d0, d_min, m, runs)), generator_states()
+                    seed_all(seed)
+                    self.assertEqual((digest(F(n, d0, d_min, m, runs)), generator_states()), want)
+
+    def test_the_iteration_cap_ends_a_daughter_before_d_min_can_replace_it(self):
+        setProperties(self.MURRAY)
+        # x = 3 log2 10 = 9.97: generations 0-9 are drawn and generation 10 falls below d_min
+        seed_all(0)
+        capped = list(stems_of(stem_tree(F(10, 10.0, 1.0, 2, 4))))
+        self.assertEqual(len(capped), 2 ** 10 - 1)
+        for stem, depth, _ in capped:
+            self.assertGreater(stem["moves"][0][1], 1.0)
+            self.assertEqual(len(stem["moves"]), 20 if depth == 9 else 5)
+        # one iteration more and generation 10 is replaced by capillary trees of two
+        # whole generations each: m does not use up the count
+        seed_all(0)
+        filled = list(stems_of(stem_tree(F(11, 10.0, 1.0, 2, 4))))
+        capillary = [depth for stem, depth, _ in filled if stem["moves"][0][1] == 1.0]
+        self.assertEqual(len(capillary), 2 ** 10 * 3)
+        self.assertEqual(sorted(set(capillary)), [10, 11])
+        self.assertEqual(len(filled) - len(capillary), 2 ** 10 - 1)
+        for stem, depth, _ in filled:
+            self.assertEqual(len(stem["moves"]), 20 if depth >= 10 else 5)
+        # with one block a stem and the cap ahead of d_min, there is nothing to fill
+        setProperties(PROPERTIES)
+        for seed in (0, 1, 2):
+            seed_all(seed)
+            want = digest(F(6, 20.0, 1.0)), generator_states()
+            seed_all(seed)
+            self.assertEqual((digest(F(6, 20.0, 1.0, 3, 1)), generator_states()), want)
+
+    def assert_shares_follow_the_closed_form(self, cases, seeds):
+        """Returns the worst difference between the program's shares and the closed form."""
+        setProperties(self.MURRAY)
+        worst = 0.0
+        for ratio, n in cases:
+            x = 3.0 * math.log2(ratio)
+            self.assertGreater(abs(x - round(x)), 0.03)    # clear of a generation boundary
+            for i, (m, runs) in enumerate(self.FILLS):
+                with self.subTest(ratio=ratio, n=n, m=m, runs=runs):
+                    seed_all(seeds[i % len(seeds)])
+                    program = F(n, ratio, 1.0, m, runs)
+                    length, volume, capillary = murray_shares(ratio, n, m, runs)
+                    self.assertEqual(program.count(",1.0)}"), capillary)     # stems ending at d_min
+                    got = program_shares(program, 2.0)
+                    self.assertAlmostEqual(got[0], length, delta=1e-9)
+                    self.assertAlmostEqual(got[1], volume, delta=1e-9)
+                    worst = max(worst, abs(got[0] - length), abs(got[1] - volume))
+        return worst
+
+    def test_shares_below_two_d_min_follow_the_symmetric_murray_closed_form(self):
+        for fill, recorded in (((0, 1), (0.757455737721, 0.3)), ((0, 3), (0.861199921738, 5.0 / 12.0)),
+                               ((2, 4), (0.970332378649, 0.685929648242)),
+                               ((3, 2), (0.974118352963, 0.712360289284))):
+            length, volume, _ = murray_shares(10.0, 64, *fill)
+            self.assertAlmostEqual(length, recorded[0], delta=1e-12)
+            self.assertAlmostEqual(volume, recorded[1], delta=1e-12)
+        # n 9 and 10 put the iteration cap ahead of d_min (G = n - 1)
+        cases = ((5.0, 64), (6.3, 64), (10.0, 64), (10.0, 9), (10.0, 10))
+        self.assert_shares_follow_the_closed_form(cases, seeds=(0, 1, 2))
+
+    @SLOW
+    def test_shares_below_two_d_min_follow_the_symmetric_murray_closed_form_at_ratios_11_and_25(self):
+        self.assert_shares_follow_the_closed_form(((11.0, 64), (25.0, 64)), seeds=tuple(range(10)))
+
+    def test_fill_settings_are_refused_before_anything_is_drawn(self):
+        setProperties(PROPERTIES)
+        refused = ((None, 0.0, 1), (None, False, True), (1.0, -1, 1), (1.0, 1.5, 1), (1.0, 2.0, 4),
+                   (1.0, True, 1), (1.0, np.bool_(False), 1), (1.0, None, 1), (1.0, "2", 1),
+                   (1.0, 0, 0), (1.0, 2, -1), (1.0, 0, 1.0), (1.0, 2, 2.5), (1.0, 0, True),
+                   (1.0, 2, np.bool_(True)), (None, 2, 4), (0.0, 2, 4), (-1.0, 1, 1), (math.inf, 2, 4),
+                   (math.nan, 2, 4), (True, 2, 4), ("1", 2, 4))
+        for d_min, m, runs in refused:
+            with self.subTest(d_min=d_min, m=m, runs=runs):
+                seed_all(0)
+                before = generator_states()
+                with self.assertRaises(ValueError):
+                    vSystem._check_fill(d_min, m, runs)
+                with self.assertRaises(ValueError):
+                    F(6, 10.0, d_min, m, runs)
+                self.assertEqual(generator_states(), before)
+        for m, d, runs in ((1.0, 1.0, 1), (True, 1.0, 1), (None, 1.0, 1), (0.0, 1.0, 1), (False, 1.0, 1),
+                           (2, 1.0, 0), (2, 1.0, 1.0), (2, 1.0, False), (2, 0.0, 1), (2, -1.0, 1),
+                           (2, math.inf, 1), (2, math.nan, 1), (2, None, 1), (2, True, 1)):
+            with self.subTest(m=m, d=d, runs=runs):
+                seed_all(0)
+                before = generator_states()
+                with self.assertRaises(ValueError):
+                    capillary_tree(m, d, runs)
+                self.assertEqual(generator_states(), before)
+        # an integer m <= 0 gives "F" before d and runs are looked at, as the rule states
+        for m, d, runs in ((0, 0.0, 1), (0, 1.0, 0), (-2, None, 1), (0, 1.0, True),
+                           (np.int64(-1), math.nan, 2.5)):
+            with self.subTest(m=m, d=d, runs=runs):
+                seed_all(0)
+                before = generator_states()
+                self.assertEqual(capillary_tree(m, d, runs), "F")
+                self.assertEqual(generator_states(), before)
+        # numpy numbers are accepted, and runs need no d_min (they apply at the cap)
+        seed_all(0)
+        want = digest(F(64, 6.3, 1.0, 2, 4)), generator_states()
+        seed_all(0)
+        self.assertEqual((digest(F(64, 6.3, np.float64(1.0), np.int64(2), np.int32(4))), generator_states()),
+                         want)
+        vSystem._check_fill(None, 0, 3)
+        vSystem._check_fill(np.float32(0.5), np.uint8(1), np.int16(2))
+
+    def test_interpreting_a_filled_program_draws_nothing(self):
+        setProperties(PROPERTIES)
+        seed_all(4)
+        program = F(64, 2.5, 1.0, 2, 2)
+        self.assertIn(repr(vSystem._SYMMETRIC_ZAMIR_ANGLE), program)
+        before = generator_states()
+        rows = list(branching_turtle_to_coords(program, 2.5))
+        walked = list(branching_turtle_to_coords(program, 2.5, walk=WalkSettings(10.0, np.random.default_rng(4))))
+        self.assertGreater(min(len(rows), len(walked)), program.count("{"))
+        self.assertEqual(generator_states(), before)
 
 
 class DeterminismTests(unittest.TestCase):

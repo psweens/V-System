@@ -97,7 +97,7 @@ from describe import describe
 RNG_STREAMS = {"ratio": 4}
 
 # The version of the library format and generator, the release it belongs to.
-LIBRARY_VERSION = "3.5.0"
+LIBRARY_VERSION = "3.6.0"
 
 RATIO_LAW = "log-uniform"
 UNITS = "d_min"
@@ -111,7 +111,8 @@ DEFAULT_FAMILIES = ("tree", "mesh", "tumour")
 
 # The families grown in a cube, with the side of the cube in root diameters:
 # c R keeps the two trees of a pair within reach of each other.
-BOX_C = {"mesh": DEFAULT_MESH_BOX_C, "aligned": 15.0, "aligned_tight": 20.0}
+BOX_C = {"mesh": DEFAULT_MESH_BOX_C, "aligned": 15.0, "aligned_tight": 20.0, "aligned_bed": 20.0,
+         "capillary_bed": 15.0}
 
 # The parser is given this volume: tree and tumour growth never read it, and
 # a mesh grows in a cube of side 3 x voxel_size, the voxel size being set to
@@ -123,12 +124,13 @@ VOLUME = (3, 3, 3)
 # Modules whose source bytes make up the code hash: this one and main's
 # import closure.
 CODE_MODULES = ("library", "main", "vSystem", "libGenerator", "analyseGrammar", "utils", "computeVoxel",
-                "tortuosity", "collisions", "anastomosis", "graph", "spatial", "guidance")
+                "tortuosity", "collisions", "anastomosis", "graph", "spatial", "guidance", "connections")
 
 # Columns of index.csv, in order. Append-only: the columns from frame_kind on
 # were added in 3.5 (orientation about the frame axis, the polar order and
 # the capillary shares, segment length and spacing, in d_min; empty where a
-# network has no frame axis or no polar sense).
+# network has no frame axis or no polar sense), and rungs, the number of
+# cross-connections, in 3.6.
 INDEX_COLUMNS = ("id", "family", "ratio", "bin", "u", "seed", "file", "generations", "points", "polylines",
                  "tips", "junctions", "cycles", "components", "total_length",
                  "diameter_p50", "diameter_p90", "diameter_p99",
@@ -138,7 +140,7 @@ INDEX_COLUMNS = ("id", "family", "ratio", "bin", "u", "seed", "file", "generatio
                  "nodes_sha256", "program_sha256",
                  "frame_kind", "capillary_order", "larger_order", "capillary_polar_order",
                  "capillary_length_share", "capillary_volume_share", "capillary_segment_median",
-                 "transverse_spacing_median")
+                 "transverse_spacing_median", "rungs")
 
 THREAD_VARIABLES = ("OMP_NUM_THREADS", "OPENBLAS_NUM_THREADS", "MKL_NUM_THREADS")
 
@@ -377,6 +379,7 @@ def describe_member(grown, collision_margin, d_min=1.0):
         "events": {k: v for k, v in grown["events"].items() if v},
     }
     row.update(_frame_columns(report))
+    row["rungs"] = len(grown.get("rungs", []))
     return row
 
 
@@ -493,7 +496,7 @@ def grow_and_write(task):
             "bridges": grown["bridges"], "min_point_diameter": row["min_point_diameter"],
             "programs": grown["programs"], "archive_version": cli.ARCHIVE_VERSION,
             "seconds": seconds, "peak_rss_mb": peak_rss_mb,
-            "frame": grown["frame"], "d_min": settings["d_min"],
+            "frame": grown["frame"], "d_min": settings["d_min"], "rungs": grown["rungs"],
         }
         metadata.update(hashes)
         save_member_archive(os.path.join(directory, member["file"]), grown, metadata)
@@ -749,7 +752,8 @@ def main(argv=None):
                 network = cli.load_network(path)
                 grown = {"nodes": network["nodes"], "edges": network["edges"], "tree": network["tree"],
                          "bridges": record.get("bridges", []), "events": record.get("events", {}),
-                         "program": network["program"], "frame": record.get("frame")}
+                         "program": network["program"], "frame": record.get("frame"),
+                         "rungs": record.get("rungs", [])}
                 row = describe_member(grown, settings["collision_margin"], settings["d_min"])
                 row.update({"id": member["id"], "family": member["family"], "ratio": member["ratio"],
                             "bin": member["bin"], "u": member["u"], "seed": member["seed"], "file": member["file"],

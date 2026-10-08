@@ -548,6 +548,7 @@ for name, argv in CLI_CASES:
                              "bridges": sidecar["bridges"], "d0": sidecar["d0"], "seed": sidecar["seed"]}
         extras[name][stem] = {"sidecar": beyond(sidecar, rules["sidecar"]),
                               "metadata": beyond(metadata, rules["sidecar"]),
+                              "rng_streams": beyond(sidecar["rng_streams"], rules["sidecar"]["rng_streams"]),
                               "events": beyond(sidecar["events"], rules["events"]), "arrays": unknown_arrays}
     hashes[name].update(global_generators=global_generators(), stage_generators=stage_generators())
 
@@ -663,11 +664,16 @@ for case, argv in LIBRARIES:
              "index": sorted(beyond(index, rules["index"])),
              "columns": table[0][len(lists["index_columns"]):],
              "manifest": sorted(set(content) - {"code_sha256", "library_version"}),
-             "library_version": content["library_version"], "metadata": {}, "arrays": {}, "events": {}}
+             "row_values": [{key: value for key, value in beyond(row, rules["index_row"]).items()
+                             if key not in lists["unpinned_columns"]} for row in index["networks"]],
+             "library_version": content["library_version"], "metadata": {}, "metadata_values": {}, "arrays": {},
+             "events": {}}
     for row in index["networks"]:
         entry[row["file"]], extra["arrays"][row["file"]], metadata = archive_hashes(
             os.path.join(directory, row["file"]), "metadata")
         extra["metadata"][row["file"]] = sorted(beyond(metadata, rules["metadata"]))
+        extra["metadata_values"][row["file"]] = {key: value for key, value in beyond(metadata, rules["metadata"]).items()
+                                                 if key not in ("seconds", "peak_rss_mb", "events")}
         extra["events"][row["file"]] = beyond(metadata["events"], rules["events"])
         describe_case(f"describe_{case}_" + row["file"], describe_module.describe_archive(
             os.path.join(directory, row["file"])))
@@ -818,11 +824,14 @@ class PinnedRelease35Tests(unittest.TestCase):
 
     def test_every_counter_appended_after_3_5_is_zero(self):
         def appended(value):
-            # the "events" entries of a case's extras, at any depth
+            # the "events" entries of a case's extras, at any depth; a library's are kept by archive
             if isinstance(value, dict):
                 for key, item in value.items():
                     if key == "events" and all(not isinstance(count, dict) for count in item.values()):
                         yield from item.items()
+                    elif key == "events":
+                        for per_archive in item.values():
+                            yield from per_archive.items()
                     else:
                         yield from appended(item)
 
@@ -830,6 +839,45 @@ class PinnedRelease35Tests(unittest.TestCase):
             with self.subTest(case=case):
                 for key, count in appended(extras):
                     self.assertEqual(count, 0, key)
+
+    def test_with_the_later_options_off_what_3_6_added_is_off(self):
+        # 3.6 appends the capillary fill and the rungs: with their options off
+        # every one of their settings is at its off value, no rung is made, and
+        # the rung stream is listed but never drawn (stage_generators above)
+        off = {"capillary_generations": 0, "capillary_runs": 1, "cross_connect": False, "rung_below": 2.0,
+               "rung_spacing": 20.0, "rung_radius": 8.0, "rung_lateral_deg": 60.0, "rung_axis": None,
+               "rung_min_separation": 2}
+        extras = self.current["extras"]
+        grown = [case for case in extras if isinstance(extras[case].get("returned"), dict)]
+        self.assertGreater(len(grown), 10)
+        for case in grown:
+            with self.subTest(case=case):
+                self.assertEqual(extras[case]["returned"].get("rungs"), [])
+                if "kwargs" in extras[case]:
+                    self.assertEqual({key: extras[case]["kwargs"].get(key) for key in off}, off)
+        for case in ("cli_tree", "cli_aligned", "cli_guidance"):
+            for stem, entry in extras[case].items():
+                with self.subTest(case=case, stem=stem):
+                    for record in (entry["sidecar"], entry["metadata"]):
+                        self.assertEqual({key: record.get(key) for key in off}, off)
+                        self.assertEqual(record.get("rungs"), 0)
+                    seed = self.current["facts"][case][stem]["seed"]
+                    self.assertEqual(entry["rng_streams"], {"rungs": [seed, 5]})
+                    self.assertEqual(entry["arrays"], [])
+        for case in ("library", "library_aligned"):
+            with self.subTest(case=case):
+                for name, values in extras[case]["metadata_values"].items():
+                    self.assertEqual(values.get("rungs"), [], name)
+                for row in extras[case]["row_values"]:
+                    self.assertEqual(row.get("rungs"), 0)
+                self.assertEqual(extras[case]["columns"][:1], ["rungs"])
+                self.assertEqual(extras[case]["arrays"], {name: [] for name in extras[case]["arrays"]})
+
+    def test_the_released_presets_are_unchanged(self):
+        import main
+        for family, released in (("tree", {}), ("mesh", MESH_3_5), ("tumour", TUMOUR_3_5), ("aligned", ALIGNED_3_5)):
+            with self.subTest(family=family):
+                self.assertEqual(json.loads(json.dumps(main.FAMILIES[family])), released)
 
     def test_the_recorded_3_5_hashes_are_matched(self):
         # a case passes when it matches a recording; a recording that the 3.5
