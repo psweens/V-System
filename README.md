@@ -121,6 +121,8 @@ Useful options (`python main.py --help` lists them all):
 | `--iterations MIN MAX` | `4 12` | drawn generations, drawn uniformly |
 | `--d0 MEAN STD` | `20 5` | root diameter, grammar units, truncated at `--d0-min` |
 | `--d-min` | none | smallest drawn vessel diameter; a branch stops bifurcating below it |
+| `--capillary-generations M` | `0` | replace a daughter that `--d-min` would end by a capillary tree of M symmetric generations drawn at `--d-min`; needs `--d-min` |
+| `--capillary-runs E` | `1` | draw every capillary stem, and every stem whose daughters both end, as E consecutive stem blocks |
 | `--epsilon MIN MAX` | `4 10` | length-to-diameter ratio of a segment |
 | `--randmarg MIN MAX` | `0.1 0.3` | relative half-width of the segment-length distribution |
 | `--sigma` | `5` | d_opt / sigma is the spread of the first daughter diameter |
@@ -133,13 +135,14 @@ Useful options (`python main.py --help` lists them all):
 | `--grow-in-volume` | off | confine growth to the volume's proportions so no vessel is cut |
 | `--no-connect` | off | rasterise bare capsules, leaving sub-voxel vessels dotted |
 | `--units` | `um` | the unit one grammar unit stands for, recorded in the sidecar |
-| `--family` | `tree` | preset bundle of the geometry options: `tree`, `mesh`, `tumour`, `aligned`, `aligned_tight` (the last two need `--d-min`) |
+| `--family` | `tree` | preset bundle of the geometry options: `tree`, `mesh`, `tumour`, `aligned`, `aligned_tight`, `aligned_bed`, `capillary_bed` (the last four need `--d-min`) |
 | `--tortuosity` | `stems` | `stems`: five sub-segments smoothed by a B-spline; `walk`: a persistent random walk of the same arc length |
 | `--persistence` | none | persistence length of the walk in vessel diameters; required by `walk` |
 | `--avoid-collisions` | off | keep branches apart by at least `--collision-margin` (default 1 µm), redrawing or shortening, and count what could not be placed |
 | `--anastomose` | off | join `--anastomosis-fraction` (0.5) of the tips to partners within `--anastomosis-radius` (25) tip diameters, never closer kin than `--anastomosis-min-separation` (3) segments, by bridges routed clear of the network at `--collision-margin`; `--anastomose-mode arteriovenous` grows a second tree from the opposite face |
 | `--guidance JSON` | none | steer the walk towards an axis or a plane per calibre class: a list of rules, each with a bound `below` in d_min (null for none), a `field` (`axis`, `plane` or null), its `axis` or `normal`, a `length` G in diameters, an `onset` (2) and, for an axis, a `sense` and `polarity`, for a plane `bank`; needs `--tortuosity walk` |
 | `--root-offsets JSON` | none | move the roots from their default positions on the faces of the growth box, staying inside it: one `[x, y, z]` per tree in units of d_min; needs `--grow-in-volume` and `--d-min` |
+| `--cross-connect` / `--no-cross-connect` | off | after anastomosis, join capillary vessels side to side by rungs at gaps of about `--rung-spacing` (20) diameters, to partners within `--rung-radius` (8) site diameters whose chord stands at least `--rung-lateral-deg` (60°) off the vessel (or off `--rung-axis`); vessels below `--rung-below` (2) d_min are capillaries; needs `--d-min` |
 
 `--d-min` and `--iterations` are both stopping criteria and whichever comes first
 wins. `--d-min` is the one a modality states directly, as its smallest resolvable
@@ -487,6 +490,65 @@ With guidance off the kind is `none` and the rules are empty. `frames.py`
 places networks by their frame (below), and `describe.py` measures against
 it.
 
+### Capillary fill: `--capillary-generations` and `--capillary-runs`
+
+A grammar tree ends every branch once its diameter falls below d_min, so it
+keeps only a small, fixed share of its length and volume in its finest
+calibres. The fill extends each such branch into a capillary bed of its own.
+With `--capillary-generations M` (M > 0, which needs `--d-min`), a daughter
+that d_min would end becomes a capillary tree instead: M generations of
+symmetric bifurcations, every stem drawn at d_min, turned by the Zamir angle
+of a bifurcation into equal daughters (acos 2^(−1/3), about 37.5°, the angle
+the grammar itself would draw for them) and rolled by the roll angle, so that
+the substitution draws nothing for its turns. The iteration count is checked
+first, so a daughter that `--iterations` ends stays ended, and the M capillary
+generations do not count against it; a root thinner than d_min is still
+drawn as nothing. With `--capillary-runs E`, every capillary stem, and every
+stem whose two daughters both end, is drawn as E consecutive stem blocks,
+each with its own length, mirror and anomaly draws, in one pair of braces, so
+the finest vessels run E times as far before they branch or stop. Every
+drawn diameter stays at or above d_min, apart from the middle of a stenosis.
+
+With both options at their defaults (0 and 1) the grammar is the released one,
+string for string and draw for draw (the tests compare it with the 3.5
+modules); the fill draws only on its own path: each capillary stem block and
+each extra run block takes the six `random.random` and five
+`np.random.uniform` calls of one stem, and nothing else. On the command line
+the fill applies only where `--d-min` ends a branch before `--iterations`
+does, so give an iteration range above the depth at which d_min is reached.
+With stochastic parameters, randomness margin and anomalies off and
+ε 7, the length and volume shares of a filled program below 2 d_min follow a
+closed form for symmetric Murray trees, which the tests check to 1e-9.
+
+### Cross-connections: `--cross-connect`
+
+Anastomosis closes a tree into loops only at its tips; a capillary bed is a
+mesh whose capillaries also meet side to side. `--cross-connect` adds such
+connections ("rungs") after anastomosis, on a random stream of their own
+(tag 5), so that turning them on changes nothing drawn before them. The
+vessels are the segments of the trees between branch points and tips; a
+vessel whose median vertex diameter lies below `--rung-below` (2) × d_min is
+a capillary. Along each capillary, sites are drawn as a Poisson process with
+mean gap `--rung-spacing` (20, at least 1) vessel diameters and snapped to a
+vertex, then taken in random order. Each site is joined to the nearest
+capillary point of another vessel within `--rung-radius` (8) site diameters
+that is not touching it, not on its own vessel (or, with
+`--rung-min-separation 3`, not on a vessel meeting it either), not near a
+junction, and whose chord stands at least `--rung-lateral-deg` (60°) off the
+site's vessel tangent, or off `--rung-axis` when one is given. The rung has
+the smaller of the two diameters, is traced along the chord by the walk of
+an anastomosis bridge, keeps `--collision-margin` from the network and the
+rungs before it, and is redrawn up to `--collision-attempts` times. It joins
+both vessels at new junctions with bitwise shared end points, carries the
+bridge label, and is listed under `rungs` in the return, the sidecar (a
+count) and the library metadata; no existing column moves. Every site has
+exactly one outcome: `rung_sites` = `rung_sites_near_junction` +
+`rung_sites_consumed` + `rung_no_partner` + `rung_collision_failed` +
+`rung_bridges`, with `rung_bridges_cross_tree`, `rung_kin_skipped`,
+`rung_angle_skipped` and `rung_bridge_redraws` beside them, appended to the
+counters. With `--cross-connect` off no generator is created and every
+counter stays at zero.
+
 ### Families: `--family`
 
 `tree` is the plain grammar. `mesh` is walk (P = 10) + collision avoidance +
@@ -509,8 +571,19 @@ provisional. `aligned_tight` is `aligned` with its capillaries steered harder
 and from their first step (G 2, so κ = 4P / G = 20, and an onset of 0 for
 both rules) and its roots moved by −20 and +20 d_min along x, 40 d_min apart,
 in a cube of side 20 R in a library; it also needs `--d-min`, and its values
-are provisional too. Released presets are frozen, so a changed value takes a
-new family name. Options given explicitly override the preset. The persistence
+are provisional too. `aligned_bed` is `aligned_tight` filled and
+cross-connected: capillary trees of two generations whose stems run as four
+blocks, and rungs at a spacing of 40 diameters whose chords stand at least 60°
+off x, for capillaries running along fibres with transverse connections
+(Skalak and Schmid-Schönbein 1986; Kassab and Fung 1994). `capillary_bed` is
+an unguided arteriovenous pair grown in the volume, every tip seeking a
+partner of the other tree, filled with capillary trees of three generations
+whose stems run as two blocks and cross-connected at a spacing of 20 diameters
+off the vessel tangent, for a homogeneous capillary mesh fed and drained by
+trees (Lorthois and Cassot 2010; Blinder et al. 2013; Ji et al. 2021). Both
+need `--d-min`; their fill and rung values are provisional. Released presets
+are frozen, so a changed value takes a new family name. Options given
+explicitly override the preset. The persistence
 values of the presets are provisional calibrations from the sweep in
 `docs/geometry`. A preset listed as None in `main.FAMILIES` is a family this
 version does not offer, and is refused.
@@ -577,6 +650,34 @@ unchanged. `describe_archive` with every new key takes 21 s on the largest
 network `tests/test_topology_benchmark.py` grows, a tree of 1.08 million
 points at R 25, and 1.9 s on an aligned network of 139 thousand points at
 R 16, on an Intel Xeon Gold 5220 workstation.
+
+From 3.6, `describe(..., evd_spacing=None)` also measures the topology of a
+network, appending five keys. `junctions` gives, among vertices of degree
+three or more, the fractions of degree 3, 4 and at least 5, the mean degree
+and the segments per junction (every segment between vertices of degree
+other than two, divided by the junctions). `branch_angles_deg` gives, at
+vertices of degree three, the three pairwise angles between unit vectors to
+the points at arc min(2 d_v, half the segment) along each arm, as medians
+over the junctions of each one's smallest, middle and largest angle.
+`loops` gives the shortest cycle through a segment (`by_segment`: 1 for a
+closed segment, 2 for a parallel pair, else one more than the distance
+between its ends without it, by a two-way breadth-first search) and through a
+junction (`by_node`: by Dijkstra over segment lengths, the shortest cycle by
+length, reported by its segment count and its length), each on every k-th
+segment or junction up to 2000, searched only where cycles can lie (the
+network's 2-core) and capped at a depth of 16 and 4096 vertices: median,
+mean, histogram, the share with no cycle within the caps, and the cycles per
+unit length. `segment_diameter_variation` gives, per segment and per calibre
+class, (max − min)/mean of its vertex diameters with its junction ends left
+out (otherwise every daughter would measure its parent's step down), as a
+median and p90. With `evd_spacing`, `tissue_distance` gives the distance from
+the points of a regular grid of at most 64³ points (the spacing raised, and
+recorded, when needed) to the nearest vessel wall, by the voxeliser's capsule
+rule, exactly and without any random draw: mean, median, p90, p99 and maximum
+outside the vessels, and the inside fraction. The grid spans the volume
+describe reads for the length density, else the bounding box. The topology
+keys add about 0.2 s to describe on a network of a million points; the
+tissue distance takes a few seconds more there.
 
 ### Placing networks by their frame: `frames.py`
 
@@ -881,14 +982,14 @@ vsystem-library --out lib --count 2000 --seed 1 --workers 8
 | --- | --- | --- |
 | `--out DIR` | required | output directory; a run into a directory holding a manifest resumes it |
 | `--count N` | required | number of networks |
-| `--families` | `tree mesh tumour` | families to grow, in id order (`aligned` and `aligned_tight` when listed); only presets that exist are accepted, so a family without one and unknown names are refused before anything is grown |
+| `--families` | `tree mesh tumour` | families to grow, in id order (`aligned`, `aligned_tight`, `aligned_bed` and `capillary_bed` when listed); only presets that exist are accepted, so a family without one and unknown names are refused before anything is grown |
 | `--family-shares` | `1 1 1` | relative share of each family, by largest remainder with ties to the family listed first (2000 at `1 1 1` gives 667 667 666) |
 | `--ratio-range R_LO R_HI` | `2.52 25` | range of R, log-uniform and stratified; 2^(4/3) gives at least about four generations |
 | `--seed S` | required | library seed |
 | `--workers W` | `1` | worker processes |
 | `--collision-margin` | `1.0` | clearance between vessel surfaces, units of d_min |
 | `--mesh-box-c` | `15` | a mesh grows in a cube of side this many times its root diameter, which keeps its two trees within reach of each other |
-| `--box-c FAMILY C` | `mesh 15`, `aligned 15`, `aligned_tight 20` | the cube side of a box family (mesh, aligned, aligned_tight) in root diameters (repeatable); refused for a family that grows free, and with `--mesh-box-c` for mesh; an aligned member whose root offsets leave a small cube is recorded as a failure |
+| `--box-c FAMILY C` | `mesh 15`, `aligned 15`, `aligned_tight 20`, `aligned_bed 20`, `capillary_bed 15` | the cube side of a box family (mesh and every aligned or bed family) in root diameters (repeatable); refused for a family that grows free, and with `--mesh-box-c` for mesh; an aligned member whose root offsets leave a small cube is recorded as a failure |
 | `--iteration-cap` | `64` | generations allowed; d_min stops growth first |
 | `--avoid-collisions` / `--no-avoid-collisions` | on | collision avoidance for the tree family; the mesh and tumour presets avoid collisions already |
 
@@ -916,21 +1017,22 @@ network's `nodes` and `program` equal what `vsystem` writes for the same
 arguments and seed on the same machine (the tests check this). The tumour
 preset's root calibre is replaced by R; its aneurysm and stenosis
 probabilities reach the properties through the parser's defaults as on the
-command line. Tree and tumour growth never read the volume; a mesh and an
-aligned network grow in a cube of side 3 × voxel size = c R, with c from
-`library.BOX_C` (15 for mesh and aligned, 20 for aligned_tight, whose roots
-are 40 d_min apart; `--mesh-box-c` for mesh, `--box-c FAMILY C` for any box
-family, not both for mesh). A library in another unit is the same
+command line. Tree and tumour growth never read the volume; a mesh and the
+aligned and bed families grow in a cube of side 3 × voxel size = c R, with c
+from `library.BOX_C` (15 for mesh, aligned and capillary_bed, 20 for
+aligned_tight and aligned_bed, whose roots are 40 d_min apart; `--mesh-box-c`
+for mesh, `--box-c FAMILY C` for any box family, not both for mesh). A library in another unit is the same
 library rescaled: growth at (2R, d_min 2, margin 2, box 2 × 15 R) equals
 twice the library network to float rounding. The default library holds
-`tree`, `mesh` and `tumour` (`library.DEFAULT_FAMILIES`); `aligned` is grown
-when listed, its box constant then recorded under `growth.box_c` in the
-manifest, and every archive's metadata carries the network's `frame` and its
+`tree`, `mesh` and `tumour` (`library.DEFAULT_FAMILIES`); the other families
+are grown when listed, a box family's constant then recorded under
+`growth.box_c` in the manifest, and every archive's metadata carries the network's `frame` and its
 `d_min`. The index holds the 3.4 columns, then `frame_kind`,
 `capillary_order` and `larger_order` (S about the frame axis), `capillary_polar_order`,
 `capillary_length_share`, `capillary_volume_share`, `capillary_segment_median`
 and `transverse_spacing_median` (in d_min), empty where a network has no frame
-axis or no polar sense.
+axis or no polar sense, then from 3.6 `rungs`, the number of cross-connections;
+archive metadata lists the rungs themselves.
 
 Every archive is written atomically (`save_network` to a temporary file,
 then renamed) with metadata recording `"units": "d_min"`, the family, R, bin,
@@ -1154,10 +1256,23 @@ leaves the order about the carried axis unchanged. `tests/test_describe.py`
 checks the frame descriptors on exact constructions (S of 1 and −0.5, the
 Watson and Fisher-axial inversions on 10⁴ samples, exact calibre shares and
 transverse spacing of a square array, each d_ref source) and their unit
-invariance. `tests/test_topology_benchmark.py`, with `VSYSTEM_SLOW_TESTS=1`,
-grows every family at three root ratios and the aligned preset over its
-guidance length and onset, prints the Phase 1 descriptors and the cost, and
-projects a 2000-network library.
+invariance. From 3.6, `tests/test_vsystem.py` checks the capillary fill
+against the 3.5 grammar, a literal statement of its rule and the closed form
+of a symmetric Murray tree's calibre shares; `tests/test_connections.py`
+checks the rungs on two parallel lines (their angles and lengths, gaps that
+pass a Kolmogorov-Smirnov test against an exponential law, one cycle per rung
+after the first, no clearance violation) and on grown trees;
+`tests/test_fill.py` checks the options and their refusals, that the rungs
+leave everything drawn before them unchanged, and the new families; and
+`tests/test_describe.py` checks the topology keys on ladders, square,
+hexagonal and cubic lattices, trees, a symmetric Y and a straight cylinder,
+against independent brute-force searches. `tests/test_pinned_release_3_5.py`
+pins 3.5 as the 3.4 pin pins 3.4. `tests/test_topology_benchmark.py`, with
+`VSYSTEM_SLOW_TESTS=1`, grows every family at three root ratios (the filled
+families in their own invocation, through `VSYSTEM_BENCHMARK_FAMILIES` and
+`VSYSTEM_BENCHMARK_RATIOS`) and the aligned preset over its guidance length
+and onset, prints the descriptors and the cost, and projects a 2000-network
+library.
 
 ---
 

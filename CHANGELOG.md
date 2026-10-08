@@ -1,9 +1,85 @@
 # Changelog
 
-## 3.6.0 (in progress)
+## 3.6.0
+
+Version 3.6 fills the finest calibres and joins them side to side.
+`--capillary-generations` and `--capillary-runs` extend each branch that
+d_min would end into a capillary tree of its own and lengthen the finest
+stems; `--cross-connect` adds rungs between neighbouring capillaries after
+anastomosis; and the families `aligned_tight`, `aligned_bed` and
+`capillary_bed` are offered. `describe.py` measures junctions, branch angles,
+shortest loops, calibre variation within segments and, on request, the
+distance from tissue to the nearest vessel. With the new options off, every
+family 3.5 offered draws, writes and measures what 3.5 did, which the tests
+check by running the 3.5 modules, kept under
+`tests/fixtures/reference_code_3_5`, alongside the current ones.
+
+### Geometry
+
+- `vSystem.F(n, d0, d_min=None, capillary_generations=0,
+  capillary_runs=1)` and `vSystem.capillary_tree(m, d, runs)`. With m > 0
+  (which needs d_min) a daughter that d_min would end becomes a capillary
+  tree: m generations of symmetric bifurcations drawn at d_min, turned by
+  the Zamir angle of equal daughters (acos 2^(−1/3)) and rolled by the roll
+  angle, unless the iteration count ends it first; the m generations do not
+  count against it, and a root thinner than d_min is still drawn as
+  nothing. Every capillary stem, and every stem whose daughters both end, is
+  E stem blocks, each drawn afresh. Every drawn diameter stays at or above
+  d_min but a stenosis middle. At the defaults F is the released rule,
+  string for string and draw for draw; the fill draws only on its own path.
+- `connections.py` (new, in main's import closure): `cross_connect` joins
+  capillary vessels (tree segments whose median diameter is below
+  `rung_below` × d_min) side to side by rungs. Sites follow a Poisson process
+  of mean gap `rung_spacing` vessel diameters (at least 1), taken in random
+  order; each is joined to the nearest capillary point of another vessel
+  within `rung_radius` site diameters that is not touching it, not near a
+  junction, at least `rung_min_separation` segments away along the trees and
+  whose chord stands at least `rung_lateral_deg` off the vessel tangent or
+  off `rung_axis`. The rung has the smaller diameter, is walked along the
+  chord like an anastomosis bridge, keeps the collision margin and joins
+  both vessels at new junctions with bitwise shared ends; no existing
+  column moves. It draws on stream tag 5 (`main.RNG_STREAMS["rungs"]`),
+  created only when the rungs are on.
+- `main.grow_network(..., capillary_generations=0, capillary_runs=1,
+  cross_connect=False, rung_below=2.0, rung_spacing=20.0, rung_radius=8.0,
+  rung_lateral_deg=60.0, rung_axis=None, rung_min_separation=2)`, which
+  returns `rungs`; the command line takes `--capillary-generations`,
+  `--capillary-runs`, `--cross-connect`/`--no-cross-connect` and `--rung-*`,
+  and `shaping_options` carries all nine. Every malformed setting is refused
+  from `grow_network` and the command line before anything is written. A
+  pair filled in the volume no longer runs the free-extent pass, whose
+  result a box at a fixed voxel size never uses.
+- Counters appended after the guidance ones: `rung_sites`,
+  `rung_sites_near_junction`, `rung_sites_consumed`, `rung_no_partner`,
+  `rung_collision_failed`, `rung_bridges`, `rung_bridges_cross_tree`,
+  `rung_kin_skipped`, `rung_angle_skipped` and `rung_bridge_redraws`, with
+  `rung_sites` = near_junction + consumed + no_partner + collision_failed +
+  bridges, all zero with the rungs off.
+- The `aligned_tight` family: `aligned` with its capillaries steered harder
+  and from their first step (G 2 and an onset of 0 for both rules) and its
+  roots moved by −20 and +20 d_min along x, 40 d_min apart. `aligned_bed` is
+  aligned_tight with capillary generations 2, runs 4 and rungs at spacing
+  40, radius 8 and at least 60° off x. `capillary_bed` is an unguided
+  arteriovenous pair grown in the volume with anastomosis arteriovenous 1.0,
+  capillary generations 3, runs 2 and rungs at spacing 20, radius 8 and at
+  least 60° off the vessel tangent. All three need d_min; their values are
+  provisional. `aligned` keeps the preset 3.5.0 released.
 
 ### Measurement
 
+- `describe(..., evd_spacing=None)` and `describe_archive` likewise. The
+  appended keys are `junctions` (fractions of degree 3, 4 and at least 5,
+  mean degree, segments per junction), `branch_angles_deg` (medians of the
+  smallest, middle and largest angle at degree-3 vertices, between arms
+  taken to arc min(2 d_v, half the segment)), `loops` (`by_segment` and
+  `by_node`: the shortest cycle through a segment and through a junction on
+  every k-th up to 2000, searched on the 2-core within a depth of 16 and 4096
+  vertices: median, mean, histogram, the share with none, cycles per unit
+  length and, by junction, loop lengths), `segment_diameter_variation`
+  ((max − min)/mean of a segment's vertex diameters, junction ends left out,
+  per class) and `tissue_distance` (with `evd_spacing` only: distance to the
+  nearest vessel wall on a grid of at most 64³ points by the voxeliser's
+  capsule rule, exact and draw-free). Every earlier key is byte-identical.
 - `frame_orientation` gains `fisher_axial_K_exact` per class about an
   axis: the K of the Fisher-axial law exp(K |t·a|) whose ⟨|t·a|⟩,
   1 / (1 − e^−K) − 1 / K, equals the measured one, by bisection on
@@ -11,15 +87,36 @@
   tangents gathered across the axis. `fisher_axial_K` keeps its 3.5
   definition, coth K − 1 / K = ⟨|t·a|⟩, which reads about 1.8 for isotropic
   tangents and agrees with the exact value only as K grows.
+- The library index gains `rungs`, the number of cross-connections,
+  appended after the 3.5 columns; archive metadata lists the rungs.
 
-### Geometry
+### Tools
 
-- The `aligned_tight` family: `aligned` with its capillaries steered harder
-  and from their first step (G 2 and an onset of 0 for both rules) and its
-  roots moved by −20 and +20 d_min along x, 40 d_min apart; it needs d_min,
-  its values are provisional, and a library grows it in a cube of side
-  `library.BOX_C["aligned_tight"]` = 20 R. `aligned` keeps the preset 3.5.0
-  released.
+- `vsystem-library` grows the new families when listed, in cubes of side
+  20 R (aligned_tight, aligned_bed) and 15 R (capillary_bed) from
+  `library.BOX_C`; `library_version` is 3.6.0 and `CODE_MODULES` gains
+  `connections`, so libraries grown with 3.5 refuse to resume under 3.6, as
+  any change of the generator does.
+
+### Compatibility
+
+- With the new options off, tree, mesh, tumour and aligned reproduce 3.5
+  exactly: nodes, programs, tree, edges, node_kind, bridges, frames, the 3.5
+  counters, the global and per-stage generator states, the command line's
+  archives, sidecars and TIFFs, the library's members, index rows, manifest
+  content and archives, description, placement and joining.
+  `tests/test_pinned_release_3_5.py` runs the 3.5 modules beside the current
+  ones, restricts every record to the keys 3.5 wrote, and checks that every
+  setting 3.6 added is off, no rung is made and every appended counter is
+  zero; it takes about 55 s on an Intel Xeon Gold 5220 workstation. Its
+  hashes are recorded on Linux x86_64, and the 3.4 pin now checks a Linux
+  recording beside its macOS one, so neither pin skips its recorded hashes on
+  CI.
+- Additions only: the return key `rungs`; the sidecar and metadata keys of
+  the nine settings and `rungs`; the describe keys above; the ten counters;
+  the index column `rungs`; and `rng_streams.rungs` in every sidecar.
+- pyproject version 3.6.0; `py-modules` gains `connections`. Python 3.9
+  syntax, numpy and tifffile only.
 
 ## 3.5.0
 
