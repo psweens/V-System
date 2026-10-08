@@ -1,5 +1,5 @@
 """
-Benchmark of the families against each other: growth cost and the Phase 1
+Benchmark of the families against each other: growth cost and the
 descriptors of every available family at three root ratios, the aligned
 preset over its guidance length and onset, and a projection of the cost of
 a 2000-network library.
@@ -38,6 +38,27 @@ from describe import describe, describe_archive  # noqa: E402
 SLOW = unittest.skipUnless(os.environ.get("VSYSTEM_SLOW_TESTS"), "set VSYSTEM_SLOW_TESTS=1 to run the benchmark")
 RATIOS = (4.0, 8.0, 16.0)
 COST_RATIO = 25.0
+# the families filled with capillary trees cost far more per network, so they
+# are benchmarked in their own invocation, R by R: VSYSTEM_BENCHMARK_FAMILIES
+# names the families (default: every available one but these) and
+# VSYSTEM_BENCHMARK_RATIOS the ratios, the last one grown for cost only on
+# one seed (default: 4 8 16 25)
+FILL_FAMILIES = ("aligned_bed", "capillary_bed")
+
+
+def benchmark_families():
+    named = os.environ.get("VSYSTEM_BENCHMARK_FAMILIES")
+    if named:
+        return named.replace(",", " ").split()
+    return [family for family in library.available_families() if family not in FILL_FAMILIES]
+
+
+def benchmark_ratios():
+    named = os.environ.get("VSYSTEM_BENCHMARK_RATIOS")
+    if named:
+        values = [float(value) for value in named.replace(",", " ").split()]
+        return tuple(values[:-1]), values[-1]
+    return RATIOS, COST_RATIO
 SEEDS = (1, 2, 3)
 PERSISTENCE = main.FAMILIES["aligned"]["persistence"]
 LENGTHS = (2.0, 4.9, 12.3, 16.4)            # kappa = 4 P / G of about 20, 8.2, 3.3 and 2.4
@@ -77,7 +98,8 @@ def capillary_summary(report):
         for cls in ("capillary", "larger"):
             entry = orientation[cls]
             if entry:
-                for key in ("S", "mean_abs_cos", "crossing_ratio", "watson_K", "fisher_axial_K", "within_45_deg"):
+                for key in ("S", "mean_abs_cos", "crossing_ratio", "watson_K", "fisher_axial_K",
+                            "fisher_axial_K_exact", "within_45_deg"):
                     out[f"{cls}_{key}"] = entry.get(key)
     polar = report["polar_order"]
     if polar:
@@ -97,6 +119,33 @@ def capillary_summary(report):
         out["spacing_median"] = spacing["median"]
         out["crossing_density"] = spacing["crossing_density"]
         out["crossings"] = spacing["count"]
+    out["arc_chord_mean"] = report["arc_chord"]["mean"]
+    junctions = report.get("junctions")
+    if junctions and junctions["count"]:
+        for key in ("count", "degree_3", "degree_4", "degree_5_plus", "mean_degree", "segments_per_junction"):
+            out[f"junctions_{key}"] = junctions[key]
+    angles = report.get("branch_angles_deg")
+    if angles and angles["count"]:
+        for key in ("min", "median", "max"):
+            out[f"branch_angle_{key}"] = angles[key]
+    loops = report.get("loops")
+    if loops:
+        for kind in ("by_segment", "by_node"):
+            for key in ("found", "none_fraction", "median", "mean"):
+                out[f"loops_{kind}_{key}"] = loops[kind].get(key)
+        out["loops_by_node_length_median_d"] = loops["by_node"].get("length_median_d")
+        out["cycles_per_length_d"] = loops["by_segment"].get("cycles_per_length_d")
+    variation = report.get("segment_diameter_variation")
+    if variation:
+        for cls in ("all", "capillary"):
+            if variation.get(cls):
+                out[f"diameter_variation_{cls}_median"] = variation[cls]["median"]
+                out[f"diameter_variation_{cls}_p90"] = variation[cls]["p90"]
+    tissue = report.get("tissue_distance")
+    if tissue:
+        for key in ("spacing", "inside_fraction", "mean_d", "median_d", "p90_d", "max_d"):
+            out[f"tissue_{key}"] = tissue.get(key)
+        out["tissue_domain"] = tissue["domain"]["source"]
     return out
 
 
@@ -126,8 +175,13 @@ def bridge_geometry(grown):
                 rows.append({"angle_to_x_deg": angle, "same_way": bool(np.sign(first[0]) == np.sign(last[0])),
                              "chord": float(np.linalg.norm(chord))})
             start = None
+    # the anastomosis bridges come first, then the rungs, each a polyline of its own
     for row, bridge in zip(rows, grown["bridges"]):
+        row["kind"] = "bridge"
         row["cross_tree"] = bridge["tip_tree"] != bridge["partner_tree"]
+    for row, rung in zip(rows[len(grown["bridges"]):], grown.get("rungs", [])):
+        row["kind"] = "rung"
+        row["cross_tree"] = rung["site_tree"] != rung["partner_tree"]
     return rows
 
 
@@ -167,16 +221,17 @@ class FamilyBenchmark(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
         cls.out = tempfile.mkdtemp()
-        families = library.available_families()
+        families = benchmark_families()
+        cls.ratios, cost_ratio = benchmark_ratios()
         members = []
         for family in families:
-            for ratio in RATIOS + (COST_RATIO,):
-                for seed in SEEDS if ratio != COST_RATIO else SEEDS[:1]:
+            for ratio in cls.ratios + (cost_ratio,):
+                for seed in SEEDS if ratio != cost_ratio else SEEDS[:1]:
                     members.append({"id": len(members), "family": family, "ratio": ratio, "bin": 0, "u": 0.0,
                                     "seed": seed, "file": f"bench_{len(members):03d}_{family}.npz"})
         settings = dict(library.growth_settings(library.build_parser().parse_args(
             ["--out", cls.out, "--count", "1", "--seed", "1", "--families"] + families)),
-            ratio_lo=min(RATIOS), ratio_hi=COST_RATIO)
+            ratio_lo=min(cls.ratios + (cost_ratio,)), ratio_hi=cost_ratio)
         tasks = [{"member": member, "settings": settings, "directory": cls.out} for member in members]
         for name in library.THREAD_VARIABLES:
             os.environ.setdefault(name, "1")
@@ -199,18 +254,26 @@ class FamilyBenchmark(unittest.TestCase):
     def test_families_grow_and_describe(self):
         self.assertEqual(self.failures, [], self.failures)
         table = {}
-        print("\nfamily   R  seed   points  seconds  rss_MB  cap_S  polar  len<2  vol<2  seg_med  spacing  density  events")
+        print("\nfamily   R  seed   points  seconds  rss_MB  cap_S  polar  len<2  vol<2  seg_med  spacing  density  "
+              "deg3  loop_n  angle  evd_mean  events")
         for ident, row in sorted(self.rows.items()):
             member = self.members[ident]
+            path = os.path.join(self.out, member["file"])
             started = time.perf_counter()
-            report = describe_archive(os.path.join(self.out, member["file"]))
+            report = describe_archive(path)
             describe_seconds = time.perf_counter() - started
+            started = time.perf_counter()
+            tissue = describe_archive(path, evd_spacing=1.0)["tissue_distance"]   # over a member's growth box
+            tissue_seconds = time.perf_counter() - started
+            report["tissue_distance"] = tissue
             summary = capillary_summary(report)
             events = {k: v for k, v in row["events"].items() if v}
+            program = str(main.load_network(path)["program"])
             entry = {"family": member["family"], "ratio": member["ratio"], "seed": member["seed"],
                      "points": row["points"], "seconds": row["seconds"], "peak_rss_mb": row["peak_rss_mb"],
-                     "describe_seconds": describe_seconds,
-                     "archive_bytes": os.path.getsize(os.path.join(self.out, member["file"])),
+                     "describe_seconds": describe_seconds, "tissue_seconds": tissue_seconds,
+                     "archive_bytes": os.path.getsize(path), "program_characters": len(program),
+                     "program_moves": program.count("f("), "rungs": row.get("rungs"),
                      "events": events, "descriptors": summary, "cycles": row["cycles"], "tips": row["tips"]}
             table[f"{member['family']}_r{member['ratio']:g}_s{member['seed']}"] = entry
 
@@ -222,7 +285,9 @@ class FamilyBenchmark(unittest.TestCase):
                   f"{row['seconds']:8.1f} {row['peak_rss_mb']:7.0f} {fmt('capillary_S')} "
                   f"{fmt('capillary_polar_order')} {fmt('length_below_2')} {fmt('volume_below_2')} "
                   f"{fmt('capillary_segment_median', 7, 2)} {fmt('spacing_median', 7, 2)} "
-                  f"{fmt('crossing_density', 8, 4)}  {' '.join(f'{k}={v}' for k, v in sorted(events.items()))}")
+                  f"{fmt('crossing_density', 8, 4)} {fmt('junctions_degree_3', 5, 2)} {fmt('loops_by_node_median', 6, 1)} "
+                  f"{fmt('branch_angle_median', 6, 1)} {fmt('tissue_mean_d', 8, 2)}  "
+                  f"{' '.join(f'{k}={v}' for k, v in sorted(events.items()))}")
         _record("families", "members", table)
         largest = max(table.values(), key=lambda entry: entry["points"])
         _record("families", "describe_largest", {key: largest[key] for key in ("family", "ratio", "seed", "points",
@@ -231,7 +296,8 @@ class FamilyBenchmark(unittest.TestCase):
               f"{largest['seed']}, {largest['points']} points): {largest['describe_seconds']:.1f} s")
         # sanity: on the same R and seed the capillaries of aligned are more ordered about its axis
         # than a tree's described against that axis
-        for ratio in RATIOS:
+        present = {member["family"] for member in self.members.values()}
+        for ratio in self.ratios if {"aligned", "tree"} <= present else ():
             for seed in SEEDS:
                 aligned = table[f"aligned_r{ratio:g}_s{seed}"]
                 tree_member = next(m for m in self.members.values()
@@ -249,16 +315,22 @@ class FamilyBenchmark(unittest.TestCase):
             selected = events.get("anastomosis_selected", 0)
             self.assertEqual(selected, events.get("anastomosis_bridges", 0) + events.get("anastomosis_source_consumed", 0)
                              + events.get("anastomosis_no_partner", 0) + events.get("anastomosis_collision_failed", 0))
+            self.assertEqual(events.get("rung_sites", 0),
+                             sum(events.get(key, 0) for key in ("rung_sites_near_junction", "rung_sites_consumed",
+                                                                 "rung_no_partner", "rung_collision_failed",
+                                                                 "rung_bridges")))
+            if not main.FAMILIES[self.members[ident]["family"]].get("cross_connect"):
+                self.assertEqual(events.get("rung_sites", 0), 0)
             steps = sum(events.get(key, 0) for key in ("guided_steps", "guidance_onset_steps", "unguided_steps",
                                                         "guidance_undefined_steps"))
-            if self.members[ident]["family"] == "aligned":
+            if main.FAMILIES[self.members[ident]["family"]].get("guidance"):
                 self.assertGreater(steps, 0)
                 self.assertGreater(events.get("guided_steps", 0), 0)
             else:
                 self.assertEqual(steps, 0)
 
     def test_a_library_of_2000_networks_is_projected_from_the_cost_per_ratio(self):
-        families = library.available_families()
+        families = sorted({self.members[k]["family"] for k in self.rows}, key=benchmark_families().index)
         projection = {}
         plan = library.plan_library(1, 2000, families, [1.0] * len(families), library.DEFAULT_RATIO_RANGE)
         weights = library.library_weights([{"ratio": m["ratio"], "ratio_law": "log-uniform"} for m in plan])

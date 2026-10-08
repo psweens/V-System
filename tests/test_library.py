@@ -253,6 +253,22 @@ class CommandLineTests(unittest.TestCase):
             self.assertIn(key, manifest["run"])
         self.assertEqual(manifest["run"]["runs"][0]["grown"], 3)
 
+    def test_describe_samples_a_member_s_tissue_over_its_growth_box(self):
+        from describe import describe_archive
+        self.assertEqual(self.status, 0, self.stderr)
+        with open(os.path.join(self.out, "index.json")) as handle:
+            rows = json.load(handle)["networks"]
+        for row in rows:
+            with self.subTest(family=row["family"]):
+                path = os.path.join(self.out, row["file"])
+                box = main.load_network(path)["metadata"]["growth_box"]
+                self.assertEqual(box is None, row["family"] != "mesh")
+                tissue = describe_archive(path, evd_spacing=1.0)["tissue_distance"]
+                if box is None:
+                    self.assertEqual(tissue["domain"]["source"], "bounding_box")
+                else:
+                    self.assertEqual(tissue["domain"], {"min": [0.0, 0.0, 0.0], "max": box, "source": "growth_box"})
+
     def test_rerunning_resumes_without_regrowing_and_the_manifest_hash_is_stable(self):
         with open(os.path.join(self.out, "manifest.json")) as handle:
             before = json.load(handle)
@@ -379,12 +395,13 @@ class AlignedMemberTests(unittest.TestCase):
         self.assertEqual(row["transverse_spacing_median"], report["transverse_spacing"]["median"])
         self.assertGreater(row["capillary_polar_order"], 0.0)
         self.assertGreater(row["transverse_spacing_median"], 0.0)
-        self.assertEqual(list(row)[-8:], list(library.INDEX_COLUMNS[-8:]))
-        # the new columns by name and in order, appended after the 3.4 ones (which the 3.4 pin checks)
-        self.assertEqual(list(library.INDEX_COLUMNS[-8:]),
+        self.assertEqual(list(row)[-9:], list(library.INDEX_COLUMNS[36:]))
+        # the columns 3.5 and 3.6 added, by name and in order, after the 3.4 ones (which the 3.4 pin checks)
+        self.assertEqual(list(library.INDEX_COLUMNS[36:]),
                          ["frame_kind", "capillary_order", "larger_order", "capillary_polar_order",
                           "capillary_length_share", "capillary_volume_share", "capillary_segment_median",
-                          "transverse_spacing_median"])
+                          "transverse_spacing_median", "rungs"])
+        self.assertEqual(row["rungs"], 0)
         # a tree has a frame of kind "none": the frame columns are empty, the class columns are not
         plain = library.describe_member(grow_member("tree", 3.0, 3)["grown"], 1.0)
         self.assertEqual(plain["frame_kind"], "none")
@@ -412,7 +429,9 @@ class BoxConstantTests(unittest.TestCase):
         self.assertEqual(library.box_constants(), library.BOX_C)
         self.assertEqual(library.box_constants(12.0), dict(library.BOX_C, mesh=12.0))
         self.assertEqual(library.box_constants(None, {"aligned": 20.0, "mesh": 11.0}),
-                         {"mesh": 11.0, "aligned": 20.0})
+                         dict(library.BOX_C, mesh=11.0, aligned=20.0))
+        self.assertEqual(library.BOX_C, {"mesh": 15.0, "aligned": 15.0, "aligned_tight": 20.0, "aligned_bed": 20.0,
+                                         "capillary_bed": 15.0})
         with self.assertRaises(ValueError):
             library.box_constants(12.0, {"mesh": 11.0})
         with self.assertRaises(ValueError):

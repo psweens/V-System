@@ -39,9 +39,12 @@ must be inert: every counter appended to the events is zero.
 
 Running both in one environment is the only portable comparison: the
 B-spline, the walk and the collision checks go through kernels whose last
-bits differ between machines. The hashes recorded on one machine
-(tests/fixtures/reference_hashes_3_4.json) are checked as well, and skipped
-only when the reference code itself no longer reproduces them here. The
+bits differ between machines. Hashes recorded on a machine are checked as
+well, one file per recording (tests/fixtures/reference_hashes_3_4*.json):
+macOS arm64, and Linux x86_64 with OpenBLAS's SkylakeX kernels and numpy's
+AVX-512 loops (_linux) or OpenBLAS's Zen kernels and numpy's AVX2 loops
+(_linux_zen). A case passes when it matches a recording, and the check is
+skipped only when the reference code itself reproduces none of them here. The
 reference directory is an unchanged copy of the release: the sha256 of each
 of its files is recorded with the hashes and checked, and the drivers write
 nothing but to a temporary directory outside the repository. The two drivers
@@ -62,7 +65,7 @@ import unittest
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 FIXTURES = os.path.join(ROOT, "tests", "fixtures")
 REFERENCE = os.path.join(FIXTURES, "reference_code_3_4")
-RECORDED = os.path.join(FIXTURES, "reference_hashes_3_4.json")
+RECORDINGS = "reference_hashes_3_4"           # tests/fixtures/reference_hashes_3_4*.json, one per recording
 
 REFERENCE_MODULES = ("main", "vSystem", "libGenerator", "analyseGrammar", "utils", "computeVoxel",
                      "tortuosity", "collisions", "anastomosis", "graph", "spatial",
@@ -629,20 +632,23 @@ class PinnedRelease34Tests(unittest.TestCase):
         cls.addClassCleanup(scratch.cleanup)
         cls.scratch = scratch.name
         cls.reference, cls.current = run_drivers(cls.scratch)
-        with open(RECORDED) as handle:
-            recorded = json.load(handle)
-        cls.recorded_files = recorded["_reference_files"]
-        cls.recorded = {k: v for k, v in recorded.items() if not k.startswith("_")}
+        cls.recordings = {}
+        for name in sorted(os.listdir(FIXTURES)):
+            if name.startswith(RECORDINGS) and name.endswith(".json"):
+                with open(os.path.join(FIXTURES, name)) as handle:
+                    cls.recordings[name] = json.load(handle)
 
     def test_the_reference_directory_is_an_unchanged_copy_of_the_release(self):
         # nothing but the modules: hidden files and a bytecode cache a stray import leaves are not the copy
         present = sorted(name for name in os.listdir(REFERENCE)
                          if not name.startswith(".") and name != "__pycache__")
         self.assertEqual(present, sorted(name + ".py" for name in REFERENCE_MODULES))
-        self.assertEqual(sorted(self.recorded_files), present)
-        for name in present:
-            with self.subTest(module=name):
-                self.assertEqual(file_sha256(os.path.join(REFERENCE, name)), self.recorded_files[name])
+        self.assertGreater(len(self.recordings), 0)
+        for recording, recorded in self.recordings.items():
+            self.assertEqual(sorted(recorded["_reference_files"]), present, recording)
+            for name in present:
+                with self.subTest(recording=recording, module=name):
+                    self.assertEqual(file_sha256(os.path.join(REFERENCE, name)), recorded["_reference_files"][name])
 
     def test_the_current_modules_produce_what_the_3_4_modules_produce_in_this_environment(self):
         self.assertEqual(sorted(self.current["hashes"]), sorted(self.reference["hashes"]))
@@ -720,34 +726,38 @@ class PinnedRelease34Tests(unittest.TestCase):
         self.assertEqual((facts["library"]["rows"], facts["library"]["failures"]), (3, 0))
 
     def test_with_the_later_options_off_the_frame_is_none_and_the_new_kwargs_are_none(self):
-        # what 3.5 appends while its options are off: a frame of kind "none" in
-        # every return, sidecar and archive, and guidance and root offsets of None
+        # what 3.5 appended while its options are off: a frame of kind "none" in
+        # every return, sidecar and archive, and guidance and root offsets of
+        # None. Later versions append more, which their own pins check, so only
+        # the keys 3.5 added are checked here.
+        import library
         extras = self.current["extras"]
         grown = [case for case in extras if isinstance(extras[case].get("returned"), dict)]
         self.assertGreater(len(grown), 10)
         for case in grown:
             with self.subTest(case=case):
                 returned = extras[case]["returned"]
-                self.assertEqual(set(returned), {"frame"})
+                self.assertIn("frame", returned)
                 self.assertEqual(returned["frame"]["kind"], "none")
                 self.assertEqual(returned["frame"]["rules"], [])
                 if "kwargs" in extras[case]:
-                    self.assertEqual(extras[case]["kwargs"], {"guidance": None, "root_offsets": None})
+                    self.assertEqual({key: extras[case]["kwargs"][key] for key in ("guidance", "root_offsets")},
+                                     {"guidance": None, "root_offsets": None})
         for case in ("cli_tree", "cli_mesh", "cli_options"):
             for stem, entry in extras[case].items():
                 with self.subTest(case=case, stem=stem):
                     for record in (entry["sidecar"], entry["metadata"]):
-                        self.assertEqual(set(record), {"guidance", "root_offsets", "frame"})
+                        self.assertLessEqual({"guidance", "root_offsets", "frame"}, set(record))
                         self.assertIsNone(record["guidance"])
                         self.assertIsNone(record["root_offsets"])
                         self.assertEqual(record["frame"]["kind"], "none")
                     self.assertEqual(entry["arrays"], [])
         for name, keys in extras["library"]["metadata"].items():
             with self.subTest(archive=name):
-                self.assertEqual(keys, ["d_min", "frame", "peak_rss_mb", "seconds"])
+                self.assertLessEqual({"d_min", "frame", "peak_rss_mb", "seconds"}, set(keys))
         self.assertEqual(extras["library"]["arrays"], {name: [] for name in extras["library"]["arrays"]})
         self.assertEqual(extras["library"]["index"], [])
-        self.assertEqual(extras["library"]["library_version"], "3.5.0")
+        self.assertEqual(extras["library"]["library_version"], library.LIBRARY_VERSION)
 
     def test_a_3_4_library_loads_and_describes_as_it_did_with_the_new_keys_inert(self):
         # the library the 3.4 modules wrote in the reference run, read by the current modules
@@ -783,6 +793,10 @@ class PinnedRelease34Tests(unittest.TestCase):
                 for key, item in value.items():
                     if key == "events" and all(not isinstance(count, dict) for count in item.values()):
                         yield from item.items()
+                    elif key == "events":
+                        # a library's are kept by archive
+                        for per_archive in item.values():
+                            yield from per_archive.items()
                     else:
                         yield from appended(item)
 
@@ -792,15 +806,21 @@ class PinnedRelease34Tests(unittest.TestCase):
                     self.assertEqual(count, 0, key)
 
     def test_the_recorded_3_4_hashes_are_matched(self):
-        self.assertEqual(sorted(self.recorded), sorted(self.reference["hashes"]))
+        # a case passes when it matches a recording; a recording that the 3.4
+        # modules themselves reproduce here must be matched; one they do not
+        # reproduce was made where rounding differs, and is skipped
+        for recording, recorded in self.recordings.items():
+            hashes = {key: value for key, value in recorded.items() if not key.startswith("_")}
+            self.assertEqual(sorted(hashes), sorted(self.reference["hashes"]), recording)
         for case in self.reference["hashes"]:
             with self.subTest(case=case):
-                if self.current["hashes"][case] == self.recorded[case]:
+                recorded = [entry[case] for entry in self.recordings.values()]
+                if self.current["hashes"][case] in recorded:
                     continue
-                if self.reference["hashes"][case] != self.recorded[case]:
-                    self.skipTest("this environment's rounding differs from the recording machine's; "
+                if self.reference["hashes"][case] not in recorded:
+                    self.skipTest("this environment's rounding differs from every recording machine's; "
                                   "the same-environment comparison above still holds")
-                self.assertEqual(self.current["hashes"][case], self.recorded[case])
+                self.assertIn(self.current["hashes"][case], recorded)
 
 
 if __name__ == "__main__":
