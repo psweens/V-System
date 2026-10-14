@@ -40,15 +40,21 @@ only, the mesh, tumour and aligned presets avoiding collisions already;
 plain trees cross themselves from about R = 10, and the setting is recorded
 per network.
 
-Mesh and aligned networks grow in a cube of side c times R, with c from
-BOX_C (`--mesh-box-c` for mesh, `--box-c FAMILY C` for any family), which
-keeps the two trees within reach of each other; tree and tumour networks
-grow freely, and the volume the parser is given is unused by their growth.
+Mesh, aligned, capillary-bed, foam and fibre networks grow in a cube of
+side c times R, with c from BOX_C (`--mesh-box-c` for mesh, `--box-c FAMILY
+C` for any family), which keeps the feeder trees within reach of each
+other (a fibre member's feeder sheets stand unit d_min apart along x across
+it); tree and tumour networks grow freely, and the volume the parser is
+given is unused by their growth.
 
 Every archive carries the network's frame record (see guidance.py) and its
 d_min, and the index gives the orientation, polar order, capillary shares,
-capillary segment length and transverse spacing that describe.py measures
-against that frame.
+capillary segment length, transverse spacing, capillary crossing density and
+crossing ratio and cross-connections that describe.py measures against that
+frame. describe is given the growth box, so that every section area across
+the frame axis is the box's (area_source "growth_box_um") rather than the
+capillaries' bounding box; a fibre member's metadata also lists its feeder
+trees ("feeder_trees": label, role, sheet and root).
 
 Resuming. A run into a directory that holds a manifest refuses a different
 parameter set or a different code hash, records a different Python or numpy
@@ -114,7 +120,7 @@ DEFAULT_FAMILIES = ("tree", "mesh", "tumour")
 # The families grown in a cube, with the side of the cube in root diameters:
 # c R keeps the two trees of a pair within reach of each other.
 BOX_C = {"mesh": DEFAULT_MESH_BOX_C, "aligned": 15.0, "aligned_tight": 20.0, "aligned_bed": 20.0,
-         "capillary_bed": 15.0, "foam": 15.0}
+         "capillary_bed": 15.0, "foam": 15.0, "fibre": 15.0}
 
 # The parser is given this volume: tree and tumour growth never read it, and
 # a mesh grows in a cube of side 3 x voxel_size, the voxel size being set to
@@ -132,7 +138,11 @@ CODE_MODULES = ("library", "main", "vSystem", "libGenerator", "analyseGrammar", 
 # were added in 3.5 (orientation about the frame axis, the polar order and
 # the capillary shares, segment length and spacing, in d_min; empty where a
 # network has no frame axis or no polar sense), and rungs, the number of
-# cross-connections, in 3.6.
+# cross-connections, in 3.6, and from capillary_crossing_density on in 3.8
+# (the capillary crossings per unit section area across the frame axis, per
+# d_min^2, over the growth box's sections; the capillary crossing ratio; the
+# cross-connections per unit capillary length, per d_min; each empty where
+# the frame has no axis).
 INDEX_COLUMNS = ("id", "family", "ratio", "bin", "u", "seed", "file", "generations", "points", "polylines",
                  "tips", "junctions", "cycles", "components", "total_length",
                  "diameter_p50", "diameter_p90", "diameter_p99",
@@ -142,7 +152,8 @@ INDEX_COLUMNS = ("id", "family", "ratio", "bin", "u", "seed", "file", "generatio
                  "nodes_sha256", "program_sha256",
                  "frame_kind", "capillary_order", "larger_order", "capillary_polar_order",
                  "capillary_length_share", "capillary_volume_share", "capillary_segment_median",
-                 "transverse_spacing_median", "rungs")
+                 "transverse_spacing_median", "rungs",
+                 "capillary_crossing_density", "capillary_crossing_ratio", "cross_connections_per_length")
 
 THREAD_VARIABLES = ("OMP_NUM_THREADS", "OPENBLAS_NUM_THREADS", "MKL_NUM_THREADS")
 
@@ -307,8 +318,9 @@ def grow_member(family, ratio, seed, *, d_min=1.0, collision_margin=DEFAULT_COLL
         raise ValueError(str(exc)) from None
     if args.bed is not None:
         # the last point before the first draw; a member always grows at a fixed voxel size
+        # a fibre bed whose settings have no axis runs along the growth direction
         planned = bed.planned_candidates(np.asarray(args.volume, dtype=float) * float(args.voxel_size),
-                                         bed.parse_settings(args.bed), args.d_min)
+                                         bed.parse_settings(args.bed), args.d_min, axis=cli.DEFAULT_DIRECTION)
         if planned > bed_max_candidates:
             raise bed.BedTooLarge(f"planned {planned} candidate edges exceed --bed-max-candidates "
                                   f"{bed_max_candidates}; raise the cap or lower --box-c {family}")
@@ -362,6 +374,19 @@ def _frame_columns(report):
     }
 
 
+def _crossing_columns(report):
+    """The index columns 3.8 appends, measured against the frame axis, None where there is none."""
+    orientation = report["frame_orientation"]
+    spacing = report["transverse_spacing"]
+    cross = report["cross_connections"]
+    return {
+        "capillary_crossing_density": spacing["crossing_density_d"] if spacing else None,
+        "capillary_crossing_ratio": (orientation["capillary"]["crossing_ratio"]
+                                     if orientation and orientation["capillary"] else None),
+        "cross_connections_per_length": cross["per_length_d"] if cross else None,
+    }
+
+
 def describe_member(grown, collision_margin, d_min=1.0):
     """
     The index row of a grown network: counts, lengths and diameter
@@ -373,8 +398,9 @@ def describe_member(grown, collision_margin, d_min=1.0):
     """
     nodes = grown["nodes"]
     edges = grown["edges"]
-    report = describe(nodes, edges, margin=collision_margin, tree=grown["tree"], frame=grown.get("frame"),
-                      d_ref=d_min)
+    # the growth box gives every section area (area_source "growth_box_um"), not the capillaries' bounding box
+    report = describe(nodes, edges, metadata={"growth_box_um": grown.get("growth_box_um")}, margin=collision_margin,
+                      tree=grown["tree"], frame=grown.get("frame"), d_ref=d_min)
     canonical = graph.canonical_columns(nodes)
     vertex_diameter = graph.vertex_diameter(nodes, canonical)
     edge_diameter = (vertex_diameter[edges[0]] + vertex_diameter[edges[1]]) / 2.0 if edges.shape[1] else np.zeros(0)
@@ -403,6 +429,7 @@ def describe_member(grown, collision_margin, d_min=1.0):
     }
     row.update(_frame_columns(report))
     row["rungs"] = len(grown.get("rungs", []))
+    row.update(_crossing_columns(report))
     return row
 
 
@@ -526,6 +553,8 @@ def grow_and_write(task):
             "seconds": seconds, "peak_rss_mb": peak_rss_mb,
             "frame": grown["frame"], "d_min": settings["d_min"], "rungs": grown["rungs"],
         }
+        if "feeder_trees" in grown:
+            metadata["feeder_trees"] = grown["feeder_trees"]
         metadata.update(hashes)
         save_member_archive(os.path.join(directory, member["file"]), grown, metadata)
         row.update({"id": member["id"], "family": member["family"], "ratio": member["ratio"], "bin": member["bin"],
@@ -798,7 +827,7 @@ def main(argv=None):
                 grown = {"nodes": network["nodes"], "edges": network["edges"], "tree": network["tree"],
                          "bridges": record.get("bridges", []), "events": record.get("events", {}),
                          "program": network["program"], "frame": record.get("frame"),
-                         "rungs": record.get("rungs", [])}
+                         "rungs": record.get("rungs", []), "growth_box_um": record.get("growth_box")}
                 row = describe_member(grown, settings["collision_margin"], settings["d_min"])
                 row.update({"id": member["id"], "family": member["family"], "ratio": member["ratio"],
                             "bin": member["bin"], "u": member["u"], "seed": member["seed"], "file": member["file"],

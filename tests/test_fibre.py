@@ -1298,6 +1298,8 @@ class RegistryTests(unittest.TestCase):
         self.assertEqual(bed.EVENT_KEYS[len(BED_EVENT_KEYS_3_7):], EVENT_KEYS_APPENDED)
         self.assertEqual(main.EVENT_KEYS[len(MAIN_EVENT_KEYS_3_7):], EVENT_KEYS_APPENDED)
         self.assertEqual(main.EVENT_KEYS[-len(bed.EVENT_KEYS):], bed.EVENT_KEYS)
+        self.assertEqual(library.INDEX_COLUMNS[len(INDEX_COLUMNS_3_7):],
+                         ("capillary_crossing_density", "capillary_crossing_ratio", "cross_connections_per_length"))
         self.assertEqual(bed.KINDS, ("foam", "fibre"))
         self.assertEqual(bed.LAYOUTS, ("pair", "sheets"))
         self.assertEqual(bed.SEED_OUTCOMES, ("seed", "on_feeders", "overlapping", "outside"))

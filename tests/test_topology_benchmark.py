@@ -54,7 +54,7 @@ COST_RATIO = 25.0
 # one but these) and VSYSTEM_BENCHMARK_RATIOS the ratios, the last one grown
 # for cost only on one seed (default: 4 8 16 25); the cost of a bed against
 # its size (BedCostBenchmark) runs when the families named include foam
-SEPARATE_FAMILIES = ("aligned_bed", "capillary_bed", "foam")
+SEPARATE_FAMILIES = ("aligned_bed", "capillary_bed", "foam", "fibre")
 
 
 def benchmark_families():
@@ -720,7 +720,9 @@ class FamilyBenchmark(unittest.TestCase):
                 self.assertEqual(events.get("rung_sites", 0), 0)
             steps = sum(events.get(key, 0) for key in ("guided_steps", "guidance_onset_steps", "unguided_steps",
                                                         "guidance_undefined_steps"))
-            if main.FAMILIES[self.members[ident]["family"]].get("guidance"):
+            preset = main.FAMILIES[self.members[ident]["family"]]
+            # a fibre bed's sheets layout steers its feeder trees by a plane rule of its own
+            if preset.get("guidance") or (preset.get("bed") or {}).get("layout") == "sheets":
                 self.assertGreater(steps, 0)
                 self.assertGreater(events.get("guided_steps", 0), 0)
             else:

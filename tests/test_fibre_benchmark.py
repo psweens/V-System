@@ -2,9 +2,17 @@
 Benchmark of the fibre bed, bed.py's kind "fibre": a bed alone over its
 settings (B1), and a bed filled between the feeders of a mesh member and of
 a packed forest, with stretched foam beside it on the same feeders (B3);
-with the cost of a dense bed alone in a cube of 256 d_min. The fibre
-family, which grows its own feeders (B2) and a library of it (B4), is not
-part of this file.
+with the cost of a dense bed alone in a cube of 256 d_min; and the fibre
+family's library members, which grow their own feeder sheets (B2). The
+projection of a library of 2000 fibre members (B4) is
+tests/test_topology_benchmark's library projection run on the family
+alone:
+    VSYSTEM_SLOW_TESTS=1 VSYSTEM_BENCHMARK_FAMILIES=fibre \\
+        nice python -m unittest tests.test_topology_benchmark
+which grows members at R 4, 8 and 16 (seeds 1-3) and 25 (seed 1), fits
+their seconds, archive bytes and peak RSS as power laws in R, and sums them
+over a planned library of 2000 over the default ratio range, with the
+effective sample size under library.library_weights.
 
 Slow: every run is a bed.build call of seconds to minutes, so the benchmark
 runs only with VSYSTEM_SLOW_TESTS=1. Each bed is built and described in a
@@ -33,8 +41,8 @@ Run from the repository root, under nice, with
 which runs every block but the cost case. The blocks run in parts:
     VSYSTEM_FIBRE_BLOCKS    the blocks, comma-separated: grid, sway, links,
                             persistence, run, dense (B1); member, foam,
-                            forest (B3); cost256. Default: every block but
-                            cost256. A block may name its own seeds after
+                            forest (B3); cost256; family (B2). Default:
+                            every block but cost256. A block may name its own seeds after
                             "@", ranges with "-" and lists with "+":
                             dense@1, member@1+3, grid@1-3.
     VSYSTEM_FIBRE_SEEDS     the seeds of every block that names none,
@@ -120,6 +128,7 @@ import sys
 import time
 import traceback
 import unittest
+from unittest import mock
 
 import numpy as np
 
@@ -137,7 +146,8 @@ from guidance import unguided_frame  # noqa: E402
 # the checks of the fibre tests and the helpers of the other benchmarks, by name only, so that no test class
 # of theirs is collected here
 from tests.test_fibre import (D_MIN, FIBRE, MARGIN, build_case, check_laws, f9_holds_by_condition,  # noqa: E402
-                              interior_count, lane_edge_mask, link_edge_mask, vertex_points)
+                              interior_count, knots_on_feeders, lane_edge_mask, link_edge_mask, vertex_points)
+from tests.test_fibre_family import sheet_rms  # noqa: E402
 from tests.test_join import build_forest, grow  # noqa: E402
 from tests.test_topology_benchmark import bed_cube, bed_laws, own_peak_rss_mb, tissue_summary  # noqa: E402
 
@@ -146,7 +156,8 @@ SLOW = unittest.skipUnless(os.environ.get("VSYSTEM_SLOW_TESTS"), "set VSYSTEM_SL
 B1_BLOCKS = ("grid", "sway", "links", "persistence", "run", "dense")
 B3_BLOCKS = ("member", "foam", "forest")
 COST_BLOCKS = ("cost256",)
-BLOCKS = B1_BLOCKS + B3_BLOCKS + COST_BLOCKS
+B2_BLOCKS = ("family",)
+BLOCKS = B1_BLOCKS + B3_BLOCKS + COST_BLOCKS + B2_BLOCKS
 DEFAULT_SEEDS = (1, 2, 3)
 FOREST_SEEDS = (1, 2)
 
@@ -1104,6 +1115,167 @@ class FibreFieldFillBenchmark(_Blocks, unittest.TestCase):
         summaries = self.check_and_record("b3", "forest", entries, B1_LINES + B3_LINES)
         print_summary("B3 packed forest", summaries, SUMMARY_KEYS + ("lane_share_feeders", "lane_share_peeled",
                                                                       "lane_share_islands", "tips_attached"), entries)
+
+
+# B2: the family's members, R by R, the last ratio for cost only on seed 1
+FAMILY_RATIOS = (4.0, 8.0, 16.0)
+FAMILY_COST_RATIO = 25.0
+
+
+def _nearest_venous(case, roles):
+    """
+    The shortest path through the bed from each attached arterial-role tip
+    to the nearest venous-role one (heapq Dijkstra over the kept bed edges,
+    each weighted by its chord), in d_min; None where no venous tip is
+    reached.
+    """
+    import heapq
+    result = case["result"]
+    points = vertex_points(case)
+    n_knots = len(result["knots"])
+    tips = result["tips"].tolist()
+    label = np.asarray(case["feeders"][1])
+    adjacency = {}
+    for a, b in result["edges"].tolist():
+        weight = float(np.linalg.norm(points[a] - points[b]))
+        adjacency.setdefault(a, []).append((b, weight))
+        adjacency.setdefault(b, []).append((a, weight))
+    attached = [n_knots + t for t, column in enumerate(tips) if result["tip_edges"][t] > 0]
+    role = {n_knots + t: roles.get(int(label[column])) for t, column in enumerate(tips)}
+    distance = {v: 0.0 for v in attached if role[v] == "venous"}
+    heap = [(0.0, v) for v in distance]
+    heapq.heapify(heap)
+    while heap:
+        d, v = heapq.heappop(heap)
+        if d > distance.get(v, math.inf):
+            continue
+        for w, weight in adjacency.get(v, []):
+            if d + weight < distance.get(w, math.inf):
+                distance[w] = d + weight
+                heapq.heappush(heap, (d + weight, w))
+    return [distance.get(v) for v in attached if role[v] == "arterial"]
+
+
+def _family_task(task):
+    """
+    B2: one fibre member in a fresh process, library.grow_member timed, its
+    bed.build call kept by a spy (with its stage timings), the bed's laws,
+    B1's items on its own columns and on the whole member, and B2's.
+    """
+    captured = {}
+    real = main.build_bed
+
+    def spy(*args, **kwargs):
+        captured["timings"] = kwargs["timings"] = {}
+        captured["args"], captured["kwargs"] = args, kwargs
+        captured["result"] = real(*args, **kwargs)
+        return captured["result"]
+
+    started = time.perf_counter()
+    with mock.patch.object(main, "build_bed", spy):
+        grown = library.grow_member("fibre", task["ratio"], task["seed"])["grown"]
+    seconds = time.perf_counter() - started
+    peak = own_peak_rss_mb()
+    low, high = (np.asarray(corner, dtype=float) for corner in captured["args"][0])
+    kwargs = captured["kwargs"]
+    feeders = kwargs["feeders"]
+    case = {"label": task["label"], "result": captured["result"], "events": grown["events"],
+            "timings": captured["timings"], "settings": captured["args"][1], "d_min": kwargs["d_min"],
+            "margin": kwargs["collision_margin"], "attempts": kwargs["attempts"], "feeders": feeders,
+            "frame": kwargs["frame"], "domain": (low, high), "extents": high - low, "seed": task["seed"]}
+    result, events, d_min = case["result"], grown["events"], case["d_min"]
+    extents = high - low
+    trees = grown["feeder_trees"]
+    row = {"seconds": seconds, "peak_rss_mb": peak, "sheets": len(trees),
+           "tips_eligible": events["bed_tips"] - events["bed_tips_inside_junction"],
+           "tips_attached": events["bed_tips_attached"], "on_feeders_knots": events["bed_knots_on_feeders"],
+           "walked": events["bed_segments_walked"], "chord": events["bed_segments_chord"],
+           "dropped": events["bed_segments_dropped"], "redraws": events["bed_walk_redraws"]}
+    row.update({f"seconds_{stage}": value for stage, value in captured["timings"].items()})
+    out = {"label": task["label"], "seed": task["seed"], "settings": case["settings"], "laws": _laws_error(case),
+           "events": events, "domain": [low, high]}
+    if task.get("describe", True):
+        n_feeders = np.asarray(feeders[0]).shape[1]
+        bed_nodes = result["nodes"][:, n_feeders:]
+        evd = float(extents.max()) / EVD_DIVISIONS
+        started = time.perf_counter()
+        edges = graph.build(bed_nodes)["edges"]
+        report = describe(bed_nodes, edges, volume=[float(v) for v in extents], frame=result["frame"], d_ref=d_min,
+                          evd_spacing=evd)
+        row["describe_seconds"] = time.perf_counter() - started
+        row.update(descriptor_items(report, extents, d_min))
+        row.update(fibre_items(case, bed_nodes, edges, report))
+        started = time.perf_counter()
+        whole = describe(grown["nodes"], grown["edges"], metadata={"growth_box_um": grown["growth_box_um"]},
+                         frame=grown["frame"], d_ref=d_min, tree=grown["tree"], evd_spacing=evd)
+        row["whole_describe_seconds"] = time.perf_counter() - started
+        row["components"] = whole["components"]
+        row["calibre_length_below_2"] = whole["calibre_shares"]["length"]["below_2"]
+        row["sheet_rms_d"] = [sheet_rms(grown, t["label"], 0, t["sheet"]) / d_min for t in trees]
+        # crossings of the bed's columns per unit section across x, on planes at a distance from the sheets
+        settings = case["settings"]
+        lam = (settings["link_spacing"] or 0.0) * d_min
+        a, b = bed_nodes[:3, :-1], bed_nodes[:3, 1:]
+        finite = np.isfinite(a[0]) & np.isfinite(b[0])
+        x0, x1 = a[0, finite], b[0, finite]
+        area = float(extents[1] * extents[2]) / d_min ** 2
+        half = float(extents[0]) / (2.0 * len(trees))
+        bins = {}
+        for name, offset in (("at_sheet", 0.0), ("lambda_half", lam / 2.0), ("lambda", lam), ("midway", half)):
+            densities = []
+            for t in trees:
+                for c in {t["sheet"] - offset, t["sheet"] + offset}:
+                    if low[0] < c < high[0]:
+                        densities.append(int(np.count_nonzero((x0 < c) != (x1 < c))) / area)
+            bins[name] = float(np.mean(densities)) if densities else None
+        row["crossing_density_by_sheet_distance_d"] = bins
+        # the lanes cut by the feeders, by nearest sheet, and the retraction per cut
+        cut = knots_on_feeders(case)
+        lane = result["knot_lane"]
+        sheets = np.array([t["sheet"] for t in trees])
+        nearest = np.argmin(np.abs(result["knots"][:, 0][:, None] - sheets[None, :]), axis=1)
+        n_lanes = len(result["seeds"])
+        row["lanes_cut_share_by_sheet"] = [len(set(lane[cut & (nearest == k)].tolist())) / n_lanes
+                                           for k in range(len(trees))]
+        runs = int(np.count_nonzero(cut & ~np.concatenate([[False], cut[:-1] & (lane[1:] == lane[:-1])])))
+        planned = float(np.sum(result["lane_extent"][:, 1] - result["lane_extent"][:, 0]))
+        peeled = row.get("lane_share_peeled")
+        row["cuts"] = runs
+        row["retraction_per_cut_d"] = (peeled * planned / runs / d_min) if runs and peeled is not None else None
+        paths = [p / d_min for p in _nearest_venous(case, {t["label"]: t["role"] for t in trees}) if p is not None]
+        row["arterial_to_venous_d"] = ({"n": len(paths), "median": float(np.median(paths)),
+                                        "p10": float(np.percentile(paths, 10)), "p90": float(np.percentile(paths, 90))}
+                                       if paths else None)
+    row["peak_rss_mb_with_describe"] = own_peak_rss_mb()
+    out["row"] = row
+    return _plain(out)
+
+
+@SLOW
+class FibreFamilyBenchmark(_Blocks, unittest.TestCase):
+    """B2: library.grow_member("fibre", R, s) for R 4, 8 and 16 over the block's seeds, and R 25 for cost only."""
+
+    def test_the_family_s_members(self):
+        seeds = self.block_seeds("family")
+        tasks = [{"label": f"fibre member R {ratio:g}", "ratio": ratio, "seed": seed}
+                 for ratio in FAMILY_RATIOS for seed in seeds]
+        tasks.append({"label": f"fibre member R {FAMILY_COST_RATIO:g}, cost only", "ratio": FAMILY_COST_RATIO,
+                      "seed": 1, "describe": False})
+        print(f"\nB2 the family: {len(tasks)} members")
+        rows = []
+        for task in tasks:
+            entry = run_fresh(_family_task, task, run_limit())
+            state = "ok" if "ok" in entry else "timed out" if "timed_out" in entry else "error"
+            print(f"  [{state} in {entry['wall_seconds']:.1f} s] {task['label']} seed {task['seed']}", flush=True)
+            with self.subTest(member=task["label"], seed=task["seed"]):
+                self.assertNotIn("error", entry, entry.get("error"))
+                if "ok" in entry:
+                    self.assertIsNone(entry["ok"]["laws"])
+                    row = entry["ok"]["row"]
+                    print("    " + " ".join(f"{k}={_fmt(v) if isinstance(v, float) else v}"
+                                            for k, v in row.items() if not k.startswith("seconds_")), flush=True)
+            rows.append({"task": task, "entry": entry})
+        _record("b2", "family", {f"{r['task']['label']} s{r['task']['seed']}": r["entry"] for r in rows})
 
 
 @SLOW
