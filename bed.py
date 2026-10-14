@@ -6,7 +6,10 @@ islands, walked as persistent segments, and attached to the tips of two
 feeder trees by bitwise end columns. States its rules, its draws
 (sub-streams [seed, 7, k]) and its laws. Every decision is computed
 elementwise, never through BLAS, so that seeds, candidates and the greedy
-pass do not depend on the kernel. Python 3.9 compatible.
+pass do not depend on the kernel. Python 3.9 compatible. The kind "foam"
+(the default) is described first; the kind "fibre", whose capillaries run
+along an axis in lanes, after it, with its own rules (F0-F8), laws and
+draws.
 
 Units. Lengths are in grammar units. With d_min the unit of the settings,
 the hard core is h = spacing d_min, the bed vessel diameter is
@@ -159,26 +162,188 @@ elementwise; never through @, np.dot, np.einsum, np.inner, np.matmul or a
 one-dimensional np.linalg.norm, whose last bit depends on the BLAS kernel.
 The walk and the feeder test stay kernel-bound through bridge_path, as the
 anastomosis bridges are.
+
+The fibre bed (kind "fibre"). Capillaries that run nearly parallel to an
+axis a, with short cross-connections between neighbours: its density
+across a is set by a two-dimensional hard core, its alignment by a
+transverse sway and its cross-connections by a rate of their own, each
+independently of the others. Its settings are FIBRE_SETTING_KEYS, with
+h = spacing d_min, d = diameter d_min, T = d + margin, l = knot d_min,
+sigma = sway d_min, w = (h - T) / 2 and lambda = link_spacing d_min; the
+domain (low, high) is inset by d / 2 to I, of centre o.
+
+F0. Axis and plane basis. a is the settings' axis, else frame["axis"] when
+the frame's kind is "axis", else frame["grow_direction"], normalised unless
+already unit (a bed with neither an axis nor a frame is refused); on main's
+pair layout the frame is unguided, so a runs along the growth direction.
+With e_j the coordinate axis of the smallest |a_j| (the lowest j on ties),
+e1 = unit(e_j - (e_j . a) a) and e2 = a x e1, each component written out;
+(e1, e2) only place the lanes.
+
+F1. Lanes (sub-stream 4). Hard-core random sequential addition places
+N = floor(density A / h^2) lane points in the plane through o
+perpendicular to a, A = |a_x| Y'Z' + |a_y| X'Z' + |a_z| X'Y' the area of I
+projected along a (X', Y', Z' the extents less d), known before anything
+is drawn (planned_seeds). A proposal is p = o + x e1 + y e2 with (x, y)
+uniform over the bounding rectangle of I's corners projected onto (e1, e2)
+about o, drawn as rng.random((RSA_BLOCK, 2)). Its line p + t a is clipped
+to I by the slab rule, elementwise (a coordinate with a_j = 0 needs p_j
+strictly inside); it is "outside" when the interval (t0, t1) is empty or
+of zero length (tested first), "overlapping" when p lies strictly within h
+of an accepted lane point, and accepted otherwise, sequentially as for the
+seeds, until N stand. For a coordinate axis the rectangle is I's
+cross-section. After ceil(RSA_PROPOSAL_CAP x rectangle area / h^2)
+proposals short of N, SeedsNotPlaced is raised; nothing is shrunk.
+
+F2. Knots (sub-stream 5). phi = rng.random(N) is drawn once. Lane i has a
+boundary knot at t0 and one at t1, on the faces of I, each coordinate of a
+face it meets written exactly, and interior knots at t = t0 + (phi_i + k) l
+for every integer k with t0 + l / 2 <= t <= t1 - l / 2; M is their number
+over the lanes. Then xi = rng.standard_normal((M, 2)) in lane order, then t
+order, and an interior knot stands at p + t a + u, u = sigma (xi_1 e1 +
+xi_2 e2) scaled radially to w when |u| > w. Interior knots may stand up to
+w outside I, as walked chains may. Every lane chord therefore lies within
+w of its lane's line: two lanes' chords stand at least h - 2 w = T apart,
+two non-adjacent chords of one lane at least l > T apart along a, and every
+lane chord lies within theta_max = atan(2 w / l) of a. The knots are the
+bed's vertices, lane by lane in increasing t, then the tips.
+
+F3. Feeders. Tips and stubs are foam's. A knot strictly within
+r_f + d / 2 + margin of a feeder column is "on feeders" and removed, and
+the lane edges at it are not candidates.
+
+F4. Breaks (sub-stream 7, only when run is not null). Lane by lane, gaps
+rng.exponential(run d_min), one call at a time, are summed from t0 until
+the sum passes t1; each break removes the lane edge whose interval
+[t_k, t_k+1) holds it, counted once per edge and only for an edge whose two
+knots stand.
+
+F5. Link sites (sub-stream 6, only when link_spacing is not null and M > 0).
+u = rng.random(M), one per interior knot, on-feeder knots included: knot k
+is a site when u_k < q = l / (2 lambda), so that link ends per unit lane
+length are planned at 1 / lambda. Then v = rng.random(n_sites), one per
+site in site order. The neighbours of lane i are the lanes j != i whose
+points lie strictly within link_reach h of its own (two-dimensional, the
+points lying in one plane), whose extent holds the site's t and that hold
+an interior knot, in increasing j; on each, the partner knot is that
+lane's interior knot nearest in t (the lower t on ties), so that a link
+always joins two interior knots. A neighbour is feasible when the link to
+its partner knot clears max(min_angle, KIN_ANGLE_DEG) at both ends against
+the lane-edge candidates there (F4's, those cut or broken left out): with
+e the link's unit direction from its lower knot id to its higher, as the
+greedy pass forms it, and u the direction of a lane-edge candidate at an
+end, no u . e at the lower end and no u . (-e) at the higher end is above
+min(cos(min_angle), cos(KIN_ANGLE_DEG)), in the greedy pass's arithmetic,
+so that a candidate link is never refused by the angle or at a shared end
+against a lane edge. The partner lane is feasible[floor(v count)] (at
+most count - 1), the feasible neighbours in increasing j. A link is the
+chord from the site to its partner: its transverse length is at least T
+(h at sway 0) and, away from the lane ends, its axial offset at most l /
+2. A site without a neighbour is "no partner"; one whose neighbours are
+none of them feasible "angle"; one whose own or partner knot is on feeders
+"on feeders"; every other is a link candidate. The sites and the "no
+partner" outcomes do not depend on the sway; the feasibility does.
+
+F6. Candidates and the greedy pass. In processing order: the lane edges,
+lane by lane in increasing t; the tip edges, every pair of an eligible tip
+and a standing knot with chord < reach h, ranked by chord (1 + jitter u),
+u from sub-stream 8 (created only when jitter > 0 and a pair exists), in
+foam's np.lexsort((j, i, key)) order; the links, in site order. Each goes
+through foam's greedy pass and rules: the degree cap (3 at a knot,
+tip_edges at a tip), the angle (the feeder's inward direction included at
+a tip), the girth and the clearance (the kin angle at a shared end, chord
+to chord at least T, and pointwise against the feeders).
+
+F7. Pruning. _prune peels every knot of at most one alive edge but the
+boundary knots, until none is left, tips never peeled; with feeders every
+component holding no tip is an island and removed, the boundary knots
+anchoring none. After each prune (the first, and each after a dropped
+chain) every boundary knot left with no alive edge goes, counted in
+bed_knots_dead_end, or in bed_knots_island when its component went as an
+island. A lane cut by a feeder, a break or a refusal therefore retracts to
+its last junction, and a break deletes the lane between the two junctions
+about it; without links a broken lane goes entirely, which is why run needs
+link_spacing.
+
+F8. Chains, walk and attachment, as foam's: _chains, one bridge_path per
+edge with Catmull-Rom tangents at the interior knots and the chord's at
+the chain's ends, on sub-stream 9; `attempts` redraws, then the stored
+chord, then a drop and peeling again; the lasso rule, BRIDGE labels and
+bitwise columns for the ends and the knots.
+
+Laws of the fibre bed, the counters from bed_proposals_outside on (every
+one 0 for foam). E1-E5 and E7-E9 hold for both kinds, E1 with the outside
+term and E2 as bed_seeds = planned_seeds(high - low, settings, d_min,
+axis=a); F7 replaces E6.
+  F1 bed_proposals = bed_proposals_outside + bed_proposals_overlapping
+     + bed_seeds, bed_proposals_on_feeders 0;
+  F2 bed_seeds = planned_seeds, the lanes;
+  F3 bed_knots = 2 bed_seeds + M, bed_knots_boundary = 2 bed_seeds;
+  F4 bed_knots - bed_seeds = bed_lane_candidates + bed_lane_edges_on_feeders
+     + bed_breaks;
+  F5 bed_link_sites = bed_link_sites_no_partner + bed_link_sites_angle
+     + bed_link_sites_on_feeders + bed_candidates_link, E[bed_link_sites]
+     = q M;
+  F6 bed_candidates = bed_lane_candidates + bed_candidates_tip
+     + bed_candidates_link; bed_lane_edges <= bed_lane_candidates and
+     bed_links <= bed_candidates_link; the tip edges accepted are
+     bed_edges - bed_lane_edges - bed_links;
+  F7 bed_knots = kept knots + bed_knots_on_feeders + bed_knots_dead_end
+     + bed_knots_island, and bed_seeds_dead_end and bed_seeds_island are 0;
+  F8 bed_links_kept <= bed_links;
+  F9 on a bed alone, with h - T <= l tan(90 - max(min_angle, KIN_ANGLE_DEG)
+     / 2 degrees), no lane edge is refused (bed_lane_edges =
+     bed_lane_candidates) and no chain is dropped: lane chords lie within
+     theta_max of a and meet at 180 - 2 theta_max degrees or more, chords
+     of different lanes stand T apart or more (up to rounding at exact
+     equality), and a placed walk was checked against every chord not
+     placed yet, so that every fallback chord is clear.
+The chord law: for untruncated offsets (sigma well below w) the
+length-weighted crossing ratio of the interior lane chords is
+J(beta) = 1 + beta sqrt(pi / 2) exp(1 / (2 beta^2)) erfc(1 / (sqrt 2 beta)),
+beta = sqrt 2 sigma / l (chord_crossing_ratio), the radial cut lowering it
+once sigma nears w. The density law: on a bed alone, without breaks and
+along a coordinate axis, every plane perpendicular to a strictly inside the
+lanes' common extent meets each lane's chord path exactly once, so that
+the lane crossings per unit section area are N over the section,
+whatever the sway or the link rate, and on the chord graph the capillary
+crossings at level c are exactly N plus the kept links with
+min(t_site, t_partner) < c < max(t_site, t_partner).
+
+Draws of the fibre bed. Nothing global; sub-stream k = 4 the lanes, 5 the
+knots' phases and offsets, 6 the link sites and partners, 7 the breaks, 8
+the tip edges' sort key, 9 the walks, each created only when it draws. A
+fibre bed creates none of sub-streams 1-3 and foam none from 4 on.
 """
 import copy
 import dataclasses
 import math
 import numbers
 import time
+import types
 
 import numpy as np
 
 import graph
 from anastomosis import BRIDGE
 from collisions import KIN_REACH
+from guidance import parse_rules
 from spatial import make_index
 from tortuosity import bridge_path
 
-KINDS = ("foam",)                                                      # append-only
+KINDS = ("foam", "fibre")                                              # append-only
+LAYOUTS = ("pair", "sheets")                   # append-only; the feeders main grows, which build ignores
+# foam's settings
 SETTING_KEYS = ("kind", "spacing", "girth", "min_angle", "reach", "diameter", "persistence",
                 "feeder_stop", "tip_edges", "stretch", "density", "jitter", "step")   # append-only
+FIBRE_SETTING_KEYS = ("kind", "spacing", "girth", "min_angle", "reach", "diameter", "persistence", "feeder_stop",
+                      "tip_edges", "density", "jitter", "step", "axis", "knot", "sway", "link_spacing",
+                      "link_reach", "run", "layout", "unit", "sheet_length")          # append-only
+KIND_KEYS = {"foam": SETTING_KEYS, "fibre": FIBRE_SETTING_KEYS}
 
-# The counters the bed reports, appended to main.EVENT_KEYS. Append-only.
+# The counters the bed reports, appended to main.EVENT_KEYS. Append-only:
+# those from bed_proposals_outside on count what a fibre bed does and are 0
+# for foam.
 EVENT_KEYS = ("bed_proposals", "bed_proposals_on_feeders", "bed_proposals_overlapping", "bed_seeds",
               "bed_tips", "bed_tips_inside_junction",
               "bed_candidates", "bed_candidates_tip",
@@ -188,17 +353,40 @@ EVENT_KEYS = ("bed_proposals", "bed_proposals_on_feeders", "bed_proposals_overla
               "bed_seeds_dead_end", "bed_seeds_island",
               "bed_segments", "bed_segments_walked", "bed_segments_chord", "bed_segments_dropped",
               "bed_segments_removed", "bed_walk_redraws",
-              "bed_tips_attached", "bed_tip_edges", "bed_components", "bed_components_one_tree")
+              "bed_tips_attached", "bed_tip_edges", "bed_components", "bed_components_one_tree",
+              "bed_proposals_outside",
+              "bed_knots", "bed_knots_boundary", "bed_knots_on_feeders",
+              "bed_lane_candidates", "bed_lane_edges_on_feeders", "bed_breaks", "bed_lane_edges",
+              "bed_link_sites", "bed_link_sites_no_partner", "bed_link_sites_angle", "bed_link_sites_on_feeders",
+              "bed_candidates_link", "bed_links", "bed_links_kept",
+              "bed_knots_dead_end", "bed_knots_island")
 
-SEED_OUTCOMES = ("seed", "on_feeders", "overlapping")                   # append-only
+SEED_OUTCOMES = ("seed", "on_feeders", "overlapping", "outside")        # append-only
 SEGMENT_OUTCOMES = ("walked", "chord", "dropped")                       # append-only
 RNG_TAG = 7                                    # bed.py's own tag, as join's 3 and the library's 4
-SUBSTREAMS = {"seeds": 1, "order": 2, "walks": 3}   # k of default_rng([seed, RNG_TAG, k])
+# k of default_rng([seed, RNG_TAG, k]): 1-3 foam's, 4-9 fibre's. Append-only.
+SUBSTREAMS = {"seeds": 1, "order": 2, "walks": 3,
+              "lanes": 4, "knots": 5, "links": 6, "breaks": 7, "tip_order": 8, "fibre_walks": 9}
 RSA_PROPOSAL_CAP = 64.0                        # proposals per V_c / h^3 before refusing; part of the rule
 RSA_BLOCK = 4096                               # proposals drawn per call; a performance constant
 RSA_CHUNK = 256                                # acceptance resolved in prefix chunks of a block
 GIRTH_MAX, STRETCH_MAX, STEP_MIN, DENSITY_MAX = 16, 4.0, 0.1, 0.6     # parse bounds
 KIN_ANGLE_DEG = 2.0 * math.degrees(math.asin(1.0 / KIN_REACH))   # 72.06; the shared-end bound
+
+# The defaults of each kind's settings; every value of a fibre bed but its
+# axis and layout is a provisional calibration.
+DEFAULTS = {
+    "foam": {"kind": "foam", "spacing": 7.5, "girth": 8, "min_angle": 60.0, "reach": 2.5, "diameter": 1.0,
+             "persistence": 8.0, "feeder_stop": 2.0, "tip_edges": 2, "stretch": 1.0, "density": 0.5,
+             "jitter": 0.25, "step": 0.5},
+    "fibre": {"kind": "fibre", "spacing": 5.0, "girth": 8, "min_angle": 60.0, "reach": 2.0, "diameter": 1.0,
+              "persistence": 16.0, "feeder_stop": 2.0, "tip_edges": 2, "density": 0.5, "jitter": 0.25,
+              "step": 0.5, "axis": None, "knot": 4.0, "sway": 1.0, "link_spacing": 20.0, "link_reach": 1.75,
+              "run": None, "layout": "pair", "unit": 60.0, "sheet_length": 2.0},
+}
+
+# The unit length of an axis a caller gives is kept bitwise within this of 1.
+_UNIT_TOLERANCE = 1e-12
 
 # Relative widening of a search that only gathers candidates for an exact
 # test, so that rounding in the index's own comparison cannot drop a pair the
@@ -285,12 +473,58 @@ def _real(value, name, test, wording):
     return float(value)
 
 
-def _normalised(settings):
-    """The fields of a BedSettings checked and in their JSON types; ValueError on the first bad one."""
-    kind = settings.kind
+def _kind(kind):
+    """The kind of a spec or of a BedSettings field, foam when left out; ValueError for any other."""
+    if kind is _UNSET:
+        return "foam"
     if not isinstance(kind, str) or kind not in KINDS:
         raise ValueError(f"the bed kind must be one of {KINDS}, got {kind!r}")
-    values = {"kind": str(kind)}
+    return str(kind)
+
+
+def _unknown(key, kind):
+    """The refusal of a setting the kind does not take, naming the kind's settings."""
+    of = "" if kind == "foam" else f" of a {kind} bed"
+    return ValueError(f"unknown bed setting {key!r}; the settings{of} are {', '.join(KIND_KEYS[kind])}")
+
+
+def _unit_axis(value, name):
+    """
+    Three finite numbers, not all zero, as a unit (3,) array: divided by
+    their length through _dist, and kept bitwise when that length is already
+    1 within _UNIT_TOLERANCE.
+    """
+    if isinstance(value, np.ndarray):
+        value = value.tolist()
+    if not isinstance(value, (list, tuple)) or len(value) != 3 or not all(_is_number(v) for v in value):
+        raise ValueError(f"{name} must be three finite numbers, got {value!r}")
+    axis = np.array([float(v) for v in value])
+    with np.errstate(over="ignore", under="ignore"):
+        norm = float(_dist(axis[None, :], np.zeros((1, 3)))[0])
+    if abs(norm - 1.0) <= _UNIT_TOLERANCE:
+        return axis
+    largest = float(np.max(np.abs(axis)))
+    if not largest > 0.0:
+        raise ValueError(f"{name} must not be a zero vector")
+    if not (math.isfinite(norm) and norm > 0.0):
+        # a length that overflows or underflows: the largest component scaled to 1 first
+        axis = axis / largest
+        norm = float(_dist(axis[None, :], np.zeros((1, 3)))[0])
+    return axis / norm
+
+
+def _normalised(settings):
+    """The fields of a BedSettings checked and in their JSON types; ValueError on the first bad one."""
+    kind = _kind(settings.kind)
+    keys = KIND_KEYS[kind]
+    for name in _FIELDS:
+        # None is what an instance holds for a field its kind does not take
+        if name not in keys and getattr(settings, name) not in (_UNSET, None):
+            raise _unknown(name, kind)
+    given = {name: getattr(settings, name) for name in keys}
+    given = {name: DEFAULTS[kind][name] if value is _UNSET else value for name, value in given.items()}
+    settings = types.SimpleNamespace(**given)
+    values = {"kind": kind}
     values["spacing"] = _real(settings.spacing, "spacing", lambda v: v > 0.0, "a positive number (d_min)")
     girth = settings.girth
     if not _is_whole(girth) or not 3 <= girth <= GIRTH_MAX:
@@ -308,45 +542,113 @@ def _normalised(settings):
     if not _is_whole(tip_edges) or tip_edges not in (1, 2):
         raise ValueError(f"the bed tip_edges must be the integer 1 or 2, got {tip_edges!r}")
     values["tip_edges"] = int(tip_edges)
-    values["stretch"] = _real(settings.stretch, "stretch", lambda v: 1.0 <= v <= STRETCH_MAX,
-                              f"a number in [1, {STRETCH_MAX:g}]")
+    if kind == "foam":
+        values["stretch"] = _real(settings.stretch, "stretch", lambda v: 1.0 <= v <= STRETCH_MAX,
+                                  f"a number in [1, {STRETCH_MAX:g}]")
     values["density"] = _real(settings.density, "density", lambda v: 0.0 < v <= DENSITY_MAX,
-                              f"a number in (0, {DENSITY_MAX:g}] (rho h^3)")
+                              f"a number in (0, {DENSITY_MAX:g}] " + ("(rho h^3)" if kind == "foam" else "(rho h^2)"))
     values["jitter"] = _real(settings.jitter, "jitter", lambda v: v >= 0.0, "a non-negative number")
     values["step"] = _real(settings.step, "step", lambda v: v >= STEP_MIN,
                            f"a number of at least {STEP_MIN:g} (bed diameters)")
+    if kind == "fibre":
+        values.update(_normalised_fibre(settings, values))
     return values
+
+
+def _normalised_fibre(settings, values):
+    """The fields only a fibre bed takes, checked in FIBRE_SETTING_KEYS order after the shared ones in `values`."""
+    out = {}
+    axis = settings.axis
+    out["axis"] = None if axis is None else [float(v) for v in _unit_axis(axis, "the bed axis")]
+    least = values["step"] * values["diameter"]
+    out["knot"] = _real(settings.knot, "knot", lambda v: v >= least,
+                        f"a number of at least step x diameter, {least:g} (d_min)")
+    out["sway"] = _real(settings.sway, "sway", lambda v: v >= 0.0, "a non-negative number (d_min)")
+    if settings.link_spacing is None:
+        out["link_spacing"] = None
+    else:
+        out["link_spacing"] = _real(settings.link_spacing, "link_spacing", lambda v: v >= out["knot"] / 2.0,
+                                    f"null or a number of at least knot / 2, {out['knot'] / 2.0:g} (d_min)")
+    out["link_reach"] = _real(settings.link_reach, "link_reach", lambda v: v > 1.0, "a number above 1 (spacings)")
+    if settings.run is None:
+        out["run"] = None
+    else:
+        out["run"] = _real(settings.run, "run", lambda v: v > 0.0, "null or a positive number (d_min)")
+        if out["link_spacing"] is None:
+            raise ValueError("the bed run needs link_spacing: without cross-connections every broken lane "
+                             "is peeled away entirely")
+    layout = settings.layout
+    if not isinstance(layout, str) or layout not in LAYOUTS:
+        raise ValueError(f"the bed layout must be one of {LAYOUTS}, got {layout!r}")
+    out["layout"] = str(layout)
+    out["unit"] = _real(settings.unit, "unit", lambda v: v > 0.0, "a positive number (d_min)")
+    out["sheet_length"] = _real(settings.sheet_length, "sheet_length", lambda v: v > 0.0,
+                                "a positive number (local diameters)")
+    rule = {"below": None, "field": "plane", "normal": out["axis"] or [1.0, 0.0, 0.0],
+            "length": out["sheet_length"], "onset": 0.0, "bank": False}
+    try:
+        parse_rules([rule], None)
+    except ValueError as error:
+        raise ValueError(f"the bed sheet_length is refused by the feeders' plane rule: {error}")
+    return out
+
+
+class _Unset:
+    """The default of every BedSettings field: the kind's own default (DEFAULTS), or none for a key it lacks."""
+
+    def __repr__(self):
+        return "<the kind's default>"
+
+
+_UNSET = _Unset()
 
 
 @dataclasses.dataclass(frozen=True)
 class BedSettings:
     """
     The settings of an explicit bed, checked when made: every instance is
-    valid, with its numbers as floats and girth and tip_edges as ints.
+    valid, with its numbers as floats and girth and tip_edges as ints. A
+    field left out takes the default of the bed's kind (DEFAULTS); a field
+    the kind does not take (KIND_KEYS) is refused when given and None
+    otherwise, so that BedSettings(kind="fibre") equals
+    BedSettings.parse({"kind": "fibre"}).
     """
-    kind: str = "foam"
-    spacing: float = 7.5        # hard-core distance of the seeds, d_min
-    girth: int = 8              # shortest cycle allowed, in bed-graph edges
-    min_angle: float = 60.0     # smallest angle between two edges at a vertex, degrees
-    reach: float = 2.5          # longest candidate edge, in spacings (compressed metric)
-    diameter: float = 1.0       # bed vessel diameter, d_min
-    persistence: float = 8.0    # walk persistence, bed diameters
-    feeder_stop: float = 2.0    # the feeders' grammar stops below feeder_stop x d_min
-    tip_edges: int = 2          # most bed edges one feeder tip takes
-    stretch: float = 1.0        # >= 1; seed metric compressed by 1/stretch along the frame axis
-    density: float = 0.5        # target rho h^3 of the seeds
-    jitter: float = 0.25        # sort key = chord (1 + jitter u), u ~ U[0, 1)
-    step: float = 0.5           # walk and chord point spacing, bed diameters
+    kind: str = _UNSET          # "foam" (the default) or "fibre"
+    spacing: float = _UNSET     # hard-core distance of the seeds or the lanes, d_min
+    girth: int = _UNSET         # shortest cycle allowed, in bed-graph edges
+    min_angle: float = _UNSET   # smallest angle between two edges at a vertex, degrees
+    reach: float = _UNSET       # longest candidate edge, in spacings (foam's compressed metric)
+    diameter: float = _UNSET    # bed vessel diameter, d_min
+    persistence: float = _UNSET  # walk persistence, bed diameters
+    feeder_stop: float = _UNSET  # the feeders' grammar stops below feeder_stop x d_min
+    tip_edges: int = _UNSET     # most bed edges one feeder tip takes
+    stretch: float = _UNSET     # foam: >= 1; seed metric compressed by 1/stretch along the frame axis
+    density: float = _UNSET     # target rho h^3 of the seeds (foam), rho h^2 of the lanes (fibre)
+    jitter: float = _UNSET      # sort key = chord (1 + jitter u), u ~ U[0, 1)
+    step: float = _UNSET        # walk and chord point spacing, bed diameters
+    axis: tuple = _UNSET        # fibre: the lanes' axis, unit (a list in as_dict), or None for the frame's
+    knot: float = _UNSET        # fibre: axial spacing of the interior knots, d_min
+    sway: float = _UNSET        # fibre: standard deviation of each transverse knot offset, d_min
+    link_spacing: float = _UNSET  # fibre: mean axial spacing of cross-connection ends, d_min; None for none
+    link_reach: float = _UNSET  # fibre: the lanes a cross-connection may reach, in spacings
+    run: float = _UNSET         # fibre: mean axial distance between lane breaks, d_min; None for none
+    layout: str = _UNSET        # fibre: the feeders main grows, "pair" or "sheets"
+    unit: float = _UNSET        # fibre, sheets: target spacing of the feeder sheets along the axis, d_min
+    sheet_length: float = _UNSET  # fibre, sheets: G of the feeders' plane rule, local diameters
 
     def __post_init__(self):
-        for name, value in _normalised(self).items():
+        values = _normalised(self)
+        for name in _FIELDS:
+            value = values.get(name)
+            if name == "axis" and value is not None:
+                value = tuple(value)            # immutable and hashable; as_dict hands out a list
             object.__setattr__(self, name, value)
 
     @classmethod
     def parse(cls, spec):
         """
-        The settings of a dict (keys from SETTING_KEYS, the rest defaulted) or
-        of a BedSettings. Draws nothing.
+        The settings of a dict (keys from KIND_KEYS[kind], kind foam when left
+        out, the rest defaulted) or of a BedSettings. Draws nothing.
 
         Raises:
             ValueError: for anything else, an unknown key or a value out of
@@ -356,14 +658,21 @@ class BedSettings:
             return cls(**spec.as_dict())
         if not isinstance(spec, dict):
             raise ValueError(f"the bed settings must be a dict or BedSettings, got {type(spec).__name__}")
-        unknown = [key for key in spec if key not in SETTING_KEYS]
+        kind = _kind(spec.get("kind", _UNSET))
+        unknown = [key for key in spec if key not in KIND_KEYS[kind]]
         if unknown:
-            raise ValueError(f"unknown bed setting {unknown[0]!r}; the settings are {', '.join(SETTING_KEYS)}")
+            raise _unknown(unknown[0], kind)
         return cls(**spec)
 
     def as_dict(self):
-        """JSON-ready, keys in SETTING_KEYS order, girth and tip_edges as int."""
-        return {key: getattr(self, key) for key in SETTING_KEYS}
+        """JSON-ready, keys in KIND_KEYS[kind] order (SETTING_KEYS for foam), girth and tip_edges as int."""
+        values = {key: getattr(self, key) for key in KIND_KEYS[self.kind]}
+        if values.get("axis") is not None:
+            values["axis"] = list(values["axis"])
+        return values
+
+
+_FIELDS = tuple(field.name for field in dataclasses.fields(BedSettings))
 
 
 def parse_settings(spec):
@@ -402,6 +711,9 @@ def check_settings(settings, *, d_min, collision_margin):
     if not parsed.spacing * d_min > parsed.diameter * d_min + margin:
         raise ValueError(f"the bed spacing {parsed.spacing:g} d_min must exceed the diameter {parsed.diameter:g} "
                          f"d_min plus the collision margin {margin:g}, or seeds would touch")
+    if parsed.kind == "fibre" and not parsed.knot * d_min > parsed.diameter * d_min + margin:
+        raise ValueError(f"the bed knot {parsed.knot:g} d_min must exceed the diameter {parsed.diameter:g} d_min "
+                         f"plus the collision margin {margin:g}, or a lane's chords would touch")
     return parsed
 
 
@@ -412,30 +724,70 @@ def _extents(extents):
     return [float(v) for v in extents]
 
 
-def planned_seeds(extents, settings, d_min):
+def _planned_axis(parsed, axis):
+    """A fibre bed's axis for its planned counts: the settings' own, else `axis` normalised; refused without both."""
+    if parsed.axis is not None:
+        return np.array(parsed.axis)
+    if axis is None:
+        raise ValueError("a fibre bed whose axis is null needs the axis it will take (the growth direction) "
+                         "to plan its lanes")
+    return _unit_axis(axis, "the planned bed axis")
+
+
+def _section(sides, a):
+    """(A, E): the inset box's area projected along the unit axis a, and its extent along a."""
+    area = abs(a[0]) * sides[1] * sides[2] + abs(a[1]) * sides[0] * sides[2] + abs(a[2]) * sides[0] * sides[1]
+    extent = abs(a[0]) * sides[0] + abs(a[1]) * sides[1] + abs(a[2]) * sides[2]
+    return float(area), float(extent)
+
+
+def planned_seeds(extents, settings, d_min, axis=None):
     """
     The target seed count N_t = floor(density V_c / h^3) of a box of the
     given extents, V_c = prod(extent - d) / stretch; 0 when the inset box is
-    empty. Draws nothing.
+    empty. For a fibre bed the lanes, N = floor(density A / h^2), A the inset
+    box's area projected along the bed axis (the settings' axis, else
+    `axis`, which foam ignores). Draws nothing.
     """
     parsed = BedSettings.parse(settings)
     d_min = _positive_d_min(d_min)
     h = parsed.spacing * d_min
     d = parsed.diameter * d_min
     sides = [side - d for side in _extents(extents)]
+    if parsed.kind == "fibre":
+        a = _planned_axis(parsed, axis)
+        if min(sides) <= 0.0:
+            return 0
+        area, _ = _section(sides, a)
+        return int(math.floor(parsed.density * area / h ** 2))
     if min(sides) <= 0.0:
         return 0
     volume = sides[0] * sides[1] * sides[2]
     return int(math.floor(parsed.density * (volume / parsed.stretch) / h ** 3))
 
 
-def planned_candidates(extents, settings, d_min):
+def planned_candidates(extents, settings, d_min, axis=None):
     """
     The expected seed-pair candidate edges of a box, the guard's count:
-    ceil(N_t density (4 pi / 3) reach^3 / 2). Tips are left out. Draws nothing.
+    ceil(N_t density (4 pi / 3) reach^3 / 2). For a fibre bed, the lane
+    edges at most and the expected link sites, N (ceil(E / l) + 1) +
+    ceil(N ceil(E / l) l / (2 lambda)), E the inset box's extent along the
+    axis (the second term 0 without links). Tips are left out. Draws nothing.
     """
     parsed = BedSettings.parse(settings)
-    n = planned_seeds(extents, parsed, d_min)
+    n = planned_seeds(extents, parsed, d_min, axis=axis)
+    if parsed.kind == "fibre":
+        d_min = float(d_min)
+        sides = [side - parsed.diameter * d_min for side in _extents(extents)]
+        if n == 0:
+            return 0
+        _, extent = _section(sides, _planned_axis(parsed, axis))
+        knot = parsed.knot * d_min
+        intervals = int(math.ceil(extent / knot))
+        links = 0
+        if parsed.link_spacing is not None:
+            links = int(math.ceil(n * intervals * knot / (2.0 * parsed.link_spacing * d_min)))
+        return n * (intervals + 1) + links
     return int(math.ceil(n * parsed.density * (4.0 * math.pi / 3.0) * parsed.reach ** 3 / 2.0))
 
 
@@ -1302,12 +1654,12 @@ def _greedy(points, i, j, order, *, caps, inward, adjacency, girth, min_angle, c
 # Pruning and chains
 
 
-def _prune(n_vertices, edges, alive, is_tip, kept, islands):
+def _prune(n_vertices, edges, alive, is_tip, kept, islands, anchored=None):
     """
     Peels every kept seed with at most one alive edge, until none is left
-    (tips are never peeled), then, when `islands`, removes every component
-    of the alive edges that holds no tip. `alive` and `kept` are updated in
-    place.
+    (tips are never peeled, nor any vertex `anchored` names), then, when
+    `islands`, removes every component of the alive edges that holds no tip.
+    `alive` and `kept` are updated in place.
 
     Args:
         n_vertices (int): bed vertices, seeds then tips.
@@ -1317,6 +1669,9 @@ def _prune(n_vertices, edges, alive, is_tip, kept, islands):
         kept (ndarray): (n_vertices,) bool, the vertices still kept (tips
             stay True).
         islands (bool): whether islands are removed (with feeders).
+        anchored (ndarray or None): (n_vertices,) bool, the vertices exempt
+            from peeling; None is `is_tip`. Only tips anchor a component
+            against the island pass.
 
     Returns:
         dict: "edges_dead_end", "seeds_dead_end", "edges_island",
@@ -1332,7 +1687,8 @@ def _prune(n_vertices, edges, alive, is_tip, kept, islands):
         incident[b].append(e)
         degree[a] += 1
         degree[b] += 1
-    tip = is_tip.tolist() if isinstance(is_tip, np.ndarray) else list(is_tip)
+    exempt = is_tip if anchored is None else anchored
+    tip = exempt.tolist() if isinstance(exempt, np.ndarray) else list(exempt)
     queue = [v for v in np.flatnonzero(kept).tolist() if not tip[v] and degree[v] <= 1]
     queued = set(queue)
     alive_list = alive.tolist()
@@ -1488,15 +1844,56 @@ def _grow_axis(frame):
     return axis
 
 
-def frame_record(frame, settings):
+def _fibre_axis(parsed, frame):
     """
-    The frame record of a network with this bed: the input unchanged at
-    stretch 1; at stretch above 1 kind "axis", axis the unit axis the seed
-    metric is compressed along (the frame's grow_direction, normalised
+    F0's axis a of a fibre bed, a unit (3,) array: the settings' axis, else
+    frame["axis"] when the frame's kind is "axis", else
+    frame["grow_direction"], each normalised unless already unit; refused
+    when the settings have no axis and there is no frame.
+    """
+    if parsed.axis is not None:
+        return np.array(parsed.axis)
+    if frame is None:
+        raise ValueError("a fibre bed without an axis of its own needs the network's frame, whose axis or "
+                         "grow_direction it runs along")
+    if not isinstance(frame, dict) or not (frame.get("kind") == "axis" or "grow_direction" in frame):
+        raise ValueError("a fibre bed without an axis of its own needs the network's frame with its axis or "
+                         "grow_direction")
+    if frame.get("kind") == "axis":
+        return _unit_axis(frame.get("axis"), "the frame's axis")
+    return _unit_axis(frame["grow_direction"], "the frame's grow_direction")
+
+
+def frame_record(frame, settings, domain=None):
+    """
+    The frame record of a network with this bed. Foam: the input unchanged
+    at stretch 1; at stretch above 1 kind "axis", axis the unit axis the
+    seed metric is compressed along (the frame's grow_direction, normalised
     unless already unit), sense "nematic", tree_senses and normal None,
-    rules [], the other fields kept.
+    rules [], the other fields kept. Fibre: the same with axis F0's a; with
+    no frame (a settings axis then being needed), the record is built about
+    the domain (low, high): frame_version 1, kind "axis", axis a, sense
+    "nematic", tree_senses and normal None, origin the domain's centre,
+    grow_direction [0, 1, 0], grow_perpendicular [0, 0, 1] (the domain's own
+    axes, main's defaults) and rules [].
     """
     parsed = BedSettings.parse(settings)
+    if parsed.kind == "fibre":
+        if frame is not None and not isinstance(frame, dict):
+            raise ValueError(f"the frame must be a frame record (a dict) or None, got {type(frame).__name__}")
+        axis = [float(v) for v in _fibre_axis(parsed, frame)]
+        if frame is None:
+            if domain is None:
+                raise ValueError("a fibre bed's frame record without a frame needs the domain, whose centre is "
+                                 "its origin")
+            low, high = (np.asarray(corner, dtype=float) for corner in domain)
+            return {"frame_version": 1, "kind": "axis", "axis": axis, "sense": "nematic", "tree_senses": None,
+                    "normal": None, "origin": [float(v) for v in (low + high) / 2.0],
+                    "grow_direction": [0.0, 1.0, 0.0], "grow_perpendicular": [0.0, 0.0, 1.0], "rules": []}
+        record = copy.deepcopy(frame)
+        record.update({"kind": "axis", "axis": axis, "sense": "nematic", "tree_senses": None, "normal": None,
+                       "rules": []})
+        return record
     if parsed.stretch == 1.0:
         return frame
     axis = _grow_axis(frame)
@@ -1504,6 +1901,404 @@ def frame_record(frame, settings):
     record.update({"kind": "axis", "axis": [float(v) for v in axis], "sense": "nematic",
                    "tree_senses": None, "normal": None, "rules": []})
     return record
+
+
+# --------------------------------------------------------------------------
+# The fibre bed: lanes, knots, breaks and links
+
+
+def chord_crossing_ratio(settings):
+    """
+    The chord law's J(beta), the length-weighted crossing ratio 1 / <|t . a|>
+    of interior lane chords whose two transverse offsets are untruncated
+    Gaussians: J = 1 + beta sqrt(pi / 2) exp(1 / (2 beta^2))
+    erfc(1 / (sqrt 2 beta)), beta = sqrt 2 sway / knot. 1 at sway 0; for
+    beta below 0.05 the series 1 + beta^2 - beta^4 + 3 beta^6 - 15 beta^8,
+    where the closed form loses its precision and then overflows. The radial
+    cut at w lowers the measured ratio once the sway nears w.
+    """
+    parsed = BedSettings.parse(settings)
+    if parsed.kind != "fibre":
+        raise ValueError("the chord law is a fibre bed's")
+    beta = math.sqrt(2.0) * parsed.sway / parsed.knot
+    if beta == 0.0:
+        return 1.0
+    if beta < 0.05:
+        b2 = beta * beta
+        return 1.0 + b2 - b2 ** 2 + 3.0 * b2 ** 3 - 15.0 * b2 ** 4
+    return 1.0 + beta * math.sqrt(math.pi / 2.0) * math.exp(1.0 / (2.0 * beta * beta)) \
+        * math.erfc(1.0 / (math.sqrt(2.0) * beta))
+
+
+def _plane_basis(axis):
+    """
+    F0's (e1, e2): e_j the coordinate axis with the smallest |a_j| (the
+    lowest j on ties), e1 = unit(e_j - (e_j . a) a) and e2 = a x e1, each
+    component written out.
+    """
+    a = np.asarray(axis, dtype=float)
+    j = min(range(3), key=lambda k: (abs(float(a[k])), k))
+    e = np.zeros(3)
+    e[j] = 1.0
+    e1 = e - a[j] * a
+    e1 = e1 / _dist(e1[None, :], np.zeros((1, 3)))[0]
+    e2 = np.array([a[1] * e1[2] - a[2] * e1[1], a[2] * e1[0] - a[0] * e1[2], a[0] * e1[1] - a[1] * e1[0]])
+    return e1, e2
+
+
+def _slabs(P, axis, low, high):
+    """
+    The lower and upper slab bounds of the lines P + t a in the box [low,
+    high], (m, 3) each, NaN along a coordinate with a_j = 0.
+    """
+    lower = np.full(P.shape, np.nan)
+    upper = np.full(P.shape, np.nan)
+    for j in range(3):
+        if axis[j] == 0.0:
+            continue
+        lo = (low[j] - P[:, j]) / axis[j]
+        hi = (high[j] - P[:, j]) / axis[j]
+        if axis[j] < 0.0:
+            lo, hi = hi, lo
+        lower[:, j], upper[:, j] = lo, hi
+    return lower, upper
+
+
+def _clip(P, axis, low, high):
+    """
+    The interval (t0, t1) of each line P + t a inside the box [low, high]
+    by the slab rule, elementwise, and whether it is a proper interval: a
+    coordinate along which a_j = 0 needs P strictly inside, and t1 > t0.
+    """
+    lower, upper = _slabs(P, axis, low, high)
+    inside = np.ones(len(P), dtype=bool)
+    t0 = np.full(len(P), -np.inf)
+    t1 = np.full(len(P), np.inf)
+    for j in range(3):
+        if axis[j] == 0.0:
+            inside &= (P[:, j] > low[j]) & (P[:, j] < high[j])
+        else:
+            t0 = np.maximum(t0, lower[:, j])
+            t1 = np.minimum(t1, upper[:, j])
+    inside &= t1 > t0
+    return t0, t1, inside
+
+
+def _rectangle(low, high, centre, e1, e2):
+    """The bounding rectangle (u_lo, u_hi, v_lo, v_hi) of the box's corners projected onto (e1, e2) about centre."""
+    corners = np.array([[x, y, z] for x in (low[0], high[0]) for y in (low[1], high[1]) for z in (low[2], high[2])])
+    u = _dot3(corners - centre, e1)
+    v = _dot3(corners - centre, e2)
+    return float(u.min()), float(u.max()), float(v.min()), float(v.max())
+
+
+def place_lanes(rng, low, high, axis, *, spacing, count, block=RSA_BLOCK, cap=None):
+    """
+    F1: hard-core random sequential addition of the lanes' points in the
+    plane through the centre o of the box [low, high] perpendicular to the
+    unit axis a.
+
+    Proposal i is o + x e1 + y e2, (e1, e2) F0's plane basis, with (x, y)
+    uniform over the bounding rectangle of the box's corners projected onto
+    (e1, e2) about o, from the doubles 2i and 2i + 1 of `rng`, drawn as
+    rng.random((block, 2)) per block. Its line through the box (_clip) is
+    tested first: an empty interval or one of zero length is "outside"
+    (outcome 3); a proposal strictly within `spacing` of an accepted point
+    (_dist) is "overlapping" (outcome 2); every other is accepted (outcome
+    0), until `count` points stand. The answer is the one a loop over the
+    proposals one at a time gives, whatever `block`.
+
+    Args:
+        rng (numpy.random.Generator): the lane stream.
+        low, high (sequence): the corners of the box, the inset domain.
+        axis (sequence): the unit axis a.
+        spacing (float): the hard core h.
+        count (int): the number of lanes; 0 draws nothing.
+        block (int): proposals drawn per call.
+        cap (int or None): proposals considered before refusing; None is
+            ceil(RSA_PROPOSAL_CAP x rectangle area / h^2).
+
+    Returns:
+        tuple: (points (count, 3) in acceptance order, extents (count, 2)
+        each lane's (t0, t1), outcomes (considered,) int8 indices into
+        SEED_OUTCOMES).
+
+    Raises:
+        SeedsNotPlaced: when `cap` proposals are considered short of `count`.
+    """
+    low = np.asarray(low, dtype=float)
+    high = np.asarray(high, dtype=float)
+    if low.shape != (3,) or high.shape != (3,) or not (np.all(np.isfinite(low)) and np.all(np.isfinite(high))) \
+            or not np.all(high > low):
+        raise ValueError("place_lanes needs finite corners with high > low")
+    axis = _unit_axis(axis, "the lane axis")
+    h = float(spacing)
+    if not h > 0.0 or not math.isfinite(h):
+        raise ValueError(f"the spacing must be a positive number, got {spacing!r}")
+    if not _is_whole(count) or count < 0:
+        raise ValueError(f"the lane count must be a non-negative integer, got {count!r}")
+    if not _is_whole(block) or block < 1:
+        raise ValueError(f"the block must be a positive integer, got {block!r}")
+    count, block = int(count), int(block)
+    points = np.empty((count, 3))
+    extents = np.empty((count, 2))
+    if count == 0:
+        return points, extents, np.zeros(0, dtype=np.int8)
+    centre = (low + high) / 2.0
+    e1, e2 = _plane_basis(axis)
+    u_lo, u_hi, v_lo, v_hi = _rectangle(low, high, centre, e1, e2)
+    if cap is None:
+        cap = int(math.ceil(RSA_PROPOSAL_CAP * (u_hi - u_lo) * (v_hi - v_lo) / h ** 2))
+    cap = int(cap)
+
+    index = make_index("grid", cell_size=h)         # accepted points; grows
+    accepted = 0
+    considered = 0
+    outcomes = []
+    while accepted < count:
+        if considered >= cap:
+            raise SeedsNotPlaced(f"the bed placed only {accepted} of {count} lanes within {cap} proposals")
+        R = rng.random((block, 2))
+        usable = min(block, cap - considered)
+        R = R[:usable]
+        x = u_lo + (u_hi - u_lo) * R[:, 0]
+        y = v_lo + (v_hi - v_lo) * R[:, 1]
+        P = centre + x[:, None] * e1 + y[:, None] * e2
+        t0, t1, inside = _clip(P, axis, low, high)
+        out = np.full(usable, 2, dtype=np.int8)
+        out[~inside] = 3
+        stop = usable
+        for start in range(0, usable, RSA_CHUNK):
+            end = min(start + RSA_CHUNK, usable)
+            chosen = _resolve_chunk(P[start:end], inside[start:end], index, points[:accepted], h)
+            need = count - accepted
+            if chosen.size >= need:
+                chosen = chosen[:need]
+                stop = start + int(chosen[-1]) + 1
+            rows = start + chosen
+            out[rows] = 0
+            points[accepted:accepted + rows.size] = P[rows]
+            extents[accepted:accepted + rows.size, 0] = t0[rows]
+            extents[accepted:accepted + rows.size, 1] = t1[rows]
+            if rows.size:
+                index.add(P[rows], 0.0, np.arange(accepted, accepted + rows.size))
+            accepted += rows.size
+            if accepted == count:
+                break
+        outcomes.append(out[:stop])
+        considered += stop
+    return points, extents, np.concatenate(outcomes)
+
+
+def _boundary_knots(points, extents, axis, low, high):
+    """
+    Each lane's two boundary knots, p + t0 a and p + t1 a, with the
+    coordinate of each face the lane meets written exactly (every coordinate
+    whose slab bound is the interval's end).
+    """
+    lower, upper = _slabs(points, axis, low, high)
+    first = points + extents[:, 0:1] * axis
+    last = points + extents[:, 1:2] * axis
+    for j in range(3):
+        if axis[j] == 0.0:
+            continue
+        near, far = (low[j], high[j]) if axis[j] > 0.0 else (high[j], low[j])
+        first[lower[:, j] == extents[:, 0], j] = near
+        last[upper[:, j] == extents[:, 1], j] = far
+    return first, last
+
+
+def _knots(rng, points, extents, axis, e1, e2, low, high, *, knot, sway, w):
+    """
+    F2: the knots of every lane, lane by lane in increasing t: its boundary
+    knot at t0, its interior knots at t = t0 + (phi_i + k) knot for every
+    integer k with t0 + knot / 2 <= t <= t1 - knot / 2, and its boundary
+    knot at t1. phi = rng.random(N) is drawn once, then xi =
+    rng.standard_normal((M, 2)) for the M interior knots in that order; an
+    interior knot stands at p + t a + u, u = sway (xi_1 e1 + xi_2 e2) scaled
+    radially to w when |u| > w.
+
+    Returns:
+        tuple: (knots (K, 3), lane (K,) int64, t (K,), boundary (K,) bool).
+    """
+    n = len(points)
+    phi = rng.random(n)
+    lanes, ts, boundary = [], [], []
+    for i, ((t0, t1), offset) in enumerate(zip(extents.tolist(), phi.tolist())):
+        k = np.arange(int(math.floor((t1 - t0) / knot)) + 2)
+        t = t0 + (offset + k) * knot
+        t = t[(t >= t0 + knot / 2.0) & (t <= t1 - knot / 2.0)]
+        lanes.append(np.full(t.size + 2, i, dtype=np.int64))
+        ts.append(np.concatenate([[t0], t, [t1]]))
+        flags = np.zeros(t.size + 2, dtype=bool)
+        flags[[0, -1]] = True
+        boundary.append(flags)
+    lane = np.concatenate(lanes) if lanes else np.zeros(0, dtype=np.int64)
+    t = np.concatenate(ts) if ts else np.zeros(0)
+    boundary = np.concatenate(boundary) if boundary else np.zeros(0, dtype=bool)
+    interior = np.flatnonzero(~boundary)
+    xi = rng.standard_normal((interior.size, 2))
+    offset = sway * (xi[:, 0:1] * e1 + xi[:, 1:2] * e2)
+    length = _dist(offset, np.zeros((1, 3)))
+    wide = length > w
+    offset[wide] = offset[wide] * (w / length[wide])[:, None]
+    knots = np.empty((t.size, 3))
+    knots[interior] = points[lane[interior]] + t[interior, None] * axis + offset
+    first, last = _boundary_knots(points, extents, axis, low, high)
+    starts = np.flatnonzero(boundary & np.concatenate([[True], lane[1:] != lane[:-1]]))
+    ends = np.flatnonzero(boundary & np.concatenate([lane[1:] != lane[:-1], [True]]))
+    knots[starts] = first
+    knots[ends] = last
+    return knots, lane, t, boundary
+
+
+def _breaks(rng, extents, run):
+    """
+    F4: each lane's breaks, lane by lane: gaps rng.exponential(run), one
+    call at a time, summed from t0 until the sum passes t1.
+    """
+    breaks = []
+    for t0, t1 in extents.tolist():
+        at, here = t0, []
+        while True:
+            at += float(rng.exponential(run))
+            if at > t1:
+                break
+            here.append(at)
+        breaks.append(here)
+    return breaks
+
+
+def _neighbour_lanes(points, reach):
+    """For every lane, the other lanes whose points lie strictly within `reach` of its own (_dist), in increasing order."""
+    n = len(points)
+    half = reach / 2.0
+    index = make_index("grid", cell_size=max(half, 1e-9), rebuild_every=0)
+    index.add(points, half, np.arange(n))
+    qi, si = index.query(points, half, margin=_WIDEN * reach)
+    i, j = qi, index.tags[si]
+    keep = i != j
+    i, j = i[keep], j[keep]
+    keep = _dist(points[i], points[j]) < reach
+    i, j = i[keep], j[keep]
+    order = np.lexsort((j, i))
+    i, j = i[order], j[order]
+    neighbours = [[] for _ in range(n)]
+    for a, b in zip(i.tolist(), j.tolist()):
+        neighbours[a].append(b)
+    return neighbours
+
+
+def _clear_of_lanes(knots, lane_edges, a, b, min_angle):
+    """
+    F5's feasibility of the links (a, b), elementwise: whether each clears
+    max(min_angle, KIN_ANGLE_DEG) at both ends against the lane-edge
+    candidates `lane_edges` ((E, 2), lower knot first, at most one edge up
+    and one down at a knot), in _greedy's arithmetic: the link's direction
+    e from its lower knot id to its higher, a lane edge's direction +u at
+    its lower knot and -u at its higher, refused where u . e (u . (-e) at
+    the link's higher end) is above min(cos(min_angle), cos(KIN_ANGLE_DEG)).
+    """
+    limit = min(math.cos(math.radians(min_angle)), math.cos(math.radians(KIN_ANGLE_DEG)))
+    n = len(knots)
+    up, down = np.zeros((n, 3)), np.zeros((n, 3))
+    has_up, has_down = np.zeros(n, dtype=bool), np.zeros(n, dtype=bool)
+    if len(lane_edges):
+        unit, _ = _unit_rows(knots[lane_edges[:, 1]] - knots[lane_edges[:, 0]])
+        up[lane_edges[:, 0]], has_up[lane_edges[:, 0]] = unit, True
+        down[lane_edges[:, 1]], has_down[lane_edges[:, 1]] = -unit, True
+    if len(a) == 0:
+        return np.zeros(0, dtype=bool)
+    lo, hi = np.minimum(a, b), np.maximum(a, b)
+    e, _ = _unit_rows(knots[hi] - knots[lo])
+    f = -e
+    refused = ((has_up[lo] & (_dot3(up[lo], e) > limit)) | (has_down[lo] & (_dot3(down[lo], e) > limit))
+               | (has_up[hi] & (_dot3(up[hi], f) > limit)) | (has_down[hi] & (_dot3(down[hi], f) > limit)))
+    return ~refused
+
+
+def _link_sites(rng, lane, t, boundary, extents, points, on_feeders, knots, lane_edges, *, q, reach, min_angle):
+    """
+    F5: one u = rng.random(M) per interior knot, which is a site when u < q;
+    then one v = rng.random(n_sites) per site, in site order. The
+    neighbours are the lanes within `reach` whose extent holds the site's t
+    and that hold an interior knot, each with its interior knot nearest in
+    t (the lower t on ties); the partner lane is feasible[floor(v count)]
+    (at most count - 1) of those whose link clears the lane-edge candidates
+    `lane_edges` at both ends (_clear_of_lanes).
+
+    Returns:
+        dict: "sites" the site knots, "no_partner", "angle" and "on_feeders"
+        the sites refused, and "links" (L, 2) int64 the candidate links
+        (lower knot first), in site order.
+    """
+    interior = np.flatnonzero(~boundary)
+    u = rng.random(interior.size)
+    sites = interior[u < q]
+    v = rng.random(sites.size)
+    n = len(points)
+    by_lane = [[] for _ in range(n)]
+    for k in interior.tolist():
+        by_lane[lane[k]].append(k)
+    lane_t = [t[np.array(members, dtype=np.int64)] for members in by_lane]
+    neighbours = _neighbour_lanes(points, reach)
+    # each site's partner knot on each of its neighbours, site by site
+    first, nearest = [0], []
+    for site in sites.tolist():
+        here = float(t[site])
+        for j in neighbours[lane[site]]:
+            if not by_lane[j] or not extents[j, 0] <= here <= extents[j, 1]:
+                continue
+            along = lane_t[j]
+            at = int(np.searchsorted(along, here))
+            if at == len(along) or (at > 0 and here - along[at - 1] <= along[at] - here):
+                at -= 1
+            nearest.append(by_lane[j][at])
+        first.append(len(nearest))
+    nearest = np.array(nearest, dtype=np.int64)
+    owner = np.repeat(sites, np.diff(first))
+    feasible = _clear_of_lanes(knots, np.asarray(lane_edges, dtype=np.int64).reshape(-1, 2), owner, nearest,
+                               min_angle).tolist()
+    nearest = nearest.tolist()
+    no_partner = angle = on = 0
+    links = []
+    for s, (site, draw) in enumerate(zip(sites.tolist(), v.tolist())):
+        if first[s] == first[s + 1]:
+            no_partner += 1
+            continue
+        kept = [p for p, ok in zip(nearest[first[s]:first[s + 1]], feasible[first[s]:first[s + 1]]) if ok]
+        if not kept:
+            angle += 1
+            continue
+        partner = kept[min(int(draw * len(kept)), len(kept) - 1)]
+        if on_feeders[site] or on_feeders[partner]:
+            on += 1
+            continue
+        links.append((min(site, partner), max(site, partner)))
+    return {"sites": sites, "no_partner": no_partner, "angle": angle, "on_feeders": on,
+            "links": np.array(links, dtype=np.int64).reshape(-1, 2)}
+
+
+def _tip_pairs(knots, standing, tip_points, reach_h, index_kind="grid"):
+    """
+    The tip candidates: every pair of a standing knot and an eligible tip
+    strictly closer than reach_h, as (knot i, tip t) in lexicographic
+    order with their chords.
+    """
+    empty = np.zeros(0, dtype=np.int64)
+    ids = np.flatnonzero(standing)
+    if ids.size == 0 or len(tip_points) == 0:
+        return empty, empty, np.zeros(0)
+    half = reach_h / 2.0
+    index = make_index(index_kind, cell_size=max(half, 1e-9), rebuild_every=0)
+    index.add(knots[ids], half, ids)
+    qi, si = index.query(tip_points, half, margin=_WIDEN * reach_h)
+    i, tip = index.tags[si].astype(np.int64), qi.astype(np.int64)
+    chord = _dist(knots[i], tip_points[tip])
+    keep = chord < reach_h
+    i, tip, chord = i[keep], tip[keep], chord[keep]
+    order = np.lexsort((tip, i))
+    return i[order], tip[order], chord[order]
 
 
 # --------------------------------------------------------------------------
@@ -1538,6 +2333,58 @@ def _feeders(feeders):
     return nodes, labels
 
 
+def _feeder_parts(fnodes, ftree, with_feeders, margin, radius):
+    """
+    What the bed needs of its feeders: (tips, stubs) as _feeder_tips finds
+    them, the tips' points (T, 3) and inward directions, the blocked set
+    (every finite column, radius its vertex radius + the bed radius + the
+    margin) or None, and the feeder segment paths.
+    """
+    if with_feeders and fnodes.shape[1]:
+        built = graph.build(fnodes)
+        tips, stubs = _feeder_tips(fnodes, ftree, margin, built)
+        canonical = built["canonical"]
+        vertex_diameter = graph.vertex_diameter(fnodes, canonical)
+        polylines = graph.polylines(fnodes)
+        polyline_of = graph.polyline_of_column(fnodes)
+        finite = np.flatnonzero(canonical >= 0)
+        r_f = vertex_diameter[canonical[finite]] / 2.0
+        blocked = (fnodes[:3, finite].T, r_f + radius + margin)
+        feeder_segments = graph.segments(fnodes, built["edges"])
+    else:
+        tips = stubs = np.zeros(0, dtype=np.int64)
+        polylines, polyline_of = [], None
+        blocked = None
+        feeder_segments = []
+    tip_points = fnodes[:3, tips].T.copy() if tips.size else np.zeros((0, 3))
+    tip_inward = [_inward(fnodes, polylines[polyline_of[column]], column) for column in tips.tolist()]
+    return tips, stubs, tip_points, tip_inward, blocked, feeder_segments
+
+
+def _girth_graph(tips, feeder_segments, n_bed):
+    """
+    The neighbour lists the girth rule searches: the bed vertices (n_bed of
+    them, then the tips) and the feeder segment graph, one edge per segment
+    path between its end vertices, a tip being the feeder vertex it stands on.
+    """
+    n_tips = int(tips.size)
+    n_vertices = n_bed + n_tips
+    feeder_ids = {}
+    for t, column in enumerate(tips.tolist()):
+        feeder_ids[column] = n_bed + t
+    for path in feeder_segments:
+        for end in (int(path[0]), int(path[-1])):
+            if end not in feeder_ids:
+                feeder_ids[end] = n_vertices + len(feeder_ids) - n_tips
+    adjacency = [[] for _ in range(n_vertices + len(feeder_ids) - n_tips)]
+    for path in feeder_segments:
+        a, b = feeder_ids[int(path[0])], feeder_ids[int(path[-1])]
+        if a != b:
+            adjacency[a].append(b)
+            adjacency[b].append(a)
+    return adjacency
+
+
 def build(domain, settings, *, d_min, seed, collision_margin, feeders=None, frame=None,
           attempts=10, index_kind="grid", events=None, timings=None):
     """
@@ -1553,7 +2400,9 @@ def build(domain, settings, *, d_min, seed, collision_margin, feeders=None, fram
         feeders (tuple or None): (nodes (4, N), tree (N,)), the two trees the
             bed joins; None grows a bed alone, with no tips and no island pass.
         frame (dict or None): the network's frame record; its grow_direction
-            is the stretch axis, needed when stretch > 1.
+            is the stretch axis, needed when stretch > 1, and a fibre bed
+            without an axis of its own runs along F0's (its axis when its
+            kind is "axis", else its grow_direction).
         attempts (int): walk redraws per chain, >= 0.
         index_kind (str): "grid", "kdtree" or "auto" (the grid) for the
             indexes built once, but for the seeds' blocked set, which
@@ -1575,13 +2424,21 @@ def build(domain, settings, *, d_min, seed, collision_margin, feeders=None, fram
         the kept bed edges (vertex i < N_t is seed i, N_t + t is tip t);
         "chains" one dict per placed chain in chain order, "vertices" in the
         order written, "outcome" "walked" or "chord", "first" and "last"
-        the columns of its first and last point, "closed".
+        the columns of its first and last point, "closed". A fibre bed's
+        vertices are its knots, then the tips: "seeds" is the lanes' points
+        (N, 3), "kept" (K,) and the vertex ids of "greedy_edges" and "edges"
+        index the knots, and it also returns "axis" (a, a list of 3),
+        "lane_extent" (N, 2) each lane's clip interval (t0, t1), "knots"
+        (K, 3), "knot_lane" (K,) int64, "knot_t" (K,), "knot_boundary" (K,)
+        bool and "links" (L, 2) int64 the kept link edges.
 
     Raises:
         ValueError: before any generator is created, for anything the
         settings or check_settings refuse, a malformed argument, stretch > 1
-        without a frame, malformed feeders, and a box that holds no seed.
-        SeedsNotPlaced: when the proposals run out before N_t seeds stand.
+        without a frame, a fibre bed with neither an axis nor a frame,
+        malformed feeders, and a box that holds no seed or lane.
+        SeedsNotPlaced: when the proposals run out before N_t seeds (or N
+        lanes) stand.
     """
     parsed = BedSettings.parse(settings)
     d_min = _positive_d_min(d_min)
@@ -1610,6 +2467,9 @@ def build(domain, settings, *, d_min, seed, collision_margin, feeders=None, fram
         raise ValueError("the bed domain corners must be finite 3-vectors")
     if not np.all(high > low + d):
         raise ValueError(f"the bed domain must be wider than the bed diameter {d:g} along every axis")
+    if parsed.kind == "fibre":
+        return _build_fibre(low, high, parsed, d_min=d_min, seed=int(seed), margin=margin, feeders=feeders,
+                            frame=frame, attempts=attempts, kind=kind, events=events, timings=timings)
     stretch = parsed.stretch
     axis = None
     if stretch != 1.0:
@@ -1630,27 +2490,11 @@ def build(domain, settings, *, d_min, seed, collision_margin, feeders=None, fram
     clock = time.perf_counter()
 
     # the feeders: tips, their inward directions, the segment graph and the obstacles
-    if feeders is not None and fnodes.shape[1]:
-        built = graph.build(fnodes)
-        tips, stubs = _feeder_tips(fnodes, ftree, margin, built)
-        canonical = built["canonical"]
-        vertex_diameter = graph.vertex_diameter(fnodes, canonical)
-        polylines = graph.polylines(fnodes)
-        polyline_of = graph.polyline_of_column(fnodes)
-        finite = np.flatnonzero(canonical >= 0)
-        r_f = vertex_diameter[canonical[finite]] / 2.0
-        blocked = (fnodes[:3, finite].T, r_f + radius + margin)
-        feeder_segments = graph.segments(fnodes, built["edges"])
-    else:
-        tips = stubs = np.zeros(0, dtype=np.int64)
-        polylines, polyline_of = [], None
-        blocked = None
-        feeder_segments = []
+    tips, stubs, tip_points, tip_inward, blocked, feeder_segments = _feeder_parts(fnodes, ftree, feeders is not None,
+                                                                                margin, radius)
     counts["bed_tips"] = int(tips.size + stubs.size)
     counts["bed_tips_inside_junction"] = int(stubs.size)
     n_tips = int(tips.size)
-    tip_points = fnodes[:3, tips].T.copy() if n_tips else np.zeros((0, 3))
-    tip_inward = [_inward(fnodes, polylines[polyline_of[column]], column) for column in tips.tolist()]
 
     # seeds
     inset = (low + radius, high - radius)
@@ -1685,19 +2529,7 @@ def build(domain, settings, *, d_min, seed, collision_margin, feeders=None, fram
     # the greedy pass
     tip_columns = {n_seeds + t: int(c) for t, c in enumerate(tips.tolist())}
     obstacles = _Obstacles(fnodes, radius, margin, kind, tip_columns)
-    feeder_ids = {}
-    for t, column in enumerate(tips.tolist()):
-        feeder_ids[column] = n_seeds + t
-    for path in feeder_segments:
-        for end in (int(path[0]), int(path[-1])):
-            if end not in feeder_ids:
-                feeder_ids[end] = n_vertices + len(feeder_ids) - n_tips
-    adjacency = [[] for _ in range(n_vertices + len(feeder_ids) - n_tips)]
-    for path in feeder_segments:
-        a, b = feeder_ids[int(path[0])], feeder_ids[int(path[-1])]
-        if a != b:
-            adjacency[a].append(b)
-            adjacency[b].append(a)
+    adjacency = _girth_graph(tips, feeder_segments, n_seeds)
     caps = [3] * n_seeds + [parsed.tip_edges] * n_tips
     near = None
     if obstacles.feeders and n_pairs:
@@ -1728,10 +2560,265 @@ def build(domain, settings, *, d_min, seed, collision_margin, feeders=None, fram
     stages["prune"], clock = now - clock, now
 
     # chains, walked in order
+    def reprune():
+        _count_removed(counts, _prune(n_vertices, greedy_edges, alive, is_tip, kept, feeders is not None))
+
+    chains, writes, placed = _walk(points, greedy_edges, alive, is_tip, samples, obstacles, counts,
+                                   step=parsed.step * d, diameter=d, persistence=parsed.persistence,
+                                   attempts=attempts, stream=lambda: _stream(seed, SUBSTREAMS["walks"]),
+                                   reprune=reprune)
+    del samples
+    now = time.perf_counter()
+    stages["walk"], clock = now - clock, now
+
+    # assembly
+    nodes, tree, records = _attach(fnodes, ftree, chains, writes, placed, points, d)
+    edges = greedy_edges[alive]
+    tip_edges = np.bincount(edges.ravel(), minlength=n_vertices)[n_seeds:].astype(np.int64) \
+        if n_tips else np.zeros(0, dtype=np.int64)
+    counts["bed_tips_attached"] = int(np.count_nonzero(tip_edges))
+    counts["bed_tip_edges"] = int(tip_edges.sum())
+    components, one_tree = _components(n_vertices, edges, n_seeds, ftree[tips] if n_tips else None,
+                                       feeders is not None)
+    counts["bed_components"] = components
+    counts["bed_components_one_tree"] = one_tree
+    now = time.perf_counter()
+    stages["assemble"] = now - clock
+
+    if events is not None:
+        for key in EVENT_KEYS:
+            events[key] = events.get(key, 0) + counts[key]
+    if timings is not None:
+        timings.update(stages)
+    return {"nodes": nodes, "tree": tree, "frame": record, "seeds": seeds, "greedy_edges": greedy_edges,
+            "kept": kept[:n_seeds].copy(), "tips": tips.astype(np.int64), "tip_edges": tip_edges,
+            "edges": edges, "chains": records}
+
+
+def _build_fibre(low, high, parsed, *, d_min, seed, margin, feeders, frame, attempts, kind, events, timings):
+    """build's fibre bed (F0-F8 of the module docstring), its arguments checked by build."""
+    h = parsed.spacing * d_min
+    d = parsed.diameter * d_min
+    radius = d / 2.0
+    T = d + margin
+    knot = parsed.knot * d_min
+    w = (h - T) / 2.0
+    axis = _fibre_axis(parsed, frame)
+    if feeders is not None:
+        fnodes, ftree = _feeders(feeders)
+    else:
+        fnodes, ftree = np.empty((4, 0)), np.zeros(0, dtype=np.int8)
+    n_lanes = planned_seeds(high - low, parsed, d_min, axis=axis)
+    if n_lanes == 0:
+        raise ValueError("the box holds no lane: it is too small for the bed's spacing and density")
+    record = frame_record(frame, parsed, (low, high))
+
+    counts = {key: 0 for key in EVENT_KEYS}
+    stages = {}
+    clock = time.perf_counter()
+
+    # the feeders, as foam's
+    tips, stubs, tip_points, tip_inward, blocked, feeder_segments = _feeder_parts(fnodes, ftree, feeders is not None,
+                                                                                margin, radius)
+    counts["bed_tips"] = int(tips.size + stubs.size)
+    counts["bed_tips_inside_junction"] = int(stubs.size)
+    n_tips = int(tips.size)
+
+    # F1: the lanes
+    inset = (low + radius, high - radius)
+    anchors, extents, outcomes = place_lanes(_stream(seed, SUBSTREAMS["lanes"]), inset[0], inset[1], axis,
+                                             spacing=h, count=n_lanes)
+    counts["bed_proposals"] = int(outcomes.size)
+    counts["bed_proposals_overlapping"] = int(np.count_nonzero(outcomes == 2))
+    counts["bed_proposals_outside"] = int(np.count_nonzero(outcomes == 3))
+    counts["bed_seeds"] = int(np.count_nonzero(outcomes == 0))
+    now = time.perf_counter()
+    stages["seeds"], clock = now - clock, now
+
+    # F2: the knots; F3: those on the feeders
+    e1, e2 = _plane_basis(axis)
+    knots, knot_lane, knot_t, knot_boundary = _knots(_stream(seed, SUBSTREAMS["knots"]), anchors, extents, axis,
+                                                     e1, e2, inset[0], inset[1], knot=knot,
+                                                     sway=parsed.sway * d_min, w=w)
+    n_knots = len(knots)
+    on_feeders = _Blocked(*blocked).mask(knots) if blocked is not None else np.zeros(n_knots, dtype=bool)
+    counts["bed_knots"] = n_knots
+    counts["bed_knots_boundary"] = int(np.count_nonzero(knot_boundary))
+    counts["bed_knots_on_feeders"] = int(np.count_nonzero(on_feeders))
+    now = time.perf_counter()
+    stages["knots"], clock = now - clock, now
+
+    # the lane edges; F4: the breaks
+    between = np.flatnonzero(knot_lane[1:] == knot_lane[:-1])
+    lane_lo, lane_hi = between, between + 1
+    cut = on_feeders[lane_lo] | on_feeders[lane_hi]
+    broken = np.zeros(lane_lo.size, dtype=bool)
+    if parsed.run is not None:
+        starts = np.flatnonzero(knot_boundary & np.concatenate([[True], knot_lane[1:] != knot_lane[:-1]]))
+        for i, at in enumerate(_breaks(_stream(seed, SUBSTREAMS["breaks"]), extents, parsed.run * d_min)):
+            if not at:
+                continue
+            ends = knot_t[starts[i]:starts[i + 1] if i + 1 < n_lanes else n_knots]
+            k = np.searchsorted(ends, np.array(at), side="right") - 1
+            k = k[(k >= 0) & (k < ends.size - 1)]
+            broken[starts[i] - i + k] = True
+    counts["bed_lane_edges_on_feeders"] = int(np.count_nonzero(cut))
+    counts["bed_breaks"] = int(np.count_nonzero(broken & ~cut))
+    lane_candidate = ~cut & ~broken
+    counts["bed_lane_candidates"] = int(np.count_nonzero(lane_candidate))
+
+    # F5: the link sites
+    links = np.zeros((0, 2), dtype=np.int64)
+    if parsed.link_spacing is not None and not knot_boundary.all():
+        lane_pairs = np.stack([lane_lo[lane_candidate], lane_hi[lane_candidate]], axis=1)
+        found = _link_sites(_stream(seed, SUBSTREAMS["links"]), knot_lane, knot_t, knot_boundary, extents, anchors,
+                            on_feeders, knots, lane_pairs, q=parsed.knot / (2.0 * parsed.link_spacing),
+                            reach=parsed.link_reach * h, min_angle=parsed.min_angle)
+        counts["bed_link_sites"] = int(found["sites"].size)
+        counts["bed_link_sites_no_partner"] = found["no_partner"]
+        counts["bed_link_sites_angle"] = found["angle"]
+        counts["bed_link_sites_on_feeders"] = found["on_feeders"]
+        links = found["links"]
+    counts["bed_candidates_link"] = int(len(links))
+
+    # F6: the candidates in processing order, lane edges, tip edges, links
+    tip_i, tip_t, tip_chord = _tip_pairs(knots, ~on_feeders, tip_points, parsed.reach * h, kind)
+    n_tip = int(tip_i.size)
+    tip_j = n_knots + tip_t
+    if parsed.jitter > 0.0 and n_tip > 0:
+        u = _stream(seed, SUBSTREAMS["tip_order"]).random(n_tip)
+        key = tip_chord * (1.0 + parsed.jitter * u)
+    else:
+        key = tip_chord
+    tip_order = np.lexsort((tip_j, tip_i, key))
+    i = np.concatenate([lane_lo[lane_candidate], tip_i[tip_order], links[:, 0]]).astype(np.int64)
+    j = np.concatenate([lane_hi[lane_candidate], tip_j[tip_order], links[:, 1]]).astype(np.int64)
+    n_pairs = int(i.size)
+    counts["bed_candidates"] = n_pairs
+    counts["bed_candidates_tip"] = n_tip
+    now = time.perf_counter()
+    stages["candidates"], clock = now - clock, now
+
+    # the greedy pass, foam's
+    points = np.concatenate([knots, tip_points])
+    n_vertices = n_knots + n_tips
+    inward = {n_knots + t: direction for t, direction in enumerate(tip_inward)}
+    tip_columns = {n_knots + t: int(c) for t, c in enumerate(tips.tolist())}
+    obstacles = _Obstacles(fnodes, radius, margin, kind, tip_columns)
+    adjacency = _girth_graph(tips, feeder_segments, n_knots)
+    caps = [3] * n_knots + [parsed.tip_edges] * n_tips
+    near = None
+    if obstacles.feeders and n_pairs:
+        near = _near_feeders(obstacles, points, i, j)
+    samples = {}
+    greedy = _greedy(points, i, j, np.arange(n_pairs), caps=caps, inward=inward, adjacency=adjacency,
+                     girth=parsed.girth, min_angle=parsed.min_angle, clearance=T, step=parsed.step * d,
+                     obstacles=obstacles if obstacles.feeders else None, near=near, samples=samples)
+    greedy_edges = greedy["edges"]
+    refusals = greedy["counts"]
+    counts["bed_refused_degree"] = refusals["degree"]
+    counts["bed_refused_angle"] = refusals["angle"]
+    counts["bed_refused_girth"] = refusals["girth"]
+    counts["bed_refused_clearance"] = refusals["clearance"]
+    counts["bed_refused_clearance_at_end"] = refusals["at_end"]
+    counts["bed_edges"] = int(len(greedy_edges))
+    lane_of = np.concatenate([knot_lane, np.full(n_tips, -1, dtype=np.int64)])
+
+    def kinds(edges):
+        """Whether each edge is a lane edge, and whether it is a link."""
+        both = (edges[:, 1] < n_knots) if len(edges) else np.zeros(0, dtype=bool)
+        same = lane_of[edges[:, 0]] == lane_of[edges[:, 1]] if len(edges) else np.zeros(0, dtype=bool)
+        return both & same, both & ~same
+
+    lane_edges, link_edges = kinds(greedy_edges)
+    counts["bed_lane_edges"] = int(np.count_nonzero(lane_edges))
+    counts["bed_links"] = int(np.count_nonzero(link_edges))
+    now = time.perf_counter()
+    stages["greedy"], clock = now - clock, now
+
+    # F7: pruning, the boundary knots anchored against the peel only
+    is_tip = np.zeros(n_vertices, dtype=bool)
+    is_tip[n_knots:] = True
+    kept = np.ones(n_vertices, dtype=bool)
+    kept[:n_knots] = ~on_feeders
+    boundary = np.zeros(n_vertices, dtype=bool)
+    boundary[:n_knots] = knot_boundary
+    anchored = is_tip | boundary
+    alive = np.ones(len(greedy_edges), dtype=bool)
+
+    def reprune():
+        removed = _prune(n_vertices, greedy_edges, alive, is_tip, kept, feeders is not None, anchored=anchored)
+        counts["bed_edges_dead_end"] += removed["edges_dead_end"]
+        counts["bed_edges_island"] += removed["edges_island"]
+        counts["bed_knots_dead_end"] += removed["seeds_dead_end"]
+        counts["bed_knots_island"] += removed["seeds_island"]
+        # a boundary knot left without an edge goes too
+        degree = np.bincount(greedy_edges[alive].ravel(), minlength=n_vertices)
+        lone = boundary & kept & (degree == 0)
+        kept[lone] = False
+        counts["bed_knots_dead_end"] += int(np.count_nonzero(lone))
+
+    reprune()
+    now = time.perf_counter()
+    stages["prune"], clock = now - clock, now
+
+    # F8: chains walked in order on their own sub-stream, and attached as foam's
+    chains, writes, placed = _walk(points, greedy_edges, alive, is_tip, samples, obstacles, counts,
+                                   step=parsed.step * d, diameter=d, persistence=parsed.persistence,
+                                   attempts=attempts, stream=lambda: _stream(seed, SUBSTREAMS["fibre_walks"]),
+                                   reprune=reprune)
+    del samples
+    now = time.perf_counter()
+    stages["walk"], clock = now - clock, now
+
+    nodes, tree, records = _attach(fnodes, ftree, chains, writes, placed, points, d)
+    edges = greedy_edges[alive]
+    tip_edges = np.bincount(edges.ravel(), minlength=n_vertices)[n_knots:].astype(np.int64) \
+        if n_tips else np.zeros(0, dtype=np.int64)
+    counts["bed_tips_attached"] = int(np.count_nonzero(tip_edges))
+    counts["bed_tip_edges"] = int(tip_edges.sum())
+    components, one_tree = _components(n_vertices, edges, n_knots, ftree[tips] if n_tips else None,
+                                       feeders is not None)
+    counts["bed_components"] = components
+    counts["bed_components_one_tree"] = one_tree
+    _, kept_links = kinds(edges)
+    counts["bed_links_kept"] = int(np.count_nonzero(kept_links))
+    now = time.perf_counter()
+    stages["assemble"] = now - clock
+
+    if events is not None:
+        for key in EVENT_KEYS:
+            events[key] = events.get(key, 0) + counts[key]
+    if timings is not None:
+        timings.update(stages)
+    return {"nodes": nodes, "tree": tree, "frame": record, "seeds": anchors, "greedy_edges": greedy_edges,
+            "kept": kept[:n_knots].copy(), "tips": tips.astype(np.int64), "tip_edges": tip_edges,
+            "edges": edges, "chains": records,
+            "axis": [float(v) for v in axis], "lane_extent": extents, "knots": knots, "knot_lane": knot_lane,
+            "knot_t": knot_t, "knot_boundary": knot_boundary, "links": edges[kept_links]}
+
+
+def _walk(points, greedy_edges, alive, is_tip, samples, obstacles, counts, *, step, diameter, persistence,
+          attempts, stream, reprune):
+    """
+    The chains of the pruned bed graph, walked in order (see the module
+    docstring): each attempt one bridge_path per edge on the generator
+    `stream()` returns, created at the first chain walked, then the stored
+    chord, then a drop, after which `reprune()` peels and prunes the graph
+    again and every chain whose edges went with it is retired. `samples`,
+    the greedy pass's stored chords, is emptied once the chains hold them,
+    and `alive` is updated in place.
+
+    Returns:
+        tuple: (chains, writes, placed): the chains as _chains gives them,
+        each one's (written vertices, joints, lasso), and {chain: (outcome,
+        path, joints)} for the chains placed.
+    """
+    n_vertices = len(points)
+    d = diameter
     edge_of = {(int(a), int(b)): e for e, (a, b) in enumerate(greedy_edges.tolist())}
     chains = _chains(n_vertices, greedy_edges[alive], is_tip)
     bed_degree = np.bincount(greedy_edges[alive].ravel(), minlength=n_vertices)
-    step = parsed.step * d
     chord_paths, writes = [], []
     for chain in chains:
         pieces = []
@@ -1750,13 +2837,12 @@ def build(domain, settings, *, d_min, seed, collision_margin, feeders=None, fram
             written = chain[position:] + chain[1:position + 1]
         chord_paths.append(path)
         writes.append((written, joints, lasso))
-    del samples                      # the chains now hold every chord they replay
+    samples.clear()                  # the chains now hold every chord they replay
     anchors = [_anchors(written, joints, lasso) for written, joints, lasso in writes]
     obstacles.set_chords(chord_paths, anchors)
     retired = [False] * len(chains)
     placed = {}
     rng = None
-    persistence = parsed.persistence
     for c, chain in enumerate(chains):
         if retired[c]:
             continue
@@ -1764,7 +2850,7 @@ def build(domain, settings, *, d_min, seed, collision_margin, feeders=None, fram
         written, joints, lasso = writes[c]
         closed = chain[0] == chain[-1]
         if rng is None:
-            rng = _stream(seed, SUBSTREAMS["walks"])
+            rng = stream()
         tangents = _tangents(points, chain)
         outcome = None
         for attempt in range(1 + attempts):
@@ -1800,8 +2886,7 @@ def build(domain, settings, *, d_min, seed, collision_margin, feeders=None, fram
             if alive[e]:
                 alive[e] = False
                 counts["bed_edges_dropped"] += 1
-        removed = _prune(n_vertices, greedy_edges, alive, is_tip, kept, feeders is not None)
-        _count_removed(counts, removed)
+        reprune()
         for other, vertices in enumerate(chains):
             if other == c:
                 continue
@@ -1815,42 +2900,27 @@ def build(domain, settings, *, d_min, seed, collision_margin, feeders=None, fram
             elif not retired[other]:
                 obstacles.retire(other)
             retired[other] = True
-    now = time.perf_counter()
-    stages["walk"], clock = now - clock, now
+    return chains, writes, placed
 
-    # assembly
+
+def _attach(fnodes, ftree, chains, writes, placed, points, diameter):
+    """
+    The feeders' columns, then the placed chains in chain order (_assemble),
+    and each one's record; returns (nodes, tree, records).
+    """
     order_placed = sorted(placed)
     pieces = []
     for c in order_placed:
         name, path, at = placed[c]
         pieces.append((path, at, points[writes[c][0]]))
-    nodes, tree, first, last = _assemble(fnodes, ftree, pieces, d)
+    nodes, tree, first, last = _assemble(fnodes, ftree, pieces, diameter)
     records = []
     for c, column_first, column_last in zip(order_placed, first, last):
         name, path, at = placed[c]
         records.append({"vertices": [int(v) for v in writes[c][0]], "outcome": name,
                         "first": int(column_first), "last": int(column_last),
                         "closed": bool(chains[c][0] == chains[c][-1])})
-    edges = greedy_edges[alive]
-    tip_edges = np.bincount(edges.ravel(), minlength=n_vertices)[n_seeds:].astype(np.int64) \
-        if n_tips else np.zeros(0, dtype=np.int64)
-    counts["bed_tips_attached"] = int(np.count_nonzero(tip_edges))
-    counts["bed_tip_edges"] = int(tip_edges.sum())
-    components, one_tree = _components(n_vertices, edges, n_seeds, ftree[tips] if n_tips else None,
-                                       feeders is not None)
-    counts["bed_components"] = components
-    counts["bed_components_one_tree"] = one_tree
-    now = time.perf_counter()
-    stages["assemble"] = now - clock
-
-    if events is not None:
-        for key in EVENT_KEYS:
-            events[key] = events.get(key, 0) + counts[key]
-    if timings is not None:
-        timings.update(stages)
-    return {"nodes": nodes, "tree": tree, "frame": record, "seeds": seeds, "greedy_edges": greedy_edges,
-            "kept": kept[:n_seeds].copy(), "tips": tips.astype(np.int64), "tip_edges": tip_edges,
-            "edges": edges, "chains": records}
+    return nodes, tree, records
 
 
 def _count_removed(counts, removed):
