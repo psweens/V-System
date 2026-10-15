@@ -634,6 +634,8 @@ NEW_KEYS = ("frame", "classes", "frame_orientation", "polar_order", "orientation
             "calibre_shares", "segments_by_class", "transverse_spacing")
 # and those appended in 3.6
 NEW_KEYS_3_6 = ("junctions", "branch_angles_deg", "loops", "segment_diameter_variation", "tissue_distance")
+# and those appended in 3.8
+NEW_KEYS_3_8 = ("cross_connections", "cross_section")
 EMPTY_LENGTHS = {"count": 0, "median": None, "p10": None, "p90": None, "cv": None,
                  "median_d": None, "p10_d": None, "p90_d": None}
 PROPERTIES = {"k": 3, "epsilon": 7.0, "randmarg": 0.2, "sigma": 5, "stochparams": True}
@@ -1119,7 +1121,7 @@ class ClassAndFrameSourceTests(unittest.TestCase):
 
     def test_archive_without_a_frame_has_no_frame_relative_keys(self):
         r = describe(Y_NODES)
-        self.assertEqual(tuple(r), OLD_KEYS + NEW_KEYS + NEW_KEYS_3_6)
+        self.assertEqual(tuple(r), OLD_KEYS + NEW_KEYS + NEW_KEYS_3_6 + NEW_KEYS_3_8)
         for key in NEW_KEYS:
             if key != "classes":
                 self.assertIsNone(r[key], key)
@@ -1227,7 +1229,7 @@ class ClassAndFrameSourceTests(unittest.TestCase):
         # the tissue distance changes nothing else, the keys of 3.5 included
         with_tissue = describe(grown["nodes"], grown["edges"], tree=grown["tree"], frame=frame, d_ref=5.0,
                                class_bound=1.5, evd_spacing=8.0)
-        self.assertEqual(tuple(with_tissue), OLD_KEYS + NEW_KEYS + NEW_KEYS_3_6)
+        self.assertEqual(tuple(with_tissue), OLD_KEYS + NEW_KEYS + NEW_KEYS_3_6 + NEW_KEYS_3_8)
         self.assertEqual({key: value for key, value in with_tissue.items() if key != "tissue_distance"},
                          {key: value for key, value in extended.items() if key != "tissue_distance"})
         self.assertIsNone(extended["tissue_distance"])

@@ -120,6 +120,11 @@ CALIBRE_MULTIPLES = (1.5, 2.0, 3.0)
 TRANSVERSE_PLANES = 9
 _TRANSVERSE_FIRST, _TRANSVERSE_STEP = 0.1, 0.1
 
+# A capillary segment whose chord stands at least this far from the frame
+# axis is transverse: a cross-connection when it joins two junctions of
+# capillaries, a cross-connection's arm at a junction.
+CROSS_ANGLE_DEG = 60.0
+
 # The concentration of a Watson or an axial Fisher distribution is found by
 # bisection. Beyond this concentration both are a single direction at any
 # precision the mean cosines reach, and the mean is reported as outside the
@@ -803,11 +808,13 @@ def _section_area(corners, pairs, axis, level, e1, e2):
     return 0.5 * abs(float(u @ np.roll(v, -1) - v @ np.roll(u, -1)))
 
 
-def _transverse_spacing(positions, lower, higher, axis, frame, d_ref, volume, metadata):
+def _transverse_spacing(positions, lower, higher, axis, frame, d_ref, volume, metadata, planes=None):
     """
     Nearest-neighbour spacing and density of the crossings of the given
     edges (the capillary class, as columns of their lower and higher ends)
-    through planes perpendicular to the frame axis; see `describe`.
+    through planes perpendicular to the frame axis; see `describe`. With
+    `planes` a dict, it is given each plane's "crossings" and section
+    "areas", in plane order.
     """
     if lower.size == 0:
         return None
@@ -831,10 +838,12 @@ def _transverse_spacing(positions, lower, higher, axis, frame, d_ref, volume, me
     crossings = 0
     pooled = 0
     distances = []
+    per_plane = []
     for level in levels:
         crossing = (s_lo < level) != (s_hi < level)
         found = int(np.count_nonzero(crossing))
         crossings += found
+        per_plane.append(found)
         if found < 2:
             continue
         fraction = (level - s_lo[crossing]) / (s_hi[crossing] - s_lo[crossing])
@@ -851,12 +860,16 @@ def _transverse_spacing(positions, lower, higher, axis, frame, d_ref, volume, me
         origin = _vector3(frame.get("origin"), "frame origin")
         basis = np.array([_unit(np.cross(grow, perpendicular), "the frame's third axis"), grow, perpendicular])
         corners, pairs = _box_corners(origin, basis, extents)
-        area = sum(_section_area(corners, pairs, axis, level, e1, e2) for level in levels)
+        areas = [_section_area(corners, pairs, axis, level, e1, e2) for level in levels]
+        area = sum(areas)
     else:
         source = "capillary_bounding_box"
         ends = np.concatenate([x_lo, x_hi])
         u, v = ends @ e1, ends @ e2
-        area = TRANSVERSE_PLANES * float((u.max() - u.min()) * (v.max() - v.min()))
+        areas = [float((u.max() - u.min()) * (v.max() - v.min()))] * TRANSVERSE_PLANES
+        area = TRANSVERSE_PLANES * areas[0]
+    if planes is not None:
+        planes.update(crossings=per_plane, areas=areas)
 
     result = {"planes": TRANSVERSE_PLANES, "count": pooled, "median": None, "mean": None, "p10": None, "p90": None,
               "median_d": None, "mean_d": None, "p10_d": None, "p90_d": None,
@@ -911,12 +924,20 @@ def _junctions(degree, vertices, n_segments):
     return result
 
 
-def _branch_angles(nodes, layout, degree, vertex_diameter):
+def _junction_arms(nodes, layout, degree, vertex_diameter):
     """
-    Angles between the three vessels at each vertex of degree three, taken
-    between the directions to points a little way along each; see `describe`.
+    The arms of every vertex of degree three, the unit vectors from it to the
+    points a little way along each of its three segment ends; see
+    "branch_angles_deg" in `describe`.
+
+    Returns:
+        tuple or None: None when no vertex has degree three, else (vertex
+        (J,) the vertices in increasing order, segment (J, 3) the segment of
+        each arm, good (J,) whether every arm of the vertex has a length and
+        a known diameter, unit (G, 3, 3) the arms of the good vertices), the
+        arms of a vertex ordered by segment and then from its last end to
+        its first.
     """
-    result = {"count": 0, "skipped": 0, "min": None, "median": None, "max": None}
     positions = nodes[:3].T
     flat, offsets, sizes, cumulative = layout["flat"], layout["offsets"], layout["sizes"], layout["cumulative"]
     # every end of a segment at a vertex of degree three is an arm of it; a
@@ -925,7 +946,7 @@ def _branch_angles(nodes, layout, degree, vertex_diameter):
     at_last = np.flatnonzero(degree[layout["last"]] == 3)
     segment = np.concatenate([at_first, at_last])
     if segment.size == 0:
-        return result
+        return None
     from_first = np.arange(segment.size) < at_first.size
     vertex = np.where(from_first, layout["first"][segment], layout["last"][segment])
     start_arc = cumulative[offsets[segment]]
@@ -951,8 +972,21 @@ def _branch_angles(nodes, layout, degree, vertex_diameter):
     arm, norm, known = arm[order], norm[order], known[order]
     # a vertex of degree three has exactly three segment ends at it
     good = (known & (norm > 0.0)).reshape(-1, 3).all(axis=1)
-    result["skipped"] = int(np.count_nonzero(~good))
     unit = arm.reshape(-1, 3, 3)[good] / norm.reshape(-1, 3)[good][:, :, None]
+    return vertex[order].reshape(-1, 3)[:, 0], segment[order].reshape(-1, 3), good, unit
+
+
+def _branch_angles(nodes, layout, degree, vertex_diameter):
+    """
+    Angles between the three vessels at each vertex of degree three, taken
+    between the directions to points a little way along each; see `describe`.
+    """
+    result = {"count": 0, "skipped": 0, "min": None, "median": None, "max": None}
+    arms = _junction_arms(nodes, layout, degree, vertex_diameter)
+    if arms is None:
+        return result
+    _, _, good, unit = arms
+    result["skipped"] = int(np.count_nonzero(~good))
     if unit.shape[0] == 0:
         return result
     angles = np.sort(np.stack([np.degrees(np.arctan2(np.linalg.norm(np.cross(unit[:, i], unit[:, j]), axis=1),
@@ -961,6 +995,93 @@ def _branch_angles(nodes, layout, degree, vertex_diameter):
     smallest, middle, largest = (float(np.percentile(angles[:, k], 50.0)) for k in range(3))
     result.update({"count": int(unit.shape[0]), "min": smallest, "median": middle, "max": largest})
     return result
+
+
+def _percentiles_d(values, d_ref, keys=("median", "p10", "p90")):
+    """The median, p10 and p90 (and the mean when asked) of `values` in d_ref, each None without values."""
+    stats = {key: None for key in keys}
+    if values.size:
+        quantile = {"median": 50.0, "p10": 10.0, "p90": 90.0}
+        for key in keys:
+            stats[key] = (float(values.mean()) if key == "mean"
+                          else float(np.percentile(values, quantile[key]))) / d_ref
+    return stats
+
+
+def _cross_connections(nodes, layout, arc, mean_diameter, degree, vertex_diameter, length, tangent, capillary_edges,
+                       axis, threshold, d_ref):
+    """
+    The capillary segments that run across the frame axis between two
+    junctions of capillaries, the unbranched runs along it and the kinds of
+    junction between capillaries; see `describe`.
+    """
+    positions = nodes[:3].T
+    first, last = layout["first"], layout["last"]
+    capillary = (arc > 0.0) & np.isfinite(mean_diameter) & (mean_diameter < threshold)
+    chord_vector = positions[last] - positions[first]
+    chord = np.linalg.norm(chord_vector, axis=1)
+    open_segment = (first != last) & (chord > 0.0)
+    across = math.cos(math.radians(CROSS_ANGLE_DEG))
+    with np.errstate(invalid="ignore", divide="ignore"):
+        u = np.abs(chord_vector @ axis) / chord
+    population = capillary & open_segment
+    transverse = population & (u <= across)
+    # a vertex where a segment that is not capillary-class ends, a feeder or a larger vessel
+    larger_end = np.zeros(positions.shape[0], dtype=bool)
+    larger_end[first[~capillary]] = True
+    larger_end[last[~capillary]] = True
+    joined = (degree[first] >= 3) & (degree[last] >= 3) & ~larger_end[first] & ~larger_end[last]
+    crossing = transverse & joined
+    count = int(np.count_nonzero(crossing))
+    capillary_length = float(length[capillary_edges].sum())
+    axial_length = float((length[capillary_edges] * np.abs(tangent[capillary_edges] @ axis)).sum())
+    per_length = count / capillary_length if capillary_length > 0.0 else None
+
+    junction_types = {"count": 0, "T": None, "Y": None, "other": None}
+    arms = _junction_arms(nodes, layout, degree, vertex_diameter)
+    if arms is not None:
+        _, segment, good, unit = arms
+        between = capillary[segment[good]].all(axis=1)
+        v = unit[between] @ axis
+        n_across = np.count_nonzero(np.abs(v) <= across, axis=1)
+        n_plus = np.count_nonzero(v > across, axis=1)
+        n_minus = np.count_nonzero(v < -across, axis=1)
+        through = (n_across == 1) & (n_plus == 1) & (n_minus == 1)
+        split = (n_across == 0) & (np.minimum(n_plus, n_minus) == 1) & (np.maximum(n_plus, n_minus) == 2)
+        total = int(v.shape[0])
+        junction_types["count"] = total
+        if total:
+            junction_types.update({"T": float(np.count_nonzero(through)) / total,
+                                   "Y": float(np.count_nonzero(split)) / total,
+                                   "other": float(np.count_nonzero(~through & ~split)) / total})
+
+    runs = arc[population & ~transverse]
+    axial_segments = dict({"count": int(runs.size)}, **_percentiles_d(runs, d_ref, ("median", "mean", "p10", "p90")))
+    return {"count": count,
+            "per_length": per_length,
+            "per_length_d": per_length * d_ref if per_length is not None else None,
+            "end_spacing_d": axial_length / (2.0 * count * d_ref) if count else None,
+            "chord_d": _percentiles_d(chord[crossing], d_ref),
+            "length_share": float(arc[crossing].sum()) / capillary_length if capillary_length > 0.0 else None,
+            "axial_segments_d": axial_segments,
+            "junction_types": junction_types}
+
+
+def _cross_section(spacing, planes, d_ref):
+    """The arrangement of the capillary crossings on the planes of transverse_spacing and their spread; see `describe`."""
+    if spacing is None:
+        return None
+    mean, density = spacing["mean"], spacing["crossing_density"]
+    per_plane = [crossings / area * d_ref ** 2 if area > 0.0 else None
+                 for crossings, area in zip(planes["crossings"], planes["areas"])]
+    cv = None
+    if all(value is not None for value in per_plane):
+        values = np.array(per_plane)
+        if values.mean() > 0.0:
+            cv = float(values.std()) / float(values.mean())
+    return {"nn_ratio": mean * math.sqrt(density) if mean is not None and density is not None else None,
+            "per_plane_density_d": per_plane,
+            "density_cv": cv}
 
 
 def _two_core(n_vertices, a, b):
@@ -2254,6 +2375,52 @@ def describe(nodes, edges=None, metadata=None, volume=None, margin=None, tol=DEF
     capsule (every point then being outside), and those in d_ref without
     d_ref.
 
+    Cross-connections and cross-sections. The two keys below read a bed of
+    capillaries that run along the frame axis a; each is None but for an
+    axis frame with d_ref. Their population is the capillary segments of
+    "segments_by_class": segments of positive length whose length-weighted
+    mean diameter is below class_bound * d_ref.
+
+    "cross_connections". The chord c of an open capillary segment runs from
+    its first to its last vertex (a closed segment has none and is left
+    out), with u = |c . a| / |c|; the segment is transverse when
+    u <= cos(CROSS_ANGLE_DEG), 60 degrees from a or more. A cross-connection
+    is a transverse capillary segment both of whose end vertices have degree
+    three or more and at both of whose ends every segment is capillary, so
+    that a segment ending at a feeder or another larger vessel, a bed edge
+    at a feeder tip among them, is not one. With L the total length of the
+    capillary-class edges: "count" the cross-connections; "per_length" count
+    / L and "per_length_d" count d_ref / L, None when L is 0;
+    "end_spacing_d" the axial capillary length sum l_e |t_e . a| over the
+    capillary-class edges divided by 2 count d_ref, the mean distance along
+    a between two cross-connection ends along a capillary, None when the
+    count is 0; "chord_d" {"median", "p10", "p90"} of the cross-connections'
+    chords |c| in d_ref; "length_share" the cross-connections' summed arc
+    over L; "axial_segments_d" {"count", "median", "mean", "p10", "p90"} of
+    the arcs of the open capillary segments that are not transverse (the
+    unbranched runs along a) in d_ref; and "junction_types" over the
+    vertices of degree exactly three whose three segments (open or closed)
+    are all capillary-class and whose arms "branch_angles_deg" measures:
+    with b_k the three arms, pointing away from the vertex, and
+    v_k = b_k . a, n0 of them
+    with |v_k| <= cos(CROSS_ANGLE_DEG), n+ with v_k above it and n- with v_k
+    below its negative, a vertex is "T" when n0 = n+ = n- = 1 (a capillary
+    running through with a transverse branch), "Y" when n0 = 0 and {n+, n-}
+    = {1, 2} (a split or a merge along a) and "other" otherwise, reported as
+    "count" and the three fractions (None when the count is 0). Percentiles
+    interpolate linearly as for "arc_chord" and are None without values.
+
+    "cross_section". On the nine planes of "transverse_spacing", which this
+    key leaves as it is: "nn_ratio" its mean nearest-neighbour distance
+    times the square root of its "crossing_density", 0.5 for a Poisson
+    pattern without edges, 1 for a square lattice and sqrt(2 / sqrt 3),
+    about 1.0746, for a hexagonal one; "per_plane_density_d" the nine
+    densities in plane order, each the plane's crossings over its section
+    area, per d_ref^2, None for a plane of no area; and "density_cv" their
+    population standard deviation over their mean. Each is None where the
+    area or the crossings are missing, and the key is None with
+    "transverse_spacing".
+
     Args:
         nodes (ndarray): (4, N) array of x, y, z and diameter with NaN separators.
         edges (ndarray or None): (2, E) column indices of the graph's edges,
@@ -2356,6 +2523,7 @@ def describe(nodes, edges=None, metadata=None, volume=None, margin=None, tol=DEF
         classes["capillary"] = known & (edge_diameter < class_bound * d_ref)
         classes["larger"] = known & ~classes["capillary"]
     frame_orientation = polar_order = transverse_spacing = None
+    planes = {}
     if frame_vector is not None:
         frame_orientation = _frame_orientation(frame_vector, oriented, length, classes, d_ref)
         kind, direction = frame_vector
@@ -2365,7 +2533,7 @@ def describe(nodes, edges=None, metadata=None, volume=None, margin=None, tol=DEF
         if kind == "axis" and d_ref is not None:
             capillary = classes["capillary"] & (length > 0.0)
             transverse_spacing = _transverse_spacing(nodes[:3].T, lower[capillary], higher[capillary], direction,
-                                                     frame, d_ref, volume, metadata)
+                                                     frame, d_ref, volume, metadata, planes)
     orientation_by_class = calibre_shares = segments_by_class = None
     arc, mean_diameter = _segment_calibres(nodes, paths, vertex_diameter)
     if d_ref is not None:
@@ -2385,6 +2553,12 @@ def describe(nodes, edges=None, metadata=None, volume=None, margin=None, tol=DEF
     tissue_distance = None
     if evd_spacing is not None:
         tissue_distance = _tissue_distance(nodes, points, r_max, float(evd_spacing), volume, metadata, d_ref)
+    cross_connections = cross_section = None
+    if frame_vector is not None and frame_vector[0] == "axis" and d_ref is not None:
+        cross_connections = _cross_connections(nodes, layout, arc, mean_diameter, degree, vertex_diameter, length,
+                                               tangent, classes["capillary"], frame_vector[1],
+                                               class_bound * d_ref, d_ref)
+        cross_section = _cross_section(transverse_spacing, planes, d_ref)
 
     result = {
         "units": metadata.get("units", "um"),
@@ -2422,6 +2596,8 @@ def describe(nodes, edges=None, metadata=None, volume=None, margin=None, tol=DEF
         "loops": loops,
         "segment_diameter_variation": diameter_variation,
         "tissue_distance": tissue_distance,
+        "cross_connections": cross_connections,
+        "cross_section": cross_section,
     }
     return _json_ready(result)
 

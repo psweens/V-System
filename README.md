@@ -743,6 +743,88 @@ median smallest, middle and largest angles at junctions of three vessels
 are 83°, 107° and 139° at R 4, 84°, 107° and 138° at R 8 and 85°, 107° and
 138° at R 16 (`tests/test_topology_benchmark.py`).
 
+#### Fibre beds: `"kind": "fibre"`
+
+A bed of kind `fibre` is made of capillaries that run nearly parallel to
+one axis a, with short cross-connections between neighbours; its density
+across a, its alignment and its cross-connections are set independently,
+so alignment costs no density. Its keys, `bed.FIBRE_SETTING_KEYS`, are
+lengths in d_min unless stated, and every default is provisional except
+`axis` and `layout`: `spacing` h (5), the lanes' hard core across a;
+`density` (0.5), ρ h², in (0, 0.6]; `girth` (8), `min_angle` (60),
+`reach` (2, the longest tip edge in spacings), `diameter` d (1),
+`persistence` (16), `feeder_stop` (2), `tip_edges` (2), `jitter` (0.25)
+and `step` (0.5), as foam's; `axis` (null: the frame's axis, else its
+growth direction); `knot` ℓ (4), the axial spacing of a lane's knots;
+`sway` σ (1), the standard deviation of each transverse knot offset;
+`link_spacing` λ (20), the planned mean axial spacing of cross-connection
+ends along one capillary, null for none; `link_reach` (1.75 spacings);
+`run`, the mean axial distance between lane breaks, null for unbroken
+lanes (it needs `link_spacing`: without links a broken lane peels away
+entirely); `layout`, `pair` or `sheets`; and, for the sheets layout,
+`unit` (60) and `sheet_length` (2). A key of the other kind is refused,
+`stretch` with fibre and `knot` with foam, and foam's settings are 3.7's
+byte for byte.
+
+The rules (F0-F8 of bed.py's docstring): N = ⌊density A / h²⌋ lane points,
+A the inset box's area projected along a, are placed by a two-dimensional
+hard core in the plane through the box centre across a, each lane its line
+clipped to the box; a lane carries a knot on each face it meets and
+interior knots every ℓ from a random phase, each offset across a by a
+Gaussian of σ per component cut radially at w = (h − d − margin) / 2, so
+that two lanes' chords never come within d + margin; breaks remove lane
+edges at exponential gaps; a share ℓ / (2λ) of the interior knots are
+link sites, each joined to the knot nearest in t of a neighbouring lane
+within link_reach h, drawn among the neighbours whose link clears
+max(min_angle, 72.06°) at both ends against the lane edges there, so that
+no link is refused by the angle or at a shared end against a lane. Lane
+edges, then tip edges, then links pass foam's greedy pass; dead ends are
+peeled with the face knots anchored, islands removed, and the chains walked
+and attached as foam's. The counters from `bed_proposals_outside` on are
+the fibre bed's (0 for foam), and their laws F1-F9 are in the docstring.
+On a bed alone along a coordinate axis without breaks every plane across a
+inside the lanes' common extent meets each lane's chord path once, whatever
+the sway or the link rate, so the chord graph's crossings are N plus the
+links that span the plane; `bed.chord_crossing_ratio(settings)` gives the
+lane chords' length-weighted crossing ratio J(β) = 1 + β √(π/2)
+exp(1/(2β²)) erfc(1/(√2 β)), β = √2 σ / ℓ, for offsets well below w.
+`planned_seeds` and `planned_candidates` (N (⌈E/ℓ⌉ + 1) + ⌈N ⌈E/ℓ⌉ ℓ /
+(2λ)⌉, E the inset box's extent along a) take the axis as a keyword when
+the settings have none, and `frame_record` gives a fibre bed an axis record
+about the domain's centre even without a frame.
+
+Layouts. `pair` grows foam's feeder pair. `sheets` grows n = max(2,
+⌊B / (unit d_min) + 1/2⌋) feeder trees, B the box's side along a, in planes
+across a at s_k = (k + 1/2) B / n: tree k is arterial from the face at
+the low end of the growth direction (y = 0 on the command line) for even k
+and venous from the opposite face for odd k, its root at s_k
+and the box centre, labelled k + (k ≥ 2) so that labels skip the bridge
+label, each steered by a plane rule of normal a and length sheet_length.
+It needs a bed axis of ±x or ±z, the growth direction ±y and the walk,
+holds at most 126 sheets, and takes no root offsets: it places its own
+roots. The sidecar and archive metadata list the trees under
+`feeder_trees` (label, role, sheet, root).
+
+Measured (`tests/test_fibre_benchmark.py`, beds alone along x, d_min 1,
+margin 1). In a cube of side 96 at the defaults (seeds 1-10) 0.83 of the
+link candidates and 0.70 of the link sites become links; no lane edge is
+refused and no chain dropped. A dense bed (spacing 3.2, density 0.6, links
+on) in a cube of side 256, 246,663 knots and 1.09 × 10⁶ d_min of walked
+chain, took 363 s and 995 MB on one core: 1.06 times foam's cost per unit
+of placed chain length on the same machine.
+
+A field of view can be filled between a forest's tips with `bed.build`
+directly and a settings axis:
+
+```python
+import bed
+result = bed.build((low, high), {"kind": "fibre", "axis": [1.0, 0.0, 0.0]}, d_min=1.0, seed=1,
+                   collision_margin=1.0, feeders=(nodes, tree))
+```
+
+With one feeder label every end of degree one but the first column of the
+label is a tip, so ends cut at the box faces are tips too.
+
 ### Families: `--family`
 
 `tree` is the plain grammar. `mesh` is walk (P = 10) + collision avoidance +
@@ -790,6 +872,32 @@ explicitly override the preset. The persistence
 values of the presets are provisional calibrations from the sweep in
 `docs/geometry`. A preset listed as None in `main.FAMILIES` is a family this
 version does not offer, and is refused.
+
+`fibre` is feeder trees in the sheets layout, walked (P = 10) with
+collision avoidance and grown in the volume, their grammar stopping below
+2 d_min, joined by a fibre bed along x with every bed setting written out:
+spacing 5, girth 8, min_angle 60, reach 2, diameter 1, persistence 16,
+feeder_stop 2, tip_edges 2, density 0.5, jitter 0.25, step 0.5, axis x,
+knot 4, sway 1, link_spacing 20, link_reach 1.75, run null, layout sheets,
+unit 60 and sheet_length 2. It imitates the capillary bed of striated
+muscle, capillaries running along the fibres between terminal arterioles
+and collecting venules in alternating sheets, with cross-connections
+(Plyley and Groom 1975, American Journal of Physiology,
+doi:10.1152/ajplegacy.1975.228.5.1376; Bassingthwaighte et al. 1974,
+Microvascular Research, doi:10.1016/0026-2862(74)90008-9; Potter and
+Groom 1983, Microvascular Research, doi:10.1016/0026-2862(83)90044-4;
+Skalak and Schmid-Schönbein 1986, Microvascular Research,
+doi:10.1016/0026-2862(86)90069-5; Sarelius 1986, American Journal of
+Physiology, doi:10.1152/ajpheart.1986.250.6.H899; Kassab and Fung 1994,
+American Journal of Physiology, doi:10.1152/ajpheart.1994.267.1.H319;
+Emerson and Segal 1997, Journal of Applied Physiology,
+doi:10.1152/jappl.1997.82.1.42), whose orientation has been fitted with a
+Fisher-axial law (Mathieu et al. 1983, Journal of Microscopy,
+doi:10.1111/j.1365-2818.1983.tb04240.x; Mathieu-Costello 1987,
+Microvascular Research, doi:10.1016/0026-2862(87)90010-0). Its frame is of
+kind `axis` along x; a library grows it in a cube of side 15 R. It needs
+`--d-min`, `--bed null` turns its bed off, and its numeric values are
+provisional.
 
 ### Cost
 
@@ -867,7 +975,21 @@ between junctions and tips, split by their mean diameter) and
 `transverse_spacing` (axis frames: on nine planes perpendicular to the axis
 over the central 80% of the capillary extent, the nearest-neighbour distance
 between the crossings of capillary edges and the crossings per unit area of
-plane inside the growth box, else inside the capillary bounding rectangle).
+plane inside the growth box, else inside the capillary bounding rectangle),
+and from 3.8 `cross_connections` and `cross_section` (axis frames with
+d_ref). `cross_connections` counts the transverse capillary segments, at
+least `describe.CROSS_ANGLE_DEG` = 60° from the axis, whose two ends are
+junctions of capillary segments only: "count", "per_length" and
+"per_length_d", "end_spacing_d" (the axial capillary length over twice the
+count, the mean axial distance between cross-connection ends along a
+capillary, comparable with a fibre bed's `link_spacing`), "chord_d",
+"length_share", "axial_segments_d" (the unbranched runs) and
+"junction_types" (T: one branch transverse and one each way along the
+axis; Y: none transverse, a split or a merge along it; other).
+`cross_section` gives, on transverse_spacing's nine planes, "nn_ratio" (the
+mean nearest-neighbour distance times the square root of the crossing
+density: 0.5 for a Poisson pattern, 1 for a square lattice, 1.0746 for a
+hexagonal one), "per_plane_density_d" and their "density_cv".
 Lengths come in the archive's unit and in d_ref (suffix `_d`). An archive
 without a frame reports `frame` None and every frame-relative key None; one
 without a d_ref reports every class-dependent key None. The pre-3.5 keys are
@@ -1276,7 +1398,13 @@ holds the 3.4 columns, then `frame_kind`,
 and `transverse_spacing_median` (in d_min), empty where a network has no frame
 axis or no polar sense, then from 3.6 `rungs`, the number of cross-connections;
 archive metadata lists the rungs themselves. 3.7 adds no column: a foam
-network's `bridges` is 0, and its bed's counters are in `events`.
+network's `bridges` is 0, and its bed's counters are in `events`. 3.8
+appends `capillary_crossing_density` (transverse_spacing's crossings per
+unit section area, per d_min²), `capillary_crossing_ratio` and
+`cross_connections_per_length` (per d_min), each empty where the frame has
+no axis; the library describes every member over its growth box, so that
+section areas are the box's (area_source `growth_box_um`), which no earlier
+column reads.
 
 Every archive is written atomically (`save_network` to a temporary file,
 then renamed) with metadata recording `"units": "d_min"`, the family, R, bin,
@@ -1555,6 +1683,22 @@ are reported beside describe's loops in segments. That no cycle of a foam
 network's bed is shorter than the girth is checked by `tests/test_bed.py`.
 
 ---
+
+From 3.8, `tests/test_pinned_release_3_7.py` runs the 3.7.0 modules (under
+`tests/fixtures/reference_code_3_7`) beside the current ones in the same
+way, on growth, the bed, description, the command line and libraries;
+`tests/test_describe_cross.py` checks the cross-connections and the cross
+section on constructed ladders, forks, lattices and archives;
+`tests/test_fibre.py` checks the fibre bed's settings and refusals, the
+planned counts, the frame record, the lanes against a one-at-a-time loop,
+every sub-stream recreated, scale, the density and chord laws, the link
+sites and partners (each link against the greedy pass itself), the rules,
+the written columns and the counters' laws; and
+`tests/test_fibre_family.py` checks the sheets layout, its refusals, the
+`fibre` preset end to end and its library members.
+`tests/test_fibre_benchmark.py`, with `VSYSTEM_SLOW_TESTS=1`, measures beds
+alone over their settings, beds between a mesh member's and a packed
+forest's feeders, the family's members and a dense bed's cost.
 
 ## Applications
 

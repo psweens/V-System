@@ -193,7 +193,15 @@ class RegistryTests(unittest.TestCase):
                                           "bed_segments", "bed_segments_walked", "bed_segments_chord",
                                           "bed_segments_dropped", "bed_segments_removed", "bed_walk_redraws",
                                           "bed_tips_attached", "bed_tip_edges", "bed_components",
-                                          "bed_components_one_tree"))
+                                          "bed_components_one_tree",
+                                          "bed_proposals_outside",
+                                          "bed_knots", "bed_knots_boundary", "bed_knots_on_feeders",
+                                          "bed_lane_candidates", "bed_lane_edges_on_feeders", "bed_breaks",
+                                          "bed_lane_edges",
+                                          "bed_link_sites", "bed_link_sites_no_partner", "bed_link_sites_angle",
+                                          "bed_link_sites_on_feeders",
+                                          "bed_candidates_link", "bed_links", "bed_links_kept",
+                                          "bed_knots_dead_end", "bed_knots_island"))
 
 
 class CropTests(unittest.TestCase):

@@ -1,5 +1,116 @@
 # Changelog
 
+## 3.8.0
+
+Version 3.8 adds a second explicit bed kind, `fibre`: capillaries in lanes
+that run nearly parallel to one axis, with short cross-connections between
+neighbours, whose density across the axis, alignment and cross-connections
+are set independently. The family `fibre` grows its feeder trees in sheets
+across the axis, arterial and venous in turn, and joins them by such a bed.
+describe gains the cross-connections and the cross section about a frame
+axis, and the library three columns that read them. Every family 3.7
+offered draws, writes and measures what 3.7.0 did, which the tests check
+by running the 3.7.0 modules, kept under `tests/fixtures/reference_code_3_7`,
+alongside the current ones.
+
+### Geometry
+
+- `bed.KINDS = ("foam", "fibre")` and `bed.LAYOUTS = ("pair", "sheets")`,
+  append-only. Settings are kind-specific: `BedSettings.parse` fills the
+  keys left out from the defaults of `spec["kind"]` (foam when absent) and
+  refuses a key outside `bed.KIND_KEYS[kind]`, naming the kind's keys;
+  `as_dict()` returns them in order. Foam's 13 keys and values are 3.7's
+  byte for byte; fibre's are `bed.FIBRE_SETTING_KEYS` (21), every default
+  provisional but `axis` and `layout`.
+- The fibre bed (rules F0-F8 in bed.py's docstring): N = ⌊density A / h²⌋
+  lane points by a two-dimensional hard core in the plane through the box
+  centre across the axis a, A the inset box's projected area; each lane a
+  line clipped to the box with a knot on each face and interior knots every
+  `knot` from a random phase, offset across a by a Gaussian of `sway` cut
+  radially at w = (h − d − margin) / 2, so that two lanes' chords never
+  come within d + margin; optional breaks at exponential gaps of mean
+  `run` (which needs `link_spacing`); link sites, a share knot / (2
+  link_spacing) of the interior knots, each joined to the nearest knot of a
+  neighbouring lane within `link_reach` spacings, drawn among the
+  neighbours whose link clears max(min_angle, 72.06°) against the lane
+  edges at both ends in the greedy pass's own arithmetic; then foam's
+  greedy pass over the lane edges, the tip edges and the links, peeling
+  with the face knots anchored, island removal, the walk and the
+  attachment. Its draws are sub-streams 4-9 of the bed's tag; it creates
+  none of foam's, and foam none of its.
+- `bed.build` keeps its signature; a fibre bed's return adds "axis",
+  "lane_extent", "knots", "knot_lane", "knot_t", "knot_boundary" and
+  "links", its "seeds" being the lane points and its vertices the knots,
+  then the tips. Foam returns 3.7's keys. `planned_seeds` and
+  `planned_candidates` take `axis=` for a fibre bed whose settings have
+  none; `frame_record(frame, settings, domain=None)` gives a fibre bed an
+  axis record, built about the domain's centre without a frame;
+  `check_settings` also refuses knot d_min ≤ d d_min + margin;
+  `bed.chord_crossing_ratio` gives the chord law J(β). Seventeen counters
+  are appended to `bed.EVENT_KEYS` and `main.EVENT_KEYS`, and the seed
+  outcome "outside" to `bed.SEED_OUTCOMES`.
+- The sheets layout (`layout: "sheets"`): n = max(2, ⌊B / (unit d_min) +
+  1/2⌋) feeder trees in planes across a at s_k = (k + 1/2) B / n, B the
+  box's side along a; tree k arterial from the low face of the growth
+  direction for even k, venous from the opposite face for odd k, its root
+  at s_k and the box centre, labelled k + (k ≥ BRIDGE), each steered by a
+  plane rule of normal a and length `sheet_length` on the one walk stream.
+  Root offsets, a null axis, a growth direction other than ±y, an axis
+  other than ±x or ±z, the stems tortuosity and more than 126 sheets
+  (`main.TooManySheets`) are refused before any draw, and `--bed` refuses
+  the same where the command line can meet them. The n programs are the
+  only global draws. A fibre bed in the pair layout runs foam's path, along
+  the growth direction when its settings have no axis.
+- The family `fibre`: the sheets layout and a fibre bed along x, every bed
+  setting written out (provisional values).
+
+### Measurement
+
+- `describe.CROSS_ANGLE_DEG = 60.0`. `cross_connections` (axis frames with
+  d_ref): the transverse capillary segments, at least 60° from the axis,
+  whose two ends are junctions of capillary segments only, with their
+  count, per unit capillary length, `end_spacing_d` (comparable with
+  `link_spacing`), chords, length share, the unbranched runs and the
+  junction types T, Y and other. `cross_section`: on transverse_spacing's
+  nine planes, `nn_ratio` (0.5 Poisson, 1 square, 1.0746 hexagonal), the
+  per-plane densities and their coefficient of variation. Every existing
+  key is unchanged.
+- `tests/test_fibre_benchmark.py` (slow): beds alone over their settings,
+  beds between a mesh member's and a packed forest's feeders beside
+  stretched foam, the family's members, and a dense bed's cost. At the
+  defaults in a cube of side 96 (seeds 1-10) 0.83 of the link candidates
+  and 0.70 of the sites become links, with no lane edge refused; a dense bed
+  in a cube of side 256 took 363 s and 995 MB, 1.06 times foam's cost per
+  unit of placed chain length.
+
+### Library
+
+- `BOX_C["fibre"] = 15.0`. `describe_member` passes the growth box to
+  describe, so that section areas are the box's (area_source
+  `growth_box_um`) rather than the capillaries' bounding box.
+- Index columns appended: `capillary_crossing_density`,
+  `capillary_crossing_ratio` and `cross_connections_per_length`, empty where
+  the frame has no axis. A fibre member's metadata lists its
+  `feeder_trees`. The cap on planned candidates passes the growth direction
+  for a fibre bed without an axis.
+
+### Compatibility
+
+- Every family 3.7 offered reproduces 3.7.0 exactly: growth, the bed,
+  description, the command line's archives, sidecars and TIFFs, and the
+  library's members, index rows (the 3.7 columns), manifest content and
+  archives. `tests/test_pinned_release_3_7.py` runs the 3.7.0 modules beside
+  the current ones and restricts every record to the keys 3.7 wrote; its
+  hashes are recorded on Linux x86_64 with numpy's AVX-512 loops, and the
+  earlier pins pass unchanged.
+- Additions only: the fibre settings, return keys and counters; the
+  sidecar's and metadata's `feeder_trees` for the sheets layout; describe's
+  two keys; the three index columns. No existing describe key, index
+  column, return key of foam or random stream changes; no index column read
+  describe's areas or volumes before, so the growth box changes none.
+- pyproject version 3.8.0 and `library.LIBRARY_VERSION` 3.8.0; no new
+  module. Python 3.9 syntax, numpy and tifffile only.
+
 ## 3.7.0
 
 Version 3.7 grows a capillary bed explicitly. `--bed` replaces the
