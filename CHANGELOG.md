@@ -1,5 +1,110 @@
 # Changelog
 
+## 3.9.0
+
+Version 3.9 lets a library grow a family with some of its preset values
+changed: `vsystem-library --family-settings FAMILY JSON`, for example a
+foam bed at a smaller spacing or a capillary fill of more generations. The
+settings reach each member as flags on its recorded command line, which
+stays a runnable `vsystem` command line, and are recorded in the manifest
+and the archives, so the library stays reproducible and resumable. A library
+without the option is what 3.8 grew, which the tests check by running the
+3.8.0 modules, kept under `tests/fixtures/reference_code_3_8`, alongside
+the current ones.
+
+### Library
+
+- `--family-settings FAMILY JSON`, repeatable (`nargs=2`,
+  `action="append"`), once per family listed in `--families` or among the
+  default families. The keys are `library.FAMILY_SETTING_KEYS`
+  (append-only): `persistence`, `anastomosis_fraction`,
+  `anastomosis_radius`, `anastomosis_min_separation`, `aneurysm_prob`,
+  `stenosis_prob`, `root_offsets`, `guidance`, `capillary_generations`,
+  `capillary_runs`, `cross_connect`, `rung_below`, `rung_spacing`,
+  `rung_radius`, `rung_lateral_deg`, `rung_axis`, `rung_min_separation` and
+  `bed`. A bed object is merged over the preset's bed and normalised by
+  `bed.parse_settings` (13 keys for foam, 21 for fibre); every other value
+  replaces the preset's, arrays whole, numbers as floats, the integer
+  settings as whole numbers and `cross_connect` as a bool.
+- `library.normalise_family_settings(family, spec)` checks and normalises
+  one family's settings (keys in `FAMILY_SETTING_KEYS` order; idempotent)
+  and raises `ValueError`. Refused: a key outside `FAMILY_SETTING_KEYS`
+  (named as fixed by the library, as changing what the family is, or as
+  the grammar's and the numerics' own), a bed for a family whose preset has
+  none, a null bed, a bed `kind` or `layout` other than the preset's, a
+  bool where a number is expected, a non-finite number, a non-array where
+  an array is expected, and a negative number in exponent notation, which
+  argparse would read as an option. The command line also refuses, naming
+  the family, a family not listed, a family given twice, and JSON that is
+  malformed, not an object or empty.
+- `library.settings_argv(family, settings)` writes the flags, appended by
+  `member_argv(..., settings=...)` after the others in key order, named from
+  `main.build_parser(family)`'s actions: JSON compact with sorted keys,
+  floats as `repr`, ints as digits, `--cross-connect` or
+  `--no-cross-connect`. `grow_member(..., settings=...)` returns the
+  normalised settings under `"family_settings"`; with `settings=None` both
+  return what 3.8 returned.
+- Before anything is grown, `library.check_family_settings` parses the
+  command line of each family with settings at R_LO and R_HI with
+  `main.build_parser(family)` and runs `main.validate_shaping`, and returns
+  the lines `vsystem-library` prints for such a family with a bed: the
+  candidate edges planned at R_HI against `--bed-max-candidates` and the
+  largest R the cap admits (`library.largest_admitted_ratio`, a bisection
+  on `library.planned_bed_candidates`, the count `grow_member`'s cap reads),
+  and where `feeder_stop` exceeds R_LO the smallest R it admits. Members
+  beyond either are recorded as failures, as before; the cap's rule is
+  unchanged.
+- The manifest's `growth` gains `family_settings` (`{family: settings}`)
+  only when a family has settings (`growth_settings(args, box_c=None,
+  family_settings=None)`), so a rerun with different settings or none is
+  refused by the existing comparison. An archive of a family with settings
+  records them under `family_settings` in its metadata, and
+  `validate_existing` compares the command line with them. No index column
+  is added, and a family grown with settings keeps its name.
+
+### Measurement
+
+- `tests/test_library_settings.SettingsBenchmark` (slow): members grown by
+  `grow_member` with settings, each in a fresh process, seed 1: foam at R
+  4, 8 and 16 over bed spacing {7.5, 6, 5, 4.5} and density {0.5, 0.6},
+  and capillary_bed at R 4 and 8 with 3 and 4 capillary generations, with
+  growth time, peak RSS, points, planned candidate edges, length density
+  over the growth box, the tissue distance over it and the capillary length
+  share, and the largest R the default cap admits at each foam setting.
+- At density 0.5, spacing 6, 5 and 4.5 multiply foam's length density by
+  1.51–1.60, 2.14–2.29 and 2.62–2.83 over R 4–16, and density 0.6 adds
+  14–23 %; the mean tissue distance falls from 3.01–3.45 d_min with the
+  preset's bed to 1.51–1.65 d_min at spacing 4.5 and density 0.6. Growth
+  takes 1.2–4.6 times the preset's time, at most 483 s and 859 MB (R 16,
+  spacing 4.5, density 0.6). One more capillary generation moves
+  capillary_bed's length density by −16 % at R 4 and +20 % at R 8 for this
+  seed. The default cap of 2 × 10⁶ candidate edges admits foam up to R
+  31.33 with the preset's bed, 25.07 and 22.21 at spacing 6, 20.90 and
+  18.52 at spacing 5, and 18.82 and 16.67 at spacing 4.5 (density 0.5 and
+  0.6).
+
+### Compatibility
+
+- A library without `--family-settings` is 3.8's: every member's command
+  line, the manifest's growth block, every archive, index row and manifest
+  entry, apart from `library_version`, `code_sha256` and each run's
+  `seconds` and `peak_rss_mb`. `tests/test_pinned_release_3_8.py` runs the
+  3.8.0 modules beside the current ones over `member_argv` for every family
+  and library option, the growth settings, a member of every family 3.8
+  offers (argv, kwargs, nodes, program, index row), a plan of every family,
+  and the default library beside one of foam, capillary_bed and aligned_bed,
+  each grown and resumed, every record restricted to the keys 3.8 wrote and
+  the global generators compared after each case; its hashes are recorded
+  on Linux x86_64 with numpy's AVX-512 loops, and the earlier pins pass
+  unchanged.
+- Settings for one family leave the plan, the seeds, the ratios and the
+  other families' members bitwise equal to a library without them.
+- `main.py`, `bed.py`, main's import closure, `main.FAMILIES`,
+  `main.RNG_STREAMS` and `library.RNG_STREAMS` are unchanged, so `vsystem`
+  draws exactly what 3.8 draws. pyproject version 3.9.0 and
+  `library.LIBRARY_VERSION` 3.9.0; no new module. Python 3.9 syntax, numpy
+  and tifffile only.
+
 ## 3.8.0
 
 Version 3.8 adds a second explicit bed kind, `fibre`: capillaries in lanes

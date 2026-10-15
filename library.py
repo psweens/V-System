@@ -56,6 +56,18 @@ the frame axis is the box's (area_source "growth_box_um") rather than the
 capillaries' bounding box; a fibre member's metadata also lists its feeder
 trees ("feeder_trees": label, role, sheet and root).
 
+Family settings. `--family-settings FAMILY JSON` (repeatable, once per
+family) grows a family with some of its preset values changed: the keys of
+FAMILY_SETTING_KEYS, a bed object merged over the preset's bed and the other
+values replacing the preset's. normalise_family_settings checks and
+normalises them; each member of the family carries them as flags appended to
+its command line, which stays a runnable `vsystem` command line, its
+metadata records them under "family_settings", and the manifest under
+growth.family_settings, which is absent when no family has settings. They
+are checked before anything is grown against everything the command line
+refuses, at both ends of the ratio range. The plan, the seeds and the other
+families' members do not depend on them, and the family keeps its name.
+
 Resuming. A run into a directory that holds a manifest refuses a different
 parameter set or a different code hash, records a different Python or numpy
 version with a warning, keeps every archive that loads and matches its plan
@@ -78,15 +90,19 @@ Python 3.9 compatible; numpy and tifffile (through main) are the only
 dependencies.
 """
 import argparse
+import contextlib
 import csv
 import datetime
 import hashlib
+import io
 import json
 import math
 import multiprocessing
+import numbers
 import os
 import platform
 import random
+import re
 import resource
 import socket
 import sys
@@ -104,7 +120,7 @@ from describe import describe
 RNG_STREAMS = {"ratio": 4}
 
 # The version of the library format and generator, the release it belongs to.
-LIBRARY_VERSION = "3.8.0"
+LIBRARY_VERSION = "3.9.0"
 
 RATIO_LAW = "log-uniform"
 UNITS = "d_min"
@@ -154,6 +170,32 @@ INDEX_COLUMNS = ("id", "family", "ratio", "bin", "u", "seed", "file", "generatio
                  "capillary_length_share", "capillary_volume_share", "capillary_segment_median",
                  "transverse_spacing_median", "rungs",
                  "capillary_crossing_density", "capillary_crossing_ratio", "cross_connections_per_length")
+
+# The parser dests a family's settings may override (--family-settings), in
+# the order their flags follow the others on a member's command line.
+# Append-only. A bed is merged over the preset's bed; every other value
+# replaces the preset's: a number, a whole number, a bool or a JSON array.
+FAMILY_SETTING_KEYS = ("persistence", "anastomosis_fraction", "anastomosis_radius", "anastomosis_min_separation",
+                       "aneurysm_prob", "stenosis_prob",
+                       "root_offsets", "guidance",
+                       "capillary_generations", "capillary_runs",
+                       "cross_connect", "rung_below", "rung_spacing", "rung_radius", "rung_lateral_deg", "rung_axis",
+                       "rung_min_separation",
+                       "bed")
+_WHOLE_SETTINGS = ("anastomosis_min_separation", "capillary_generations", "capillary_runs", "rung_min_separation")
+_FLAG_SETTINGS = ("cross_connect",)
+_ARRAY_SETTINGS = ("root_offsets", "guidance", "rung_axis")
+# The dests a family's settings may not override, by why (see the README):
+# what the library fixes for every member from its plan, its options and its
+# box layout, and what makes a family what it is; a bed's kind and a fibre
+# bed's feeder layout make it too. Every other dest is the grammar's own
+# ranges or a numerical or output setting, the same for every family.
+_LIBRARY_OWNED = ("d0", "d0_min", "d_min", "iterations", "volume", "fit", "voxel_size", "grow_in_volume",
+                  "collision_margin", "avoid_collisions", "seed", "count", "out")
+_FAMILY_DEFINING = ("family", "tortuosity", "anastomose", "anastomose_mode")
+_BED_DEFINING = ("kind", "layout")
+# what argparse reads as a negative number rather than an option
+_NEGATIVE_NUMBER = re.compile(r"-\d+|-\d*\.\d+")
 
 THREAD_VARIABLES = ("OMP_NUM_THREADS", "OPENBLAS_NUM_THREADS", "MKL_NUM_THREADS")
 
@@ -267,12 +309,163 @@ def box_constants(mesh_box_c=None, box_c=None):
     return boxes
 
 
+def _finite_real(value):
+    # a real number but a bool, finite; an integer too large for a float is not
+    if isinstance(value, (bool, np.bool_)) or not isinstance(value, numbers.Real):
+        return False
+    try:
+        return math.isfinite(value)
+    except OverflowError:
+        return False
+
+
+def _plain_json(value):
+    # a numpy scalar or array inside an array setting, as the JSON value it stands for
+    if isinstance(value, (np.generic, np.ndarray)):
+        return value.tolist()
+    raise TypeError(f"{type(value).__name__} is not a JSON value")
+
+
+def _exact(value):
+    # a float as %g where that is the same number, else its repr
+    return f"{value:g}" if float(f"{value:g}") == value else repr(value)
+
+
+def _refused_setting(key, family):
+    """Why `key` is not a family setting, naming the ones that are."""
+    settings = ", ".join(FAMILY_SETTING_KEYS)
+    if key in _LIBRARY_OWNED:
+        reason = "the library fixes it for every member, from its plan, its options and its box layout"
+    elif key in _FAMILY_DEFINING:
+        reason = "it changes what the family is"
+    elif key in {action.dest for action in cli.build_parser(family)._actions}:
+        reason = "the grammar's own ranges and the numerical and output settings are the same for every family"
+    else:
+        return ValueError(f"unknown setting {key!r}; the settings a family may change are {settings}")
+    return ValueError(f"{key!r} cannot be set per family: {reason}; the settings a family may change are {settings}")
+
+
+def _normalised_bed(family, value):
+    """A bed object merged over the family preset's bed, normalised by bed.parse_settings."""
+    released = cli.FAMILIES[family].get("bed")
+    if released is None:
+        raise ValueError(f"bed: the {family} preset grows no bed, and a bed would change what the family is")
+    if value is None:
+        raise ValueError("bed: null turns the preset's bed off, which changes what the family is")
+    if not isinstance(value, dict):
+        raise ValueError(f"bed must be a JSON object of bed settings, merged over the preset's bed, got {value!r}")
+    base = bed.parse_settings(released)
+    for key in _BED_DEFINING:
+        # the preset's own value may be repeated, as a normalised bed does
+        if key in value and key in base and value[key] != base[key]:
+            raise ValueError(f"bed: {key} {value[key]!r} cannot replace the preset's {base[key]!r}: a different bed "
+                             f"kind or feeder layout changes what the family is")
+    merged = dict(base)
+    merged.update(value)
+    try:
+        return bed.parse_settings(merged)
+    except ValueError as error:
+        raise ValueError(f"bed: {error}") from None
+
+
+def normalise_family_settings(family, spec):
+    """
+    One family's settings (--family-settings FAMILY JSON), checked and
+    normalised: keys from FAMILY_SETTING_KEYS, in that order. "bed" is
+    merged over the preset's bed and normalised by bed.parse_settings, every
+    key of bed.KIND_KEYS[kind] written out; it is refused for a family whose
+    preset grows no bed, as null, and with a kind or layout other than the
+    preset's. An array (root_offsets, guidance, rung_axis) replaces the
+    preset's whole; a number is a float, a whole number an int and
+    cross_connect a bool, a bool being refused where a number is expected. A
+    negative number that argparse would read as an option (in exponent
+    notation, such as -1e-05) is refused, so that the member's command line
+    stays runnable. Normalising twice changes nothing. Draws nothing.
+
+    What the command line refuses only together with the rest of a member's
+    arguments, such as a bed with a capillary fill, is refused by
+    member_argv's parse and main.validate_shaping (see check_family_settings).
+
+    Raises:
+        ValueError: for a family that is not offered, a spec that is not a
+        non-empty dict, a key outside FAMILY_SETTING_KEYS and a value
+        refused above.
+    """
+    if family not in available_families():
+        raise ValueError(f"unknown family {family!r}; choose from {' '.join(available_families())}")
+    if not isinstance(spec, dict):
+        raise ValueError(f"the settings must be a JSON object, got {spec!r}")
+    if not spec:
+        raise ValueError(f"the settings are empty; give at least one of {', '.join(FAMILY_SETTING_KEYS)}")
+    for key in spec:
+        if key not in FAMILY_SETTING_KEYS:
+            raise _refused_setting(key, family)
+    settings = {}
+    for key in FAMILY_SETTING_KEYS:
+        if key not in spec:
+            continue
+        value = spec[key]
+        if key == "bed":
+            settings[key] = _normalised_bed(family, value)
+        elif key in _ARRAY_SETTINGS:
+            if isinstance(value, np.ndarray):
+                value = value.tolist()
+            if not isinstance(value, (list, tuple)):
+                raise ValueError(f"{key} must be a JSON array, which replaces the preset's whole, got {value!r}")
+            try:
+                settings[key] = json.loads(json.dumps(value, allow_nan=False, default=_plain_json))
+            except (TypeError, ValueError) as error:
+                raise ValueError(f"{key} must hold JSON values with finite numbers only ({error})") from None
+        elif key in _FLAG_SETTINGS:
+            if not isinstance(value, (bool, np.bool_)):
+                raise ValueError(f"{key} must be true or false, got {value!r}")
+            settings[key] = bool(value)
+        elif key in _WHOLE_SETTINGS:
+            if not _finite_real(value) or not float(value).is_integer():
+                raise ValueError(f"{key} must be a whole number, got {value!r}")
+            settings[key] = int(value)
+        else:
+            if not _finite_real(value):
+                raise ValueError(f"{key} must be a finite number, got {value!r}")
+            settings[key] = float(value)
+            if settings[key] < 0.0 and not _NEGATIVE_NUMBER.fullmatch(repr(settings[key])):
+                raise ValueError(f"{key} {settings[key]!r}: a negative number written in exponent notation is read "
+                                 f"as an option by the command line's parser, so the member's command line would "
+                                 f"not run")
+    return settings
+
+
+def settings_argv(family, settings):
+    """
+    The flags of a family's normalised settings, one per key in
+    FAMILY_SETTING_KEYS order, as main.build_parser(family) names them: a
+    JSON value compact with sorted keys, a float as its repr, an int as its
+    digits, and cross_connect as --cross-connect or --no-cross-connect.
+    """
+    options = {action.dest: [option for option in action.option_strings if option.startswith("--")]
+               for action in cli.build_parser(family)._actions}
+    argv = []
+    for key, value in settings.items():
+        if key in _FLAG_SETTINGS:
+            argv.append(next(option for option in options[key] if option.startswith("--no-") != bool(value)))
+        elif key == "bed" or key in _ARRAY_SETTINGS:
+            argv += [options[key][0], json.dumps(value, sort_keys=True, separators=(",", ":"))]
+        elif key in _WHOLE_SETTINGS:
+            argv += [options[key][0], str(int(value))]
+        else:
+            argv += [options[key][0], repr(float(value))]
+    return argv
+
+
 def member_argv(family, ratio, *, d_min=1.0, collision_margin=DEFAULT_COLLISION_MARGIN,
-                mesh_box_c=None, iteration_cap=DEFAULT_ITERATION_CAP, avoid_collisions=True, box_c=None):
+                mesh_box_c=None, iteration_cap=DEFAULT_ITERATION_CAP, avoid_collisions=True, box_c=None,
+                settings=None):
     """
     The `vsystem` command line that grows one library network (without
     --count, --seed or --out). A family in BOX_C grows in a cube of side c R:
-    the voxel size is set to c d0 / 3 over the three-voxel volume.
+    the voxel size is set to c d0 / 3 over the three-voxel volume. The
+    family's `settings`, normalised by normalise_family_settings, follow as
+    flags (settings_argv); without them the command line is 3.8's.
     """
     d0 = ratio * d_min
     boxes = box_constants(mesh_box_c, box_c)
@@ -283,16 +476,62 @@ def member_argv(family, ratio, *, d_min=1.0, collision_margin=DEFAULT_COLLISION_
             "--volume"] + [str(v) for v in VOLUME] + ["--fit", "voxel_size", "--voxel-size", repr(float(voxel_size))]
     if family == "tree" and avoid_collisions:
         argv.append("--avoid-collisions")
+    if settings is not None:
+        argv += settings_argv(family, normalise_family_settings(family, settings))
     return argv
+
+
+def planned_bed_candidates(args):
+    """
+    The candidate edges a member's bed plans (bed.planned_candidates over
+    its growth box) from its parsed arguments, which the cap counts; a fibre
+    bed whose settings have no axis runs along the growth direction. None
+    for a member without a bed.
+    """
+    if args.bed is None:
+        return None
+    # a member always grows at a fixed voxel size
+    return bed.planned_candidates(np.asarray(args.volume, dtype=float) * float(args.voxel_size),
+                                  bed.parse_settings(args.bed), args.d_min, axis=cli.DEFAULT_DIRECTION)
+
+
+def largest_admitted_ratio(family, bed_max_candidates, *, settings=None, **options):
+    """
+    The largest R whose member's bed `bed_max_candidates` admits, found by
+    bisection to a relative 1e-9 on the members member_argv(family, R,
+    settings=settings, **options) gives, whose planned candidate edges do
+    not fall as R grows; math.inf when no R up to 2 ** 40 exceeds the cap,
+    None for a family without a bed.
+    """
+    def planned(ratio):
+        args = cli.build_parser(family).parse_args(member_argv(family, ratio, settings=settings, **options))
+        return planned_bed_candidates(args)
+
+    if planned(1.0) is None:
+        return None
+    admitted, refused = 0.0, 1.0
+    while planned(refused) <= bed_max_candidates:
+        admitted, refused = refused, 2.0 * refused
+        if refused > 2.0 ** 40:
+            return math.inf
+    while refused - admitted > 1e-9 * refused:
+        middle = (admitted + refused) / 2.0
+        if planned(middle) <= bed_max_candidates:
+            admitted = middle
+        else:
+            refused = middle
+    return admitted
 
 
 def grow_member(family, ratio, seed, *, d_min=1.0, collision_margin=DEFAULT_COLLISION_MARGIN,
                 mesh_box_c=None, iteration_cap=DEFAULT_ITERATION_CAP, avoid_collisions=True, box_c=None,
-                bed_max_candidates=DEFAULT_BED_MAX_CANDIDATES):
+                bed_max_candidates=DEFAULT_BED_MAX_CANDIDATES, settings=None):
     """
     Grows one library network exactly as `vsystem` would from the same
     arguments and seed: main's parser with the family preset, its parameter
     sampling under the seeded global generators, then grow_network.
+    `settings`, one family's settings (normalise_family_settings), reach
+    the parser as flags on the member's command line.
 
     A member with an explicit bed is refused before anything is drawn when
     its planned candidate edges (bed.planned_candidates over its growth box)
@@ -301,14 +540,16 @@ def grow_member(family, ratio, seed, *, d_min=1.0, collision_margin=DEFAULT_COLL
     Returns:
         dict: "grown" (the result of grow_network), "argv", "kwargs" (every
         keyword passed to grow_network, JSON-ready), "niter", "d0" and
-        "properties".
+        "properties", and with settings "family_settings", normalised.
 
     Raises:
-        ValueError: for a member the command line refuses, and
-        (bed.BedTooLarge) for a bed over the cap.
+        ValueError: for settings normalise_family_settings refuses, a member
+        the command line refuses, and (bed.BedTooLarge) a bed over the cap.
     """
+    if settings is not None:
+        settings = normalise_family_settings(family, settings)
     argv = member_argv(family, ratio, d_min=d_min, collision_margin=collision_margin, mesh_box_c=mesh_box_c,
-                       iteration_cap=iteration_cap, avoid_collisions=avoid_collisions, box_c=box_c)
+                       iteration_cap=iteration_cap, avoid_collisions=avoid_collisions, box_c=box_c, settings=settings)
     args = cli.build_parser(family).parse_args(argv)
     try:
         cli.validate_shaping(args)
@@ -317,10 +558,8 @@ def grow_member(family, ratio, seed, *, d_min=1.0, collision_margin=DEFAULT_COLL
         # member's box, is an error of this member, which the library records
         raise ValueError(str(exc)) from None
     if args.bed is not None:
-        # the last point before the first draw; a member always grows at a fixed voxel size
-        # a fibre bed whose settings have no axis runs along the growth direction
-        planned = bed.planned_candidates(np.asarray(args.volume, dtype=float) * float(args.voxel_size),
-                                         bed.parse_settings(args.bed), args.d_min, axis=cli.DEFAULT_DIRECTION)
+        # the last point before the first draw
+        planned = planned_bed_candidates(args)
         if planned > bed_max_candidates:
             raise bed.BedTooLarge(f"planned {planned} candidate edges exceed --bed-max-candidates "
                                   f"{bed_max_candidates}; raise the cap or lower --box-c {family}")
@@ -337,7 +576,10 @@ def grow_member(family, ratio, seed, *, d_min=1.0, collision_margin=DEFAULT_COLL
     record = dict(kwargs)
     record["tVol"] = list(record["tVol"])
     record["clip_axes"] = list(record["clip_axes"])
-    return {"grown": grown, "argv": argv, "kwargs": record, "niter": niter, "d0": d0, "properties": properties}
+    result = {"grown": grown, "argv": argv, "kwargs": record, "niter": niter, "d0": d0, "properties": properties}
+    if settings is not None:
+        result["family_settings"] = settings
+    return result
 
 
 def _weighted_percentile(values, weights, fraction):
@@ -495,7 +737,7 @@ def code_hash(root=None):
     return digest.hexdigest()
 
 
-def growth_settings(args, box_c=None):
+def growth_settings(args, box_c=None, family_settings=None):
     """
     The growth parameters of a library, as the manifest records them. The
     mesh box constant is recorded as before; the constants of the other box
@@ -503,7 +745,9 @@ def growth_settings(args, box_c=None):
     absent when none is listed, and the cap on a bed's planned candidate
     edges under "bed_max_candidates", absent when no family listed has a
     bed, so that a library of the default families records what it always
-    did.
+    did. `family_settings` ({family: normalised settings}, from
+    parse_family_settings) are recorded under "family_settings", in
+    `--families` order, absent when no family has settings.
     """
     boxes = box_constants(args.mesh_box_c, box_c)
     families = args.families if args.families else list(DEFAULT_FAMILIES)
@@ -515,7 +759,79 @@ def growth_settings(args, box_c=None):
         settings["box_c"] = listed
     if bed_families(families):
         settings["bed_max_candidates"] = int(args.bed_max_candidates)
+    if family_settings:
+        settings["family_settings"] = {family: family_settings[family] for family in families
+                                       if family in family_settings}
     return settings
+
+
+def parse_family_settings(given, families):
+    """
+    --family-settings as parsed ([FAMILY, JSON] pairs, or None), each
+    normalised by normalise_family_settings: {family: settings} in
+    `families` order. Refuses, naming the family, one not in `families`,
+    one given twice, and JSON that is malformed or that
+    normalise_family_settings refuses.
+    """
+    found = {}
+    for family, text in given or ():
+        if family not in families:
+            raise SystemExit(f"--family-settings {family}: not a family of this library; its families are "
+                             f"{' '.join(families)}")
+        if family in found:
+            raise SystemExit(f"--family-settings {family}: given twice; give each family's settings once")
+        try:
+            spec = json.loads(text)
+        except ValueError as error:
+            raise SystemExit(f"--family-settings {family}: not JSON ({error})")
+        try:
+            found[family] = normalise_family_settings(family, spec)
+        except ValueError as error:
+            raise SystemExit(f"--family-settings {family}: {error}")
+    return {family: found[family] for family in families if family in found}
+
+
+def check_family_settings(family_settings, ratio_range, bed_max_candidates, **options):
+    """
+    Checks each family's settings before anything is grown: the member's
+    command line (member_argv with **options) at both ends of the ratio
+    range is parsed by main.build_parser(family) and checked by
+    main.validate_shaping, and a refusal of either names the family. For a
+    family with a bed, returns the lines to print: the candidate edges its
+    bed plans at R_HI against the cap and the largest R the cap admits (a
+    larger member is recorded as a failure by grow_member's own check), and,
+    where its feeder_stop exceeds R_LO, the smallest R the feeders admit (a
+    smaller member is refused by the command line and grow_network alike,
+    and recorded as a failure).
+    """
+    lo, hi = (float(v) for v in ratio_range)
+    lines = []
+    for family, settings in family_settings.items():
+        for ratio in (lo, hi):
+            argv = member_argv(family, ratio, settings=settings, **options)
+            with contextlib.redirect_stderr(io.StringIO()) as printed:
+                try:
+                    args = cli.build_parser(family).parse_args(argv)
+                    cli.validate_shaping(args)
+                except SystemExit as exc:
+                    # validate_shaping's message, or the error argparse printed
+                    reason = exc.code if isinstance(exc.code, str) else \
+                        (printed.getvalue().strip().splitlines() or [f"status {exc.code}"])[-1]
+                    raise SystemExit(f"--family-settings {family}: the command line refuses the member at R "
+                                     f"{ratio:g}: {reason}") from None
+        if args.bed is None:
+            continue
+        planned = planned_bed_candidates(args)
+        limit = largest_admitted_ratio(family, bed_max_candidates, settings=settings, **options)
+        admits = "every R" if limit == math.inf else f"R up to {math.floor(limit * 100.0) / 100.0:.2f}"
+        lines.append(f"--family-settings {family}: the bed plans {planned} candidate edges at R {hi:g} against "
+                     f"--bed-max-candidates {bed_max_candidates}, which admits {admits}; a larger member is "
+                     f"recorded as a failure")
+        stop = bed.parse_settings(args.bed)["feeder_stop"]
+        if stop > lo:
+            lines.append(f"--family-settings {family}: feeder_stop {_exact(stop)} admits R from {_exact(stop)}; "
+                         f"a smaller member is recorded as a failure")
+    return lines
 
 
 def grow_and_write(task):
@@ -532,7 +848,8 @@ def grow_and_write(task):
                              collision_margin=settings["collision_margin"], mesh_box_c=settings["mesh_box_c"],
                              iteration_cap=settings["iteration_cap"], avoid_collisions=settings["avoid_collisions"],
                              box_c=settings.get("box_c"),
-                             bed_max_candidates=settings.get("bed_max_candidates", DEFAULT_BED_MAX_CANDIDATES))
+                             bed_max_candidates=settings.get("bed_max_candidates", DEFAULT_BED_MAX_CANDIDATES),
+                             settings=settings.get("family_settings", {}).get(member["family"]))
         grown = result["grown"]
         row = describe_member(grown, settings["collision_margin"], settings["d_min"])
         row["generations"] = max(drawn_generations(p) for p in grown["programs"])
@@ -555,6 +872,8 @@ def grow_and_write(task):
         }
         if "feeder_trees" in grown:
             metadata["feeder_trees"] = grown["feeder_trees"]
+        if "family_settings" in result:
+            metadata["family_settings"] = result["family_settings"]
         metadata.update(hashes)
         save_member_archive(os.path.join(directory, member["file"]), grown, metadata)
         row.update({"id": member["id"], "family": member["family"], "ratio": member["ratio"], "bin": member["bin"],
@@ -592,7 +911,7 @@ def validate_existing(path, member, settings):
     argv = member_argv(member["family"], member["ratio"], d_min=settings["d_min"],
                        collision_margin=settings["collision_margin"], mesh_box_c=settings["mesh_box_c"],
                        iteration_cap=settings["iteration_cap"], avoid_collisions=settings["avoid_collisions"],
-                       box_c=settings.get("box_c"))
+                       box_c=settings.get("box_c"), settings=settings.get("family_settings", {}).get(member["family"]))
     if record.get("argv") != argv:
         return None, f"grown from {record.get('argv')!r}, planned {argv!r}"
     if "nodes_sha256" not in record or record["nodes_sha256"] != sha256_bytes(np.ascontiguousarray(network["nodes"]).tobytes()):
@@ -735,6 +1054,12 @@ def build_parser():
                         help="refuse, and record as a failure, a bed member whose planned candidate edges exceed N, "
                              "before anything is drawn; it bounds the candidates only, not the walk "
                              "(default 2e6)")
+    parser.add_argument("--family-settings", nargs=2, action="append", default=None, metavar=("FAMILY", "JSON"),
+                        help="grow FAMILY with some of its preset values changed: a JSON object of settings from "
+                             "library.FAMILY_SETTING_KEYS, a bed object merged over the preset's bed and every other "
+                             "value replacing the preset's, for example '{\"bed\": {\"spacing\": 5}}' or "
+                             "'{\"capillary_generations\": 4}'; recorded in each member's command line and "
+                             "metadata and in the manifest (repeatable, once per family listed; default: the presets)")
     parser.add_argument("--avoid-collisions", dest="avoid_collisions", action="store_true", default=True,
                         help="grow trees with collision avoidance (default; mesh and tumour always do)")
     parser.add_argument("--no-avoid-collisions", dest="avoid_collisions", action="store_false",
@@ -777,13 +1102,19 @@ def main(argv=None):
         raise SystemExit("--mesh-box-c must be positive and --iteration-cap at least 1")
     if args.bed_max_candidates < 1:
         raise SystemExit("--bed-max-candidates must be a whole number of at least 1")
+    family_settings = parse_family_settings(args.family_settings, families)
+    for line in check_family_settings(family_settings, (lo, hi), args.bed_max_candidates,
+                                      collision_margin=args.collision_margin, mesh_box_c=args.mesh_box_c,
+                                      iteration_cap=args.iteration_cap, avoid_collisions=args.avoid_collisions,
+                                      box_c=box_c):
+        print(line, flush=True)
 
-    settings = growth_settings(args, box_c)
+    settings = growth_settings(args, box_c, family_settings)
     settings.update({"ratio_lo": float(lo), "ratio_hi": float(hi)})
     members = plan_library(args.seed, args.count, families, shares, (lo, hi))
     code = code_hash()
-    content_now = manifest_content(args.seed, args.count, families, shares, (lo, hi), growth_settings(args, box_c),
-                                   None, members, {}, [], code)
+    content_now = manifest_content(args.seed, args.count, families, shares, (lo, hi),
+                                   growth_settings(args, box_c, family_settings), None, members, {}, [], code)
     os.makedirs(args.out, exist_ok=True)
     manifest_path = os.path.join(args.out, "manifest.json")
     run_record = {"host": socket.gethostname(), "platform": platform.platform(),
@@ -864,8 +1195,8 @@ def main(argv=None):
                       f"peak RSS {row['peak_rss_mb']:.0f} MB", flush=True)
     elapsed = time.perf_counter() - started
 
-    content = manifest_content(args.seed, args.count, families, shares, (lo, hi), growth_settings(args, box_c),
-                               None, members, rows, failures, code)
+    content = manifest_content(args.seed, args.count, families, shares, (lo, hi),
+                               growth_settings(args, box_c, family_settings), None, members, rows, failures, code)
     run_record["runs"].append({"started": run_record.pop("started"),
                                "finished": datetime.datetime.now(datetime.timezone.utc).isoformat(),
                                "workers": args.workers, "grown": len(pending) - len(failures),
