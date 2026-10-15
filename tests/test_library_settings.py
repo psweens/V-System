@@ -119,6 +119,12 @@ class NormalisationTests(unittest.TestCase):
         copied = normalise_family_settings("capillary_bed", {"rung_axis": array})
         array[0] = 7
         self.assertEqual(copied["rung_axis"], [1, 0, 0])
+        # numpy values through the Python API are the JSON values they stand for
+        for given in (np.array([1, 0, 0]), [np.int64(1), 0, np.float64(0.0)]):
+            normalised = normalise_family_settings("capillary_bed", {"rung_axis": given})
+            self.assertEqual(normalised, {"rung_axis": [1, 0, 0.0]})
+            self.assertEqual(json.dumps(normalised["rung_axis"]), "[1, 0, 0.0]" if isinstance(given, list)
+                             else "[1, 0, 0]")
 
     def test_normalising_twice_changes_nothing(self):
         for family, spec in (("foam", FOAM_SPACING_5), ("capillary_bed", CAPILLARY_4), ("foam", EVERY_KEY),
@@ -162,6 +168,7 @@ class NormalisationTests(unittest.TestCase):
             ("capillary_bed", {"cross_connect": 1}, "true or false"),
             ("aligned", {"guidance": None}, "JSON array"), ("aligned", {"root_offsets": {"x": 1}}, "JSON array"),
             ("capillary_bed", {"rung_axis": [math.inf, 0, 0]}, "finite numbers"),
+            ("foam", {"bed": {1: 2}}, "unknown bed setting 1"),
             # a negative number argparse would read as an option
             ("tree", {"aneurysm_prob": -1e-05}, "read as an option"),
             ("nonesuch", {"persistence": 5}, "unknown family"),
@@ -174,11 +181,14 @@ class NormalisationTests(unittest.TestCase):
 
 
 class ArgvTests(unittest.TestCase):
-    def test_without_settings_the_command_line_is_unchanged(self):
-        for family in library.available_families():
-            with self.subTest(family=family):
-                self.assertEqual(member_argv(family, 4.0, settings=None), member_argv(family, 4.0))
-                self.assertNotIn("--bed", member_argv(family, 4.0))
+    def test_without_settings_the_command_line_is_3_8_s(self):
+        # 3.8's command lines, written out (the 3.8 pin compares every family under every option)
+        foam = ["--family", "foam", "--d0", "4.0", "0", "--d0-min", "4.0", "--d-min", "1.0", "--iterations", "64",
+                "64", "--collision-margin", "1.0", "--volume", "3", "3", "3", "--fit", "voxel_size", "--voxel-size",
+                "20.0"]
+        self.assertEqual(member_argv("foam", 4.0, settings=None), foam)
+        self.assertEqual(member_argv("tree", 4.0, settings=None), foam[:1] + ["tree"] + foam[2:-1] + ["1.0",
+                                                                                                       "--avoid-collisions"])
 
     def test_the_flags_follow_the_others_in_key_order_and_parse_back_as_normalised(self):
         settings = normalise_family_settings("foam", EVERY_KEY)
@@ -306,6 +316,10 @@ class CapTests(unittest.TestCase):
             grow_member("foam", 2.9, 1, settings=family_settings["foam"])
         status, caught = run_main(argv + ["--count", "1", "--seed", "1", "--out", tempfile.mkdtemp()])
         self.assertIn("feeder_stop", str(caught))
+        # the smallest R is printed exactly, so that it is never below the member check's bound
+        exact = {"foam": normalise_family_settings("foam", {"bed": {"feeder_stop": 2.0000004}})}
+        line = library.check_family_settings(exact, (1.5, 4.0), 2000000, **options)[1]
+        self.assertIn("feeder_stop 2.0000004 admits R from 2.0000004;", line)
         # no line where feeder_stop is below R_LO
         lines = library.check_family_settings({"foam": family_settings["foam"]}, (3.0, 8.0), 2000000, **options)
         self.assertEqual(len(lines), 1)
@@ -474,6 +488,10 @@ class RefusalTests(unittest.TestCase):
         (["--families", "aligned"], ["aligned", '{"root_offsets": [[-90, 0, 0], [90, 0, 0]]}'],
          "outside the growth box"),
         (["--families", "foam"], ["foam", '{"bed": {"spacing": 1.5}}'], "seeds would touch"),
+        # refused at one end of the range only: offsets outside the cube at R_LO, too many feeder sheets at R_HI
+        (["--families", "aligned"], ["aligned", '{"root_offsets": [[-25, 0, 0], [25, 0, 0]]}'],
+         "refuses the member at R 2.52: --root-offsets"),
+        (["--families", "fibre"], ["fibre", '{"bed": {"unit": 0.4}}'], "refuses the member at R 4: --bed"),
     )
 
     def test_each_refusal_names_the_family_before_anything_is_written(self):

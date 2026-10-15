@@ -319,6 +319,18 @@ def _finite_real(value):
         return False
 
 
+def _plain_json(value):
+    # a numpy scalar or array inside an array setting, as the JSON value it stands for
+    if isinstance(value, (np.generic, np.ndarray)):
+        return value.tolist()
+    raise TypeError(f"{type(value).__name__} is not a JSON value")
+
+
+def _exact(value):
+    # a float as %g where that is the same number, else its repr
+    return f"{value:g}" if float(f"{value:g}") == value else repr(value)
+
+
 def _refused_setting(key, family):
     """Why `key` is not a family setting, naming the ones that are."""
     settings = ", ".join(FAMILY_SETTING_KEYS)
@@ -348,8 +360,10 @@ def _normalised_bed(family, value):
         if key in value and key in base and value[key] != base[key]:
             raise ValueError(f"bed: {key} {value[key]!r} cannot replace the preset's {base[key]!r}: a different bed "
                              f"kind or feeder layout changes what the family is")
+    merged = dict(base)
+    merged.update(value)
     try:
-        return bed.parse_settings(dict(base, **value))
+        return bed.parse_settings(merged)
     except ValueError as error:
         raise ValueError(f"bed: {error}") from None
 
@@ -394,10 +408,12 @@ def normalise_family_settings(family, spec):
         if key == "bed":
             settings[key] = _normalised_bed(family, value)
         elif key in _ARRAY_SETTINGS:
+            if isinstance(value, np.ndarray):
+                value = value.tolist()
             if not isinstance(value, (list, tuple)):
                 raise ValueError(f"{key} must be a JSON array, which replaces the preset's whole, got {value!r}")
             try:
-                settings[key] = json.loads(json.dumps(value, allow_nan=False))
+                settings[key] = json.loads(json.dumps(value, allow_nan=False, default=_plain_json))
             except (TypeError, ValueError) as error:
                 raise ValueError(f"{key} must hold JSON values with finite numbers only ({error})") from None
         elif key in _FLAG_SETTINGS:
@@ -813,8 +829,8 @@ def check_family_settings(family_settings, ratio_range, bed_max_candidates, **op
                      f"recorded as a failure")
         stop = bed.parse_settings(args.bed)["feeder_stop"]
         if stop > lo:
-            lines.append(f"--family-settings {family}: feeder_stop {stop:g} admits R from {stop:g}; a smaller "
-                         f"member is recorded as a failure")
+            lines.append(f"--family-settings {family}: feeder_stop {_exact(stop)} admits R from {_exact(stop)}; "
+                         f"a smaller member is recorded as a failure")
     return lines
 
 
