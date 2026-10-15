@@ -30,9 +30,10 @@ of 3.8 on every family it offers:
                    content.
 
 Every record (events, kwargs, bed settings, frame records and their rules,
-rung records, feeder trees, index rows, archive metadata, the manifest) is
+bridge and rung records, feeder trees, index rows, archive metadata, the
+manifest) is
 first restricted, recursively, to the keys 3.8 wrote, which are listed
-literally below, so that what a later version appends never enters the
+literally below (index.csv's events cell to the 3.8 counters), so that what a later version appends never enters the
 comparison while everything 3.8 wrote must still be there, unchanged; a list
 of dicts, such as a frame's rules or the rungs, is restricted entry by
 entry, and a bed's settings, where a record holds None for no bed, keep the
@@ -129,6 +130,9 @@ BED_SETTING_KEYS_3_8 = ("kind", "spacing", "girth", "min_angle", "reach", "diame
 GROWN_KEYS_3_8 = ("program", "growth_box_um", "root_positions_um", "clip_axes", "collision_index", "frame",
                   "feeder_trees")
 FEEDER_TREE_KEYS_3_8 = ("label", "role", "sheet", "root")
+# an anastomosis bridge, as grow_network returns it and a library archive's metadata stores it
+BRIDGE_FIELDS_3_8 = ("tip", "partner", "partner_kind", "tip_tree", "partner_tree", "chord_um", "arc_um", "diameter_um",
+                     "points", "redraws")
 # a rung, as grow_network returns it and a library archive's metadata stores it
 RUNG_FIELDS_3_8 = ("site", "partner", "site_tree", "partner_tree", "chord_um", "arc_um", "diameter_um", "points",
                    "redraws", "angle_deg")
@@ -236,6 +240,7 @@ def _whole(keys):
 # every key (a label or an id, not a field) and restricts each value, and
 # {"[]": rule} restricts every entry of a list.
 RULE_RULE = {"[]": _whole(RULE_KEYS_3_8)}
+BRIDGE_RULE = {"[]": _whole(BRIDGE_FIELDS_3_8)}
 RUNG_RULE = {"[]": _whole(RUNG_FIELDS_3_8)}
 FEEDER_RULE = {"[]": _whole(FEEDER_TREE_KEYS_3_8)}
 FRAME_RULE = dict(_whole(FRAME_KEYS_3_8), rules=RULE_RULE)
@@ -246,6 +251,7 @@ GROWTH_RULE = _whole(GROWTH_KEYS_3_8)
 RULES = {
     "events": EVENTS_RULE,
     "grown": dict(_whole(GROWN_KEYS_3_8), frame=FRAME_RULE, feeder_trees=FEEDER_RULE),
+    "bridges": BRIDGE_RULE,
     "rungs": RUNG_RULE,
     "kwargs": KWARGS_RULE,
     "member": dict(_whole(MEMBER_KEYS_3_8), properties=_whole(PROPERTY_KEYS_3_8)),
@@ -255,7 +261,7 @@ RULES = {
                       events=EVENTS_RULE),
     "metadata": dict(_whole(key for key in METADATA_KEYS_3_8 if key not in UNPINNED_COLUMNS),
                      properties=_whole(PROPERTY_KEYS_3_8), grow_kwargs=KWARGS_RULE, events=EVENTS_RULE,
-                     frame=FRAME_RULE, rungs=RUNG_RULE, feeder_trees=FEEDER_RULE),
+                     frame=FRAME_RULE, bridges=BRIDGE_RULE, rungs=RUNG_RULE, feeder_trees=FEEDER_RULE),
     "manifest": dict(_whole(key for key in MANIFEST_KEYS_3_8 if key not in UNPINNED_MANIFEST_KEYS),
                      growth=GROWTH_RULE, rng_streams=_whole(LIBRARY_RNG_STREAMS_3_8),
                      networks={"*": _whole(MANIFEST_NETWORK_KEYS_3_8)}, failures={"[]": _whole(FAILURE_KEYS_3_8)}),
@@ -439,7 +445,7 @@ for family, ratio, seed in MEMBERS:
                     "nodes": array_sha(grown["nodes"]), "tree": array_sha(grown["tree"]),
                     "edges": array_sha(grown["edges"]), "node_kind": array_sha(grown["node_kind"]),
                     "program": record_sha(grown["program"]), "programs": record_sha(grown["programs"]),
-                    "bridges": record_sha(grown["bridges"]),
+                    "bridges": record_sha(restrict(grown["bridges"], rules["bridges"])),
                     "rungs": record_sha(restrict(grown["rungs"], rules["rungs"])),
                     "events": record_sha(restrict(grown["events"], rules["events"])),
                     "record": record_sha(restrict(grown, rules["grown"])),
@@ -452,6 +458,8 @@ for family, ratio, seed in MEMBERS:
                    "events": {key: grown["events"][key] for key in rules["events"] if grown["events"].get(key)}}
     known = set(rules["grown"]) | {"nodes", "tree", "edges", "node_kind", "programs", "bridges", "rungs", "events"}
     extras[name] = {"kwargs": beyond(result["kwargs"], rules["kwargs"]),
+                    "bridges": sorted({key for bridge in grown["bridges"]
+                                       for key in beyond(bridge, rules["bridges"]["[]"])}),
                     "member": sorted(set(result) - set(rules["member"]) - {"grown", "kwargs"}),
                     "returned": sorted(set(grown) - known), "events": beyond(grown["events"], rules["events"]),
                     "row": sorted(beyond(row, rules["index_row"])),
@@ -495,6 +503,10 @@ def library_run(directory, argv):
     # index.csv restricted to the 3.8 columns, which a later version keeps first and in order
     pinned = [k for k, column in enumerate(table[0])
               if column in lists["index_columns"] and column not in lists["unpinned_columns"]]
+    events = table[0].index("events")
+    for line in table[1:]:
+        # the events cell, "key=value" for every counter that is not zero, kept to the 3.8 counters
+        line[events] = " ".join(item for item in line[events].split() if item.split("=")[0] in rules["events"])
     content = manifest["content"]
     entry = {"status": status, "files": sorted(os.listdir(directory)),
              "content": record_sha(restrict(content, rules["manifest"])),
