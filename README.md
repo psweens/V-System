@@ -1335,16 +1335,17 @@ vsystem-library --out lib --count 2000 --seed 1 --workers 8
 | --- | --- | --- |
 | `--out DIR` | required | output directory; a run into a directory holding a manifest resumes it |
 | `--count N` | required | number of networks |
-| `--families` | `tree mesh tumour` | families to grow, in id order (`aligned`, `aligned_tight`, `aligned_bed`, `capillary_bed` and `foam` when listed); only presets that exist are accepted, so a family without one and unknown names are refused before anything is grown |
+| `--families` | `tree mesh tumour` | families to grow, in id order (`aligned`, `aligned_tight`, `aligned_bed`, `capillary_bed`, `foam` and `fibre` when listed); only presets that exist are accepted, so a family without one and unknown names are refused before anything is grown |
 | `--family-shares` | `1 1 1` | relative share of each family, by largest remainder with ties to the family listed first (2000 at `1 1 1` gives 667 667 666) |
 | `--ratio-range R_LO R_HI` | `2.52 25` | range of R, log-uniform and stratified; 2^(4/3) gives at least about four generations |
 | `--seed S` | required | library seed |
 | `--workers W` | `1` | worker processes |
 | `--collision-margin` | `1.0` | clearance between vessel surfaces, units of d_min |
 | `--mesh-box-c` | `15` | a mesh grows in a cube of side this many times its root diameter, which keeps its two trees within reach of each other |
-| `--box-c FAMILY C` | `mesh 15`, `aligned 15`, `aligned_tight 20`, `aligned_bed 20`, `capillary_bed 15`, `foam 15` | the cube side of a box family (mesh and every aligned or bed family) in root diameters (repeatable); refused for a family that grows free, and with `--mesh-box-c` for mesh; an aligned member whose root offsets leave a small cube is recorded as a failure |
+| `--box-c FAMILY C` | `mesh 15`, `aligned 15`, `aligned_tight 20`, `aligned_bed 20`, `capillary_bed 15`, `foam 15`, `fibre 15` | the cube side of a box family (mesh and every aligned or bed family) in root diameters (repeatable); refused for a family that grows free, and with `--mesh-box-c` for mesh; an aligned member whose root offsets leave a small cube is recorded as a failure |
 | `--iteration-cap` | `64` | generations allowed; d_min stops growth first |
 | `--bed-max-candidates N` | `2e6` | refuse, and record as a failure, a member with an explicit bed whose planned candidate edges exceed N, before anything is drawn; a whole number of at least 1, given as integer or float text; it bounds the candidates only, not the walk |
+| `--family-settings FAMILY JSON` | the presets | grow FAMILY with some of its preset values changed: a JSON object of `library.FAMILY_SETTING_KEYS`, a bed merged over the preset's bed and every other value replacing the preset's (repeatable, once per family listed); see Family settings below |
 | `--avoid-collisions` / `--no-avoid-collisions` | on | collision avoidance for the tree family; the mesh and tumour presets avoid collisions already |
 
 Ids run 0 .. N-1 in contiguous family blocks in `--families` order and the
@@ -1501,6 +1502,170 @@ between the measured points: about 15 s per tree, 56 s per mesh and 19 s per
 tumour on this machine, 16.7 CPU hours in all, about 2.1 h of wall time at 8
 workers, 5.0 GB of archives, and at most 8 × 0.45 GB = 3.6 GB of memory with
 every worker at the largest peak measured.
+
+### Family settings: `--family-settings`
+
+```bash
+vsystem-library --out lib --count 600 --seed 1 --families foam capillary_bed \
+    --family-settings foam '{"bed": {"spacing": 5}}' \
+    --family-settings capillary_bed '{"capillary_generations": 4}'
+```
+
+`--family-settings FAMILY JSON` (repeatable, once per family listed in
+`--families`, or among the default families) grows FAMILY with some of its
+preset values changed, as `vsystem --family FAMILY` does with options given
+explicitly, while the library stays reproducible. The JSON object takes the
+keys of `library.FAMILY_SETTING_KEYS` (append-only), the parser's own names:
+`persistence`, `anastomosis_fraction`, `anastomosis_radius`,
+`anastomosis_min_separation`, `aneurysm_prob`, `stenosis_prob`,
+`root_offsets`, `guidance`, `capillary_generations`, `capillary_runs`,
+`cross_connect`, `rung_below`, `rung_spacing`, `rung_radius`,
+`rung_lateral_deg`, `rung_axis`, `rung_min_separation` and `bed`.
+
+- `bed` is an object merged over the preset's bed and normalised by
+  `bed.parse_settings`, so that `{"bed": {"spacing": 5}}` is the preset's bed
+  at spacing 5 and every key of `bed.KIND_KEYS[kind]` is recorded (13 for
+  foam, 21 for fibre). It is refused for a family whose preset grows no bed,
+  as `null`, and with a `kind` or `layout` other than the preset's.
+- Every other value replaces the preset's: an array (`root_offsets`,
+  `guidance`, `rung_axis`) as a whole, a number as a float, a whole number
+  for `anastomosis_min_separation`, `capillary_generations`,
+  `capillary_runs` and `rung_min_separation`, and `cross_connect` as true or
+  false. A bool is refused where a number is expected, and `null` where an
+  array is.
+
+`library.normalise_family_settings(family, spec)` applies these checks and
+returns the normalised dict, its keys in `FAMILY_SETTING_KEYS` order;
+normalising twice changes nothing. It raises `ValueError`, which the command
+line turns into an exit naming the family, as it does for a family not
+listed, a family given twice, and JSON that is malformed, not an object or
+empty. The other parser options are refused, by class:
+
+- **What the library sets itself:** `d0`, `d0_min`, `d_min`, `iterations`,
+  `volume`, `fit`, `voxel_size`, `clip_axes`, `grow_in_volume`,
+  `collision_margin`, `avoid_collisions`, `seed`, `count` and `out`. R, the
+  cube of side c R, d_min = 1, the iteration cap and the margin come from
+  the plan and the library's options, follow one rule for every member and
+  are recorded once in the manifest's `growth`; a value for one family would
+  contradict that record, and d_min and the margin set the unit every
+  network is measured in.
+- **What makes a family what it is:** `family`, `tortuosity`, `anastomose`
+  and `anastomose_mode`, and in the bed a different `kind`, a fibre bed's
+  feeder `layout` (`sheets` to `pair`), or turning the bed on or off. A
+  family with a different value is another family, which takes a preset of
+  its own: released presets are frozen, and a changed family takes a new
+  name.
+- **The grammar's own ranges and the numerical and output settings:**
+  `epsilon`, `randmarg`, `sigma`, `k`, `roll_angle`, `stem_angle`,
+  `deterministic`, `subdivisions`, `collision_attempts`, `collision_index`,
+  `units` and `connect`. No preset sets them: every family draws its grammar
+  from the same ranges and is computed at the same resolution, which keeps
+  the members of different families comparable.
+- **A negative number in exponent notation**, such as `-1e-05` (reachable
+  only for the two probabilities, which the command line does not bound):
+  argparse reads it as an option, so the member's command line would not
+  run.
+
+Each member of the family carries its settings as flags after the others
+on its command line, in `FAMILY_SETTING_KEYS` order and named as
+`main.build_parser(family)` names them: a JSON value compact with sorted
+keys (`--bed '{"density":0.5,...}'`), a float as its `repr`, a whole number
+as its digits, and `--cross-connect` or `--no-cross-connect`. The recorded
+`argv` therefore stays a runnable `vsystem` command line that grows the same
+network (the tests check this).
+
+Before anything is grown, each family's command line at R_LO and at R_HI
+is parsed by `main.build_parser(family)` and checked by
+`main.validate_shaping`, so that whatever the command line refuses, such as
+a bed with a capillary fill, a bed value out of bounds or root offsets
+outside the cube, refuses the library and names the family. (Without
+settings, a member the command line refuses at some ratios only, such as an
+aligned member whose root offsets leave a small cube, is recorded as a
+failure instead.) For a family with a bed, one line is printed before
+growth: the candidate edges its bed plans at R_HI against
+`--bed-max-candidates` and the largest R the cap admits
+(`library.largest_admitted_ratio`); a larger member is recorded as a
+failure under the cap's unchanged rule. Where the bed's `feeder_stop`
+exceeds R_LO, a second line gives the smallest R it admits, R =
+`feeder_stop`; a smaller member is refused by `grow_network` and by
+`vsystem` alike, and recorded as a failure.
+
+The manifest records the normalised settings under
+`growth.family_settings` (`{family: settings}`, absent when no family has
+settings, so that a library without them records its growth as before), so
+a rerun with different settings, or none, is refused as any other change of
+growth is. Each archive of the family records them in its metadata under
+`family_settings`, beside the `argv` and `grow_kwargs` it already records,
+and a resumed archive is checked against its command line with the
+settings. No index column is added. A family grown with settings keeps its
+name (`net_00000_foam.npz`, `"family": "foam"`): `growth.family_settings`
+in the manifest and `family_settings` in an archive's metadata are where a
+consumer tells a variant library from a default one. Settings for one
+family leave the plan, the seeds, the ratios and every other family's
+members bitwise as they are without them. In Python,
+`library.member_argv(..., settings=...)` and `library.grow_member(...,
+settings=...)` take one family's settings, keyword-only; None gives the
+member without them.
+
+Measured with `tests/test_library_settings.SettingsBenchmark` (each member
+grown by `grow_member` with its settings in a fresh process of its own, one
+at a time, seed 1, on a 4-core 2.1 GHz Xeon; growth is timed alone and the
+peak RSS is the process's VmHWM; the length density is the total edge
+length over the growth box's volume; the tissue distance is
+`describe(nodes, edges, metadata={"growth_box_um": box}, d_ref=1,
+evd_spacing=side / 64)`'s, side the box's edge; the capillary length share
+is that call's `calibre_shares["length"]["below_2"]`):
+
+| family | R | setting | growth | peak RSS | points | planned candidates | length density (d_min⁻²) | tissue mean / p90 / max (d_min) | capillary length share |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| foam | 4 | spacing 7.5, density 0.5 | 1.2 s | 56 MB | 6 766 | 3 977 | 0.0142 | 3.45 / 5.90 / 17.27 | 0.935 |
+| foam | 4 | spacing 7.5, density 0.6 | 1.5 s | 56 MB | 8 253 | 5 734 | 0.0174 | 3.06 / 5.23 / 12.75 | 0.947 |
+| foam | 4 | spacing 6, density 0.5 | 2.0 s | 57 MB | 10 836 | 7 773 | 0.0227 | 2.58 / 4.41 / 11.22 | 0.959 |
+| foam | 4 | spacing 6, density 0.6 | 3.1 s | 58 MB | 12 732 | 11 192 | 0.0268 | 2.32 / 3.94 / 10.03 | 0.965 |
+| foam | 4 | spacing 5, density 0.5 | 4.2 s | 62 MB | 15 667 | 13 434 | 0.0325 | 2.07 / 3.55 / 11.72 | 0.971 |
+| foam | 4 | spacing 5, density 0.6 | 4.6 s | 65 MB | 18 434 | 19 341 | 0.0382 | 1.85 / 3.16 / 8.72 | 0.976 |
+| foam | 4 | spacing 4.5, density 0.5 | 5.1 s | 66 MB | 19 533 | 18 425 | 0.0402 | 1.81 / 3.11 / 11.68 | 0.977 |
+| foam | 4 | spacing 4.5, density 0.6 | 5.4 s | 71 MB | 22 265 | 26 547 | 0.0457 | 1.65 / 2.83 / 8.28 | 0.980 |
+| foam | 8 | spacing 7.5, density 0.5 | 13.1 s | 85 MB | 59 988 | 32 676 | 0.0161 | 3.08 / 5.18 / 16.13 | 0.934 |
+| foam | 8 | spacing 7.5, density 0.6 | 16.0 s | 92 MB | 69 165 | 47 046 | 0.0186 | 2.81 / 4.71 / 13.15 | 0.943 |
+| foam | 8 | spacing 6, density 0.5 | 21.2 s | 105 MB | 92 026 | 63 814 | 0.0244 | 2.40 / 4.06 / 10.49 | 0.956 |
+| foam | 8 | spacing 6, density 0.6 | 24.3 s | 114 MB | 106 310 | 91 892 | 0.0281 | 2.18 / 3.68 / 10.06 | 0.962 |
+| foam | 8 | spacing 5, density 0.5 | 31.9 s | 126 MB | 131 909 | 110 283 | 0.0344 | 1.93 / 3.29 / 8.42 | 0.969 |
+| foam | 8 | spacing 5, density 0.6 | 41.0 s | 142 MB | 153 748 | 158 808 | 0.0400 | 1.75 / 2.97 / 8.53 | 0.973 |
+| foam | 8 | spacing 4.5, density 0.5 | 40.9 s | 146 MB | 163 392 | 151 288 | 0.0422 | 1.70 / 2.91 / 7.13 | 0.975 |
+| foam | 8 | spacing 4.5, density 0.6 | 54.9 s | 162 MB | 189 694 | 217 850 | 0.0488 | 1.54 / 2.63 / 7.79 | 0.978 |
+| foam | 16 | spacing 7.5, density 0.5 | 104.9 s | 300 MB | 476 655 | 264 745 | 0.0162 | 3.01 / 5.03 / 12.48 | 0.966 |
+| foam | 16 | spacing 7.5, density 0.6 | 134.1 s | 353 MB | 559 496 | 381 233 | 0.0190 | 2.73 / 4.54 / 10.54 | 0.971 |
+| foam | 16 | spacing 6, density 0.5 | 187.2 s | 433 MB | 739 713 | 517 071 | 0.0247 | 2.35 / 3.93 / 9.32 | 0.978 |
+| foam | 16 | spacing 6, density 0.6 | 225.5 s | 498 MB | 868 855 | 744 578 | 0.0289 | 2.12 / 3.56 / 8.16 | 0.981 |
+| foam | 16 | spacing 5, density 0.5 | 271.2 s | 591 MB | 1 065 008 | 893 505 | 0.0349 | 1.90 / 3.21 / 8.91 | 0.984 |
+| foam | 16 | spacing 5, density 0.6 | 363.6 s | 711 MB | 1 248 175 | 1 286 659 | 0.0407 | 1.71 / 2.90 / 6.76 | 0.987 |
+| foam | 16 | spacing 4.5, density 0.5 | 362.3 s | 761 MB | 1 321 917 | 1 225 663 | 0.0427 | 1.67 / 2.84 / 6.62 | 0.987 |
+| foam | 16 | spacing 4.5, density 0.6 | 483.0 s | 859 MB | 1 544 327 | 1 764 967 | 0.0497 | 1.51 / 2.57 / 7.20 | 0.989 |
+| capillary_bed | 4 | generations 3 | 60.6 s | 95 MB | 36 290 | – | 0.0198 | 4.07 / 8.42 / 25.21 | 0.946 |
+| capillary_bed | 4 | generations 4 | 52.4 s | 90 MB | 30 712 | – | 0.0166 | 4.79 / 9.91 / 27.80 | 0.954 |
+| capillary_bed | 8 | generations 3 | 618.8 s | 292 MB | 191 771 | – | 0.0134 | 6.60 / 15.45 / 54.26 | 0.927 |
+| capillary_bed | 8 | generations 4 | 882.5 s | 335 MB | 234 272 | – | 0.0160 | 5.40 / 12.37 / 43.47 | 0.943 |
+
+At density 0.5, spacing 6, 5 and 4.5 multiply foam's length density by
+1.60, 2.29 and 2.83 at R 4, 1.51, 2.14 and 2.62 at R 8, and 1.52, 2.15 and
+2.64 at R 16; density 0.6 adds 14–23 % at any spacing. The mean tissue
+distance falls from 3.45, 3.08 and 3.01 d_min with the preset's bed to
+1.65, 1.54 and 1.51 d_min at spacing 4.5 and density 0.6 (R 4, 8 and 16).
+Growth takes 1.2–4.6 times the preset's time, up to 483 s and 859 MB at R
+16, spacing 4.5 and density 0.6, whose bed plans 1 764 967 candidate edges.
+One more capillary generation lowers capillary_bed's length density by 16 %
+at R 4 and raises it by 19 % at R 8 for this seed, so it does not raise
+length consistently; at R 8 it is the slowest member measured, 882 s. The
+largest R the default cap of 2 × 10⁶ candidate edges admits, rounded down
+as the printed line gives it:
+
+| foam bed | density 0.5 | density 0.6 |
+| --- | --- | --- |
+| spacing 7.5 (the preset's) | 31.33 | 27.75 |
+| spacing 6 | 25.07 | 22.21 |
+| spacing 5 | 20.90 | 18.52 |
+| spacing 4.5 | 18.82 | 16.67 |
 
 ---
 
@@ -1699,6 +1864,21 @@ the written columns and the counters' laws; and
 `tests/test_fibre_benchmark.py`, with `VSYSTEM_SLOW_TESTS=1`, measures beds
 alone over their settings, beds between a mesh member's and a packed
 forest's feeders, the family's members and a dense bed's cost.
+
+From 3.9, `tests/test_pinned_release_3_8.py` runs the 3.8.0 modules (under
+`tests/fixtures/reference_code_3_8`) beside the current ones on the
+library: `member_argv` for every family under each library option, the
+manifest's growth settings, a member of every family 3.8 offers, a plan of
+every family, and the default library beside one of foam, capillary_bed and
+aligned_bed, each grown and then resumed with its index removed; the global
+generators start from a fixed state, so that a case which seeds nothing is
+held to draw nothing. `tests/test_library_settings.py` checks the family
+settings: their normalisation and every refusal, the flags and their parse,
+members equal to `vsystem`'s output on their recorded command lines, the
+lines printed and the cap they report, the records in the manifest and the
+archives, resuming, and the other families' members, bitwise as they are
+without settings; with `VSYSTEM_SLOW_TESTS=1` it measures foam and
+capillary_bed members over their settings.
 
 ## Applications
 
