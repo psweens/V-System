@@ -141,17 +141,17 @@ class NormalisationTests(unittest.TestCase):
             ("foam", [], "JSON object"), ("foam", None, "JSON object"), ("foam", {}, "empty"),
             ("foam", {"spacing": 5}, "unknown setting"),
             # the library's own settings
-            ("foam", {"d0": 3.0}, "the library sets it"), ("foam", {"collision_margin": 2.0}, "the library sets it"),
-            ("tree", {"avoid_collisions": False}, "the library sets it"),
-            ("mesh", {"grow_in_volume": False}, "the library sets it"),
-            ("foam", {"iterations": [4, 4]}, "the library sets it"), ("foam", {"d_min": 2.0}, "the library sets it"),
+            ("foam", {"d0": 3.0}, "the library fixes it"), ("foam", {"collision_margin": 2.0}, "the library fixes it"),
+            ("tree", {"avoid_collisions": False}, "the library fixes it"),
+            ("mesh", {"grow_in_volume": False}, "the library fixes it"),
+            ("foam", {"iterations": [4, 4]}, "the library fixes it"), ("foam", {"d_min": 2.0}, "the library fixes it"),
             # what makes a family what it is
             ("foam", {"tortuosity": "stems"}, "changes what the family is"),
             ("mesh", {"anastomose": False}, "changes what the family is"),
             ("mesh", {"anastomose_mode": "any"}, "changes what the family is"),
             # the grammar's ranges and the numerics
             ("tree", {"epsilon": [3, 5]}, "same for every family"), ("tree", {"sigma": 4}, "same for every family"),
-            ("tree", {"subdivisions": 2}, "same for every family"),
+            ("tree", {"subdivisions": 2}, "same for every family"), ("tree", {"clip_axes": []}, "same for every family"),
             # the bed
             ("tree", {"bed": {"spacing": 5}}, "grows no bed"), ("capillary_bed", {"bed": {}}, "grows no bed"),
             ("foam", {"bed": None}, "turns the preset's bed off"), ("foam", {"bed": [1]}, "JSON object"),
@@ -460,10 +460,10 @@ class RefusalTests(unittest.TestCase):
 
     CASES = (
         (["--families", "foam"], ["foam", '{"bogus": 1}'], "unknown setting"),
-        (["--families", "foam"], ["foam", '{"d0": 3}'], "the library sets it"),
-        (["--families", "foam"], ["foam", '{"collision_margin": 2}'], "the library sets it"),
-        (["--families", "tree"], ["tree", '{"avoid_collisions": false}'], "the library sets it"),
-        (["--families", "mesh"], ["mesh", '{"grow_in_volume": false}'], "the library sets it"),
+        (["--families", "foam"], ["foam", '{"d0": 3}'], "the library fixes it"),
+        (["--families", "foam"], ["foam", '{"collision_margin": 2}'], "the library fixes it"),
+        (["--families", "tree"], ["tree", '{"avoid_collisions": false}'], "the library fixes it"),
+        (["--families", "mesh"], ["mesh", '{"grow_in_volume": false}'], "the library fixes it"),
         (["--families", "foam"], ["foam", '{"tortuosity": "stems"}'], "changes what the family is"),
         (["--families", "mesh"], ["mesh", '{"anastomose": false}'], "changes what the family is"),
         (["--families", "mesh"], ["mesh", '{"anastomose_mode": "any"}'], "changes what the family is"),

@@ -186,12 +186,12 @@ _WHOLE_SETTINGS = ("anastomosis_min_separation", "capillary_generations", "capil
 _FLAG_SETTINGS = ("cross_connect",)
 _ARRAY_SETTINGS = ("root_offsets", "guidance", "rung_axis")
 # The dests a family's settings may not override, by why (see the README):
-# what the library sets for every member and records once in the manifest,
-# and what makes a family what it is; a bed's kind and a fibre bed's feeder
-# layout make it too. Every other dest is the grammar's own ranges or a
-# numerical or output setting, the same for every family.
-_LIBRARY_OWNED = ("d0", "d0_min", "d_min", "iterations", "volume", "fit", "voxel_size", "clip_axes",
-                  "grow_in_volume", "collision_margin", "avoid_collisions", "seed", "count", "out")
+# what the library fixes for every member from its plan, its options and its
+# box layout, and what makes a family what it is; a bed's kind and a fibre
+# bed's feeder layout make it too. Every other dest is the grammar's own
+# ranges or a numerical or output setting, the same for every family.
+_LIBRARY_OWNED = ("d0", "d0_min", "d_min", "iterations", "volume", "fit", "voxel_size", "grow_in_volume",
+                  "collision_margin", "avoid_collisions", "seed", "count", "out")
 _FAMILY_DEFINING = ("family", "tortuosity", "anastomose", "anastomose_mode")
 _BED_DEFINING = ("kind", "layout")
 # what argparse reads as a negative number rather than an option
@@ -335,7 +335,7 @@ def _refused_setting(key, family):
     """Why `key` is not a family setting, naming the ones that are."""
     settings = ", ".join(FAMILY_SETTING_KEYS)
     if key in _LIBRARY_OWNED:
-        reason = "the library sets it for every member and records it once in the manifest"
+        reason = "the library fixes it for every member, from its plan, its options and its box layout"
     elif key in _FAMILY_DEFINING:
         reason = "it changes what the family is"
     elif key in {action.dest for action in cli.build_parser(family)._actions}:

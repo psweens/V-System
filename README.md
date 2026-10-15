@@ -1541,14 +1541,17 @@ line turns into an exit naming the family, as it does for a family not
 listed, a family given twice, and JSON that is malformed, not an object or
 empty. The other parser options are refused, by class:
 
-- **What the library sets itself:** `d0`, `d0_min`, `d_min`, `iterations`,
-  `volume`, `fit`, `voxel_size`, `clip_axes`, `grow_in_volume`,
-  `collision_margin`, `avoid_collisions`, `seed`, `count` and `out`. R, the
-  cube of side c R, d_min = 1, the iteration cap and the margin come from
-  the plan and the library's options, follow one rule for every member and
-  are recorded once in the manifest's `growth`; a value for one family would
-  contradict that record, and d_min and the margin set the unit every
-  network is measured in.
+- **What the library fixes for every member:** `d0`, `d0_min`, `d_min`,
+  `iterations`, `volume`, `fit`, `voxel_size`, `grow_in_volume`,
+  `collision_margin`, `avoid_collisions`, `seed`, `count` and `out`. R and
+  the seed come from the plan; d_min = 1, the iteration cap, the margin and
+  the trees' collision avoidance from the library's options, recorded in the
+  manifest's `growth` (the other presets avoid collisions already); and the
+  volume, fit, voxel size and growth in the volume make the box layout, a
+  box family growing in its cube of side c R and tree and tumour growing
+  free. A value for one family would contradict what the manifest records
+  or change the box or the unit (d_min and the margin) a member is grown
+  and measured in.
 - **What makes a family what it is:** `family`, `tortuosity`, `anastomose`
   and `anastomose_mode`, and in the bed a different `kind`, a fibre bed's
   feeder `layout` (`sheets` to `pair`), or turning the bed on or off. A
@@ -1558,7 +1561,7 @@ empty. The other parser options are refused, by class:
 - **The grammar's own ranges and the numerical and output settings:**
   `epsilon`, `randmarg`, `sigma`, `k`, `roll_angle`, `stem_angle`,
   `deterministic`, `subdivisions`, `collision_attempts`, `collision_index`,
-  `units` and `connect`. No preset sets them: every family draws its grammar
+  `clip_axes`, `units` and `connect`. No preset sets them: every family draws its grammar
   from the same ranges and is computed at the same resolution, which keeps
   the members of different families comparable.
 - **A negative number in exponent notation**, such as `-1e-05` (reachable
@@ -1574,15 +1577,15 @@ as its digits, and `--cross-connect` or `--no-cross-connect`. The recorded
 `argv` therefore stays a runnable `vsystem` command line that grows the same
 network (the tests check this).
 
-Before anything is grown, each family's command line at R_LO and at R_HI
-is parsed by `main.build_parser(family)` and checked by
+Before anything is grown, the command line of each family with settings,
+at R_LO and at R_HI, is parsed by `main.build_parser(family)` and checked by
 `main.validate_shaping`, so that whatever the command line refuses, such as
 a bed with a capillary fill, a bed value out of bounds or root offsets
-outside the cube, refuses the library and names the family. (Without
-settings, a member the command line refuses at some ratios only, such as an
-aligned member whose root offsets leave a small cube, is recorded as a
-failure instead.) For a family with a bed, one line is printed before
-growth: the candidate edges its bed plans at R_HI against
+outside the cube, refuses the library and names the family. (A family
+without settings is not checked up front: a member the command line refuses
+at some ratios only, such as an aligned member whose root offsets leave a
+small cube, is recorded as a failure.) For a family with settings and a
+bed, one line is printed before growth: the candidate edges its bed plans at R_HI against
 `--bed-max-candidates` and the largest R the cap admits
 (`library.largest_admitted_ratio`); a larger member is recorded as a
 failure under the cap's unchanged rule. Where the bed's `feeder_stop`
@@ -1655,7 +1658,7 @@ distance falls from 3.45, 3.08 and 3.01 d_min with the preset's bed to
 Growth takes 1.2–4.6 times the preset's time, up to 483 s and 859 MB at R
 16, spacing 4.5 and density 0.6, whose bed plans 1 764 967 candidate edges.
 One more capillary generation lowers capillary_bed's length density by 16 %
-at R 4 and raises it by 19 % at R 8 for this seed, so it does not raise
+at R 4 and raises it by 20 % at R 8 for this seed, so it does not raise
 length consistently; at R 8 it is the slowest member measured, 882 s. The
 largest R the default cap of 2 × 10⁶ candidate edges admits, rounded down
 as the printed line gives it:

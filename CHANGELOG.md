@@ -29,8 +29,8 @@ the current ones.
 - `library.normalise_family_settings(family, spec)` checks and normalises
   one family's settings (keys in `FAMILY_SETTING_KEYS` order; idempotent)
   and raises `ValueError`. Refused: a key outside `FAMILY_SETTING_KEYS`
-  (named as set by the library, as changing what the family is, or as the
-  grammar's and the numerics' own), a bed for a family whose preset has
+  (named as fixed by the library, as changing what the family is, or as
+  the grammar's and the numerics' own), a bed for a family whose preset has
   none, a null bed, a bed `kind` or `layout` other than the preset's, a
   bool where a number is expected, a non-finite number, a non-array where
   an array is expected, and a negative number in exponent notation, which
@@ -44,10 +44,11 @@ the current ones.
   `--no-cross-connect`. `grow_member(..., settings=...)` returns the
   normalised settings under `"family_settings"`; with `settings=None` both
   return what 3.8 returned.
-- Before anything is grown, `library.check_family_settings` parses each
-  family's command line at R_LO and R_HI with `main.build_parser(family)`
-  and runs `main.validate_shaping`, and prints, for a family with a bed,
-  the candidate edges planned at R_HI against `--bed-max-candidates` and the
+- Before anything is grown, `library.check_family_settings` parses the
+  command line of each family with settings at R_LO and R_HI with
+  `main.build_parser(family)` and runs `main.validate_shaping`, and returns
+  the lines `vsystem-library` prints for such a family with a bed: the
+  candidate edges planned at R_HI against `--bed-max-candidates` and the
   largest R the cap admits (`library.largest_admitted_ratio`, a bisection
   on `library.planned_bed_candidates`, the count `grow_member`'s cap reads),
   and where `feeder_stop` exceeds R_LO the smallest R it admits. Members
@@ -76,7 +77,7 @@ the current ones.
   preset's bed to 1.51–1.65 d_min at spacing 4.5 and density 0.6. Growth
   takes 1.2–4.6 times the preset's time, at most 483 s and 859 MB (R 16,
   spacing 4.5, density 0.6). One more capillary generation moves
-  capillary_bed's length density by −16 % at R 4 and +19 % at R 8 for this
+  capillary_bed's length density by −16 % at R 4 and +20 % at R 8 for this
   seed. The default cap of 2 × 10⁶ candidate edges admits foam up to R
   31.33 with the preset's bed, 25.07 and 22.21 at spacing 6, 20.90 and
   18.52 at spacing 5, and 18.82 and 16.67 at spacing 4.5 (density 0.5 and
