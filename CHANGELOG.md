@@ -138,7 +138,10 @@ voxeliser.
 - `tests/test_geometry.ContractTests.test_process_network_signature_is_unchanged`
   now pins the parameters with `antialias` appended, defaulting to False.
 - `main.py` and the command line are unchanged, so `vsystem` and
-  `vsystem-library` draw what 3.9 draws.
+  `vsystem-library` draw what 3.9 draws. `library.code_hash` covers
+  `computeVoxel.py` and `library.py`, both changed, so a library begun
+  under 3.9 is refused on resume under 3.10 ("the generator changed"), as
+  across earlier releases. Resume it with 3.9, or grow it anew.
 - pyproject version 3.10.0 and `library.LIBRARY_VERSION` 3.10.0; no new
   module or dependency. Python 3.9 syntax, numpy only in `computeVoxel`. The
   tests' neck and component measures use scipy and are skipped without it.
