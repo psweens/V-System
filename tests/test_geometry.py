@@ -252,9 +252,12 @@ class ReferenceFixtureTests(unittest.TestCase):
 
 class ContractTests(unittest.TestCase):
     def test_process_network_signature_is_unchanged(self):
+        # the parameters keep their order and defaults; 3.10 appends antialias, off by default
         parameters = inspect.signature(process_network).parameters
-        self.assertEqual(list(parameters), ["data", "tVol", "fit", "voxel_size", "margin", "clip_axes", "connect"])
+        self.assertEqual(list(parameters), ["data", "tVol", "fit", "voxel_size", "margin", "clip_axes", "connect",
+                                            "antialias"])
         self.assertEqual(parameters["connect"].default, True)
+        self.assertIs(parameters["antialias"].default, False)
 
     def test_generate_network_keeps_its_return_value_and_accepts_the_options(self):
         seed_all(2)

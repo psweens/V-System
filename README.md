@@ -245,6 +245,119 @@ string; `nodes` is the (4, N) centreline of x, y, z and diameter with NaN column
 separating branches. `nodes` is in grammar units and independent of `tVol`, `fit`
 and `voxel_size`, so it is the artefact worth keeping.
 
+### Anti-aliased rendering
+
+A capsule sets the voxels whose centres it contains, and at small calibres how
+many it contains depends on where its centre line falls among them. A vessel
+two voxels across is one voxel wide where its centre line passes near a voxel
+centre and 2 × 2 where it passes between four, so a straight vessel at an
+oblique angle renders beaded, and an axis-aligned one has an area anywhere
+from 36 % below to 59 % above π r², depending on its sub-voxel offset. A
+segmentation model trained on such masks learns the beads. The library
+functions take `antialias=True` to draw each vessel with the cross-section
+its geometry asks for instead:
+
+```python
+from computeVoxel import process_network, rasterise_segments
+
+volume = process_network(nodes, shape, fit="voxel_size", voxel_size=2.0, antialias=True)
+volume = rasterise_segments(points, radii, shape, connect=True, antialias=True)
+```
+
+Every voxel at least half a voxel inside a capsule is drawn. Across each
+vessel, in every lattice plane perpendicular to its dominant axis, the voxels
+near the surface then get a count: the plane's share of the capsule's volume,
+from a coverage ramp one voxel wide, rounded by error diffusion along the
+vessel (half of each plane's rounding remainder carried into the next). The
+count is filled with the voxels nearest the surface from inside out, chain
+voxels first. A vessel below 2.45 voxels across never completes a 2 × 2 × 2
+cube, and a voxel outside a capsule is drawn only where it cannot touch a
+vessel more than √3 voxels away. The face-connected chain is unioned in as
+by default (`connect`), and a voxel enclosed by six drawn neighbours is set.
+The full rule is in `computeVoxel._rasterise_antialiased`.
+
+Smoothing the capsules' coverage and thresholding it, the obvious
+band-limit-then-sample rule, was measured and does not help. On a straight
+vessel it still sets the voxel centres inside a smooth tube, so it beads
+exactly as the default does: at two voxels across, the CV along the tube is
+0.101 against 0.103, and on the foam network below it gives 3 to 9 short
+necks per mm, depending on the threshold.
+
+Measured on straight tubes in 20 directions (axis-aligned, face and body
+diagonals, 12 random) at 3 random sub-voxel offsets each. The area of a tube
+is the number of its voxels in each lattice plane across its dominant axis k,
+times |u_k|, averaged over the planes of its central part; its CV is that
+area's coefficient of variation along the tube. Short necks are counted on
+the oblique tubes and on tortuous ones, at 2 µm voxels (a thin voxel belongs
+to no all-foreground 2 × 2 × 2 cube; a neck is a run of thin voxels touching
+two or more pieces of the 2 × 2 × 2 opening, short if it has at most 5
+voxels):
+
+| diameter (voxels) | worst tube's area error, default / anti-aliased | mean CV along the tube | short necks per mm, oblique / tortuous |
+|---|---|---|---|
+| 1.5 | 60 % / 13 % | 0.192 / 0.140 | 0 / – |
+| 2 | 55 % / 6.5 % | 0.105 / 0.078 | 0.80 → 0 / 4.06 → 0 |
+| 2.2 (tortuous only) | – | – | – / 12.5 → 0 |
+| 2.5 | 22 % / 3.0 % | 0.092 / 0.041 | 0 / 0 |
+| 3 | 13 % / 2.0 % | 0.056 / 0.020 | 0 / 0 |
+| 4 | 13 % / 3.5 % | 0.039 / 0.019 | 0 / 0 |
+| 8 | 4.5 % / 0.5 % | 0.014 / 0.005 | 0 / 0 |
+
+The mean area over the tubes of a diameter is within 1.5 % of π r² either
+way (the default's errors cancel out across offsets). A foam network grown
+at `--d-min 4` and rendered at 2 µm in 256³ (98 % of its centre line two
+voxels across) goes from 4.92 short necks per mm to none. Its volume is
+within 0.1 % of the capsules' union, its 26-components are unchanged, it has
+2 face-connected pieces instead of 5, and it renders in 0.6 to 0.9 times
+the default's time. A capillary_bed network goes from 0.95 to none, also
+with its components unchanged.
+
+What the mode guarantees, and where it stops:
+
+- **Calibre.** Every straight tube two voxels across or more keeps its area
+  within 6.5 % at every orientation and offset measured. The per-plane count
+  is an integer, though. A vessel whose planes each ask for n + ½ voxels must
+  either alternate between n and n + 1 or be off by half a voxel. Carrying half
+  the remainder settles a plane that asks for n + 0.2 on n, at a bias of at
+  most a quarter voxel per plane, and leaves the alternation for targets near
+  n + ½. That is why the worst tube's CV at two voxels across stays 0.144 while
+  the mean falls.
+- **Topology.** A voxel outside the capsules is drawn only where it cannot
+  touch another capsule more than √3 voxels away. Two vessels that far apart
+  surface to surface, which includes the 2-voxel separation in the
+  acceptance tests, therefore touch only where the default has them touch.
+  Rendered whole, the fixture networks have the same 26-components as by
+  default. Where a volume face cuts vessels, the pieces touching that face
+  can differ: a vessel running just outside a slab shows its edge in the face
+  plane, and the default may break that edge in two where the mode keeps it
+  whole, or the mode may show a one-voxel piece the default leaves out. The
+  pieces that touch no face are as many as by default (measured on 48
+  clipped renders of the fixtures).
+- **Necks.** Below 2.45 voxels across a vessel holds no 2 × 2 × 2 cube, so it
+  has no opening to pinch and no necks of any length (tortuous two-voxel
+  vessels: 38.8 per mm of any length by default, none anti-aliased). Above
+  that, a vessel is too thin for an unbroken 2 × 2 × 2 opening (one costs about
+  four voxels per unit length, 27 % over π r² at two voxels across) yet thick
+  enough to hold cubes. Around 2.6 voxels it keeps longer necks, all over 5
+  voxels: 9.6 per mm of any length against the default's 4.6 on tortuous
+  vessels, and 4.6 against 17.9 at 2.45. Short necks are none at every
+  diameter measured.
+- **Order and determinism.** The result involves no random numbers and does
+  not depend on the order of the polylines. It does depend on the order of the
+  points within a polyline, since the counts are carried along it: reversing
+  every polyline of a foam network changes about 4 % of its voxels.
+- **Cost.** Segments more than 8 voxels beyond their reach outside the volume
+  are skipped, so a window of a large network costs what the window holds
+  (0.1 to 0.35 times the default's time on 64³ and 128³ windows of the foam
+  network). On whole networks at 2 µm it takes 0.4 to 1.3 times the
+  default's time. Thick vessels sampled every fraction of a voxel cost up to
+  about 3 times, as do 1 µm renders of 28 µm vessels. Peak memory is about
+  1.5 times the default's.
+
+The command line does not expose the mode; `vsystem` writes what 3.9 wrote.
+`antialias=False` is the default, and with it both functions draw what 3.9
+drew, bit for bit.
+
 ### Rendering one network for several modalities
 
 Because the mapping from grammar units to voxels happens at rasterisation time, a
@@ -1882,6 +1995,36 @@ lines printed and the cap they report, the records in the manifest and the
 archives, resuming, and the other families' members, bitwise as they are
 without settings; with `VSYSTEM_SLOW_TESTS=1` it measures foam and
 capillary_bed members over their settings.
+
+From 3.10, `tests/test_antialias.py` covers the anti-aliased voxeliser. With
+`antialias` left off, `rasterise_segments` and `process_network` draw bit for
+bit what the 3.9.0 voxeliser draws on random polylines and the network
+fixtures. That voxeliser is `tests/fixtures/reference_code_3_8/computeVoxel.py`,
+unchanged since 3.2, with its sha256 checked against the 3.8 recording.
+Anti-aliased, it checks:
+
+- straight tubes of 1.5 to 8 voxels in every kind of direction and at random
+  offsets keep their area within 10 % per tube, with a mean CV along the
+  tube of at most 0.10 at 2 to 3 voxels, where the default's area is off by
+  more than 15 %;
+- oblique and tortuous two-voxel vessels have at most 0.4 short necks per mm
+  at 2 µm, where the default has more, and a smooth vessel thinner than 2.45
+  voxels holds no 2 × 2 × 2 cube;
+- vessels 2 voxels apart never touch, and vessels more than √3 apart touch
+  only where the default has them touch;
+- the fixtures have the default's 26-components when rendered whole, and
+  where a face cuts them, the pieces touching no face are as many as by
+  default;
+- tapers and junctions render as one face-connected piece, with no enclosed
+  cavity and no plane across a taper far below its cross-section;
+- every voxel lies within half a voxel of a capsule, on a chain or between six
+  drawn neighbours, the chain is drawn, and sub-voxel vessels render as by
+  default;
+- the result is deterministic, independent of the order of the polylines, and
+  a window of a network matches the same crop of the whole.
+
+With `VSYSTEM_SLOW_TESTS=1` it measures the default against the anti-aliased
+mode, giving the tables in *Anti-aliased rendering*.
 
 ## Applications
 

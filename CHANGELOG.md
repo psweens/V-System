@@ -1,5 +1,148 @@
 # Changelog
 
+## 3.10.0
+
+Version 3.10 adds an opt-in anti-aliased mode to the voxeliser:
+`rasterise_segments(..., antialias=True)` and
+`process_network(..., antialias=True)`. By default a capsule sets the voxels
+whose centres it contains. At about two voxels across, how many that is
+swings with the centre line's position against the grid, so such a vessel
+renders beaded, and its area depends on its sub-voxel offset. The
+anti-aliased mode gives each vessel the cross-section its geometry asks for
+in every lattice plane across it. Vessels two voxels across then keep their
+calibre along their length at every orientation and offset, without
+constrictions. A foam network grown at d_min 4 µm and rendered at 2 µm
+falls from 4.92 short necks per mm to none. The mode is off by default, and
+the default draws what 3.9 drew, which the tests check against the 3.9.0
+voxeliser.
+
+### Voxeliser
+
+- `rasterise_segments(points, radii, tVol, connect=True, antialias=False)`
+  and `process_network(..., connect=True, antialias=False)`: the keyword is
+  appended, and any value other than a bool (numpy's included) raises
+  `ValueError`. `antialias=False` runs 3.9's code unchanged.
+- The rule (stated in full in `computeVoxel._rasterise_antialiased`),
+  polyline by polyline:
+  - Polylines and segments are read as by default.
+  - Each segment has a dominant axis, kept along the polyline with a
+    hysteresis of 0.1.
+  - Every voxel whose coverage ramp clip(0.5 + r_eff − dist, 0, 1), with
+    r_eff = √(r² − 1/12), is 1 against some segment is drawn.
+  - The other voxels with a positive ramp, or within √3/2 of a segment, are
+    owned by the segment of lowest score dist − r.
+  - In each lattice plane across a run of segments sharing an axis and
+    sign, the owned voxels get floor(T + e + 0.5) voxels. T is their ramp
+    sum, so that the plane holds the capsule's volume. e is half the
+    previous plane's rounding remainder.
+  - The count is filled by score, chain voxels first.
+  - Voxels owned at a polyline end are only drawn inside the capsule, and
+    others only within r_eff + 0.5.
+  - A voxel outside the capsules is drawn only if every capsule more than
+    √3 from its owner's (gap measured at the axes' closest points, which
+    never under-estimates it) is more than √3 + max(0.5, √3/2 − r_min)
+    from it.
+  - In planes below 2.45 voxels across, voxels are taken one at a time,
+    skipping one that would complete a 2 × 2 × 2 cube with the polyline's
+    drawn voxels. With `connect`, one with no face neighbour among them is
+    skipped too (inside the volume only neighbours inside it count).
+  - The chain is unioned in with `connect`.
+  - Finally, every unset voxel with six set face neighbours is set.
+  - Segments more than 8 voxels beyond their reach outside the volume are
+    skipped.
+- Guarantees:
+  - every voxel drawn is on a chain, less than half a voxel outside a
+    capsule, or enclosed by its six neighbours;
+  - two capsules more than √3 voxels apart surface to surface touch only
+    where the default has them touch;
+  - a smooth vessel below 2.45 voxels across holds no 2 × 2 × 2 cube;
+  - the result involves no random numbers and does not depend on the order
+    of the polylines. It depends on the order of points within one.
+- No smoothing parameter is exposed. Thresholding the low-passed coverage of
+  the capsules (supersampled coverage, a Gaussian of σ 0.5 voxel, a
+  threshold) was measured first. On a straight tube it is still the voxel
+  centres inside a smooth tube, so it beads as the default does: at two
+  voxels across the CV along the tube is 0.101 against 0.103, oblique short
+  necks are 1.14 against 1.06 per mm, and at matched volume the foam
+  network keeps 3 to 9 short necks per mm. The rule's constants are fixed
+  module constants (`_AA_*`), since changing one changes what the tests
+  establish.
+- `rasterise_line` draws through `_line_voxels`, which returns the walk's
+  voxels; what it sets is unchanged.
+
+### Measurement
+
+- `tests/test_antialias.AntialiasBenchmark` (slow) measured the following.
+  Straight tubes in 20 directions (axis-aligned, face and body diagonals,
+  12 random), 3 random offsets each, 120 voxels long. A tube's area is its
+  voxel count in each lattice plane across its dominant axis k times |u_k|,
+  over its central planes. A thin voxel is in no all-foreground
+  2 × 2 × 2 cube; a neck is a run of thin voxels touching two or more pieces
+  of the 2 × 2 × 2 opening, and a short neck has at most 5 voxels. Rates are
+  per mm at 2 µm.
+- Worst tube's area error, 3.9 against 3.10: 60 % / 13 % at 1.5 voxels
+  across, 55 % / 6.5 % at 2, 22 % / 3.0 % at 2.5, 13 % / 2.0 % at 3,
+  13 % / 3.5 % at 4, 13 % / 1.0 % at 6 and 4.5 % / 0.5 % at 8. The mean
+  over the tubes of a diameter is within 1.5 % either way.
+- Mean CV along the tube: 0.105 / 0.078 at 2, 0.092 / 0.041 at 2.5 and
+  0.056 / 0.020 at 3. The worst tube at 2 voxels has 0.214 / 0.144. Its
+  planes ask for about n + ½ voxels, which integer counts cannot meet
+  without alternating or a half-voxel bias.
+- Short necks per mm on oblique two-voxel tubes: 0.80 against 0. On
+  tortuous tubes (a persistent random walk, 8 seeds): 4.06 against 0 at 2
+  voxels and 12.5 against 0 at 2.2. None at 2.5 and above either way.
+- Necks of any length on tortuous tubes: 38.8 against 0 per mm at 2 voxels,
+  44.6 against 0 at 2.3, 17.9 against 4.6 at 2.45, 4.6 against 9.6 at 2.6,
+  0 against 0.4 at 2.8, and none at 3. Above the cube threshold a vessel is
+  too thin for an unbroken 2 × 2 × 2 opening (about 4 voxels per unit
+  length) yet holds cubes, so it keeps long necks there.
+- Networks rendered at 2 µm in 256³, 3.9 against 3.10:
+
+  | network | short necks per mm | 26-components | 6-components | voxels | time |
+  |---|---|---|---|---|---|
+  | foam at d_min 4 µm (seed 1, 66,981 segments) | 4.92 → 0 | 2 → 2 | 5 → 2 | +0.08 % | ×0.6–0.9 |
+  | capillary_bed at d_min 4 µm | 0.95 → 0 | equal | equal | +0.10 % | ×0.7 |
+  | Lnet_i4_s2, Lnet_i5_s1 and Lnet_i9_s3 fixtures | 0.14 → 0 at most | equal | equal | – | ×0.4–1.3 |
+
+  The foam volume is within 0.1 % of the capsules' union, measured by 4³
+  supersampling.
+- Cost elsewhere:
+  - windows of 64³ and 128³ cut from the whole foam network take 0.1–0.35
+    of 3.9's time;
+  - the Lnet_i5_s1 fixture at 1 µm (28 µm vessels) takes ×2.4;
+  - a 12-voxel-radius vessel sampled every 0.3 voxel takes ×3.1;
+  - Lnet_i9_s3 in 512³ took 6.1 s against 9.8 s, at 237 MB against 158 MB
+    peak.
+- Topology:
+  - the fixtures rendered whole at 2, 4 and 8 µm, and isotropically into
+    64 × 64 × 32 to 512 × 512 × 140, have 3.9's 26-components;
+  - across 48 slab renders with z clipped, the components touching no face
+    are as many as 3.9's in every one. In two, the pieces a face cuts
+    differ: 3 against 2, where 3.9 breaks a grazing edge in two, and 4
+    against 5, where the mode adds a one-voxel piece;
+  - in 1,200 pairs of tubes 1.74 to 1.9 voxels apart surface to surface
+    (diameters 1-4, parallel and skew), none touched under 3.10 that did not
+    under 3.9;
+  - none of 300 pairs 2 voxels apart touched under either.
+
+### Compatibility
+
+- With `antialias` left False, `rasterise_segments` and `process_network`
+  draw 3.9's volumes bit for bit. `tests/test_antialias.DefaultTests` runs
+  the 3.9.0 computeVoxel in the same process, on random polylines (NaN
+  separators, repeats with their own radii, sub-voxel to thick radii,
+  clipping, with and without `connect`) and on the fixtures under every
+  fit. That module is `tests/fixtures/reference_code_3_8/computeVoxel.py`,
+  unchanged since 3.2, and its sha256 is checked against the 3.8 recording.
+  The pinned-release tests pass unchanged.
+- `tests/test_geometry.ContractTests.test_process_network_signature_is_unchanged`
+  now pins the parameters with `antialias` appended, defaulting to False.
+- `main.py` and the command line are unchanged, so `vsystem` and
+  `vsystem-library` draw what 3.9 draws.
+- pyproject version 3.10.0 and `library.LIBRARY_VERSION` 3.10.0; no new
+  module or dependency. Python 3.9 syntax, numpy only in `computeVoxel`. The
+  tests' neck and component measures use scipy and are skipped without it.
+
 ## 3.9.0
 
 Version 3.9 lets a library grow a family with some of its preset values
