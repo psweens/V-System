@@ -109,18 +109,23 @@ voxeliser.
   | network | short necks per mm | 26-components | 6-components | voxels | time |
   |---|---|---|---|---|---|
   | foam at d_min 4 µm (seed 1, 66,981 segments) | 4.92 → 0 | 2 → 2 | 5 → 2 | +0.08 % | ×0.6–0.9 |
-  | capillary_bed at d_min 4 µm | 0.95 → 0 | equal | equal | +0.10 % | ×0.7 |
+  | capillary_bed at d_min 4 µm | 0.95 → 0 | equal | equal | +0.10 % | ×0.7–0.8 |
   | Lnet_i4_s2, Lnet_i5_s1 and Lnet_i9_s3 fixtures | 0.14 → 0 at most | equal | equal | – | ×0.4–1.3 |
 
   The foam volume is within 0.1 % of the capsules' union, measured by 4³
   supersampling.
 - Cost elsewhere:
-  - windows of 64³ and 128³ cut from the whole foam network take 0.1–0.35
-    of 3.9's time;
-  - the Lnet_i5_s1 fixture at 1 µm (28 µm vessels) takes ×2.4;
-  - a 12-voxel-radius vessel sampled every 0.3 voxel takes ×3.1;
-  - Lnet_i9_s3 in 512³ took 6.1 s against 9.8 s, at 237 MB against 158 MB
-    peak.
+  - windows of 64³ and 128³ cut from the whole foam network take 0.1–0.4 of
+    3.9's time, and match the crop of the whole rendering except in 0.4 %
+    of their voxels, where the carry restarts at the cull margin;
+  - one segment 1,000 voxels long through a 64³ volume takes 0.3 s;
+  - the Lnet_i5_s1 fixture (28 µm vessels) takes ×1.9 rendered whole at
+    1 µm, and ×3.0 in a 256³ window at 0.5 µm;
+  - a 12-voxel-radius vessel sampled every 0.3 voxel takes ×2.2;
+  - Lnet_i9_s3 in 512³ took 5.0 s against 8.4 s, at 215 MB against 158 MB
+    peak;
+  - besides the volume, a 256³ window at 2 µm needs 35–50 MB, and a single
+    polyline of 50,000 points about 0.2 GB.
 - Topology:
   - the fixtures rendered whole at 2, 4 and 8 µm, and isotropically into
     64 × 64 × 32 to 512 × 512 × 140, have 3.9's 26-components;

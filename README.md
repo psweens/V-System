@@ -361,7 +361,8 @@ What the mode guarantees, and where it stops:
   the fixture windows tested differs, 0.4 % of a foam window does.
   - On whole networks at 2 µm it takes 0.4 to 1.3 times the default's time.
   - Thick vessels sampled every fraction of a voxel cost 1.7 to 2.2 times.
-  - 1 µm and 0.5 µm renders of 28 µm vessels cost 2.4 to 3 times.
+  - Renders of 28 µm vessels cost about 2 times at 1 µm and 3 times at
+    0.5 µm.
   - Besides the volume, it needs 35 to 50 MB on 256³ windows at 2 µm,
     where the default needs the volume alone. A single polyline of 50,000
     points needs about 0.2 GB.
