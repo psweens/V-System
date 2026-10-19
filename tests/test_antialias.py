@@ -15,32 +15,42 @@ Anti-aliased. Measured as the CHANGELOG states the acceptance criteria:
     offsets: the cross-section of a tube is the number of its voxels in a
     lattice plane across its dominant axis k, times |u_k|, over the planes
     of its central part. For d >= 2 every tube's mean is within 10 % of
-    pi r^2; for d = 2-3 the mean coefficient of variation along the tubes is
-    at most 0.10;
+    pi r^2, with the chain and without it; for d = 2-3 the mean coefficient
+    of variation along the tubes is at most 0.10 and below the default's;
   - short necks: thin voxels are those in no all-foreground 2 x 2 x 2 cube; a
     neck is a 26-connected run of thin voxels 26-adjacent to two or more
     26-components of the 2 x 2 x 2 opening, short if it has at most 5 voxels.
     Two-voxel tubes, straight at oblique angles and tortuous, have at most
     0.4 short necks per mm at 2 um voxels (3.9 has several on the tortuous
-    ones);
-  - topology: the network fixtures have as many 26-components as under 3.9;
-    two vessels 2 voxels or more apart surface to surface never touch, and
-    those more than sqrt(3) apart touch only where 3.9 has them touch;
+    ones), and a smooth polyline thinner than 2.45 voxels holds no
+    2 x 2 x 2 cube;
+  - topology: vessels at least sqrt(3) voxels across and more than sqrt(3)
+    apart never touch, nor do a steep taper ending its polyline and a tube
+    beside it; vessels more than sqrt(3) apart, thinner ones included, touch
+    only where 3.9 has them touch; the network fixtures rendered whole have
+    3.9's 26-components, and in slabs whose faces cut them the pieces that
+    touch no face are as many as 3.9's; thin polylines are face-connected
+    wherever they are connected, on tight curves and along volume faces;
   - tapers and junctions render as one face-connected piece without an
     enclosed cavity or a plane across a taper far below its cross-section;
   - every voxel drawn lies within half a voxel of a capsule, on a chain or
-    between six drawn neighbours; a polyline thinner than 2.45 voxels holds
-    no 2 x 2 x 2 cube; the result is deterministic and independent of the
-    order of the polylines.
+    between six drawn neighbours, with the chain and without it; the chain
+    is drawn and sub-voxel vessels render as by default; the result is
+    deterministic and independent of the order of the polylines; a window
+    of a network is the crop of the whole; a segment far longer than the
+    volume costs what the volume holds.
 
 The comparison of 3.9 with 3.10 that the CHANGELOG reports (area bias, CV,
 short necks per mm, components, runtime on a foam and a capillary_bed
-network grown at d_min 4 um and rendered at 2 um in 256^3) is slow and runs
-only with VSYSTEM_SLOW_TESTS=1; it prints its tables and writes them as JSON
-to the path in VSYSTEM_BENCHMARK_JSON when that is set.
+network grown at d_min 4 um and rendered at 2 um in 256^3) and the sweep of
+the fixtures' components over every voxel size, fit and slab it cites are
+slow and run only with VSYSTEM_SLOW_TESTS=1; the benchmark prints its tables
+and writes them as JSON to the path in VSYSTEM_BENCHMARK_JSON when that is
+set.
 
 Run from the repository root with
     python -m unittest tests.test_antialias
+    VSYSTEM_SLOW_TESTS=1 python -m unittest tests.test_antialias.FixtureTopologySweep
     VSYSTEM_SLOW_TESTS=1 python -m unittest tests.test_antialias.AntialiasBenchmark
 The neck and component measures use scipy.ndimage and are skipped where scipy
 is not installed.
@@ -226,6 +236,33 @@ def components(volume, connectivity=26):
     return ndimage.label(volume, structure)[1]
 
 
+def fixture_components(name, voxel_size, connect=True):
+    """26-components of a fixture rendered whole at a voxel size, anti-aliased and by default."""
+    nodes = load_fixture(name)
+    extent = np.nanmax(nodes[:3], axis=1) - np.nanmin(nodes[:3], axis=1)
+    shape = tuple(int(e) for e in np.ceil(extent / voxel_size) + 8)
+    kwargs = {"fit": "voxel_size", "voxel_size": voxel_size, "connect": connect}
+    return (components(process_network(nodes, shape, antialias=True, **kwargs)),
+            components(process_network(nodes, shape, **kwargs)))
+
+
+def slab_pieces(name, shape, clip_axes=(2,), connect=True):
+    """The 26-components touching no face of a slab, anti-aliased and by default."""
+    from scipy import ndimage
+
+    def inner(volume):
+        labels, n = ndimage.label(volume, np.ones((3, 3, 3), dtype=bool))
+        touching = set()
+        for axis in range(3):
+            touching.update(np.unique(np.take(labels, 0, axis=axis)).tolist())
+            touching.update(np.unique(np.take(labels, -1, axis=axis)).tolist())
+        return n - len(touching - {0})
+
+    nodes = load_fixture(name)
+    return tuple(inner(process_network(nodes, shape, clip_axes=clip_axes, connect=connect, antialias=mode))
+                 for mode in (True, False))
+
+
 def load_fixture(name):
     return np.load(os.path.join(FIXTURES, name), allow_pickle=True)["nodes"]
 
@@ -310,11 +347,20 @@ class StraightTubeTests(unittest.TestCase):
                 self.assertGreater(np.abs(bias).max(), 0.15)
 
     def test_the_cross_section_is_steadier_than_the_default(self):
-        for d in (2.5, 3.0):
+        # at two voxels a few directions can leave the default as steady by chance,
+        # so that diameter is measured over more of them
+        for d, n_random, offsets, ratio in ((2.0, 12, 3, 0.85), (2.5, 6, 2, 0.75), (3.0, 6, 2, 0.75)):
             with self.subTest(d=d):
-                aa = np.mean([row[2] for row in self.measure(antialiased, d)])
-                old = np.mean([row[2] for row in self.measure(default, d)])
-                self.assertLess(aa, 0.75 * old)
+                aa = np.mean([row[2] for row in measure_tubes(antialiased, d, n_random, offsets, 60.0)])
+                old = np.mean([row[2] for row in measure_tubes(default, d, n_random, offsets, 60.0)])
+                self.assertLess(aa, ratio * old)
+
+    def test_without_the_chain_tubes_keep_their_area(self):
+        # connect=False: no chain is forced, and the counts alone keep the area
+        for d in (2.0, 3.0, 4.0):
+            rows = measure_tubes(lambda p, r, s: antialiased(p, r, s, connect=False), d, 3, 2, 60.0)
+            with self.subTest(d=d):
+                self.assertLessEqual(max(abs(row[1]) for row in rows), 0.10, rows)
 
 
 @NEEDS_SCIPY
@@ -346,12 +392,22 @@ class NeckTests(unittest.TestCase):
         self.assertLessEqual(per_mm["antialiased"], 0.4)
         self.assertGreater(per_mm["default"], 0.4)              # the test sees what the mode removes
 
-    def test_a_polyline_thinner_than_the_cube_threshold_holds_no_cube(self):
-        for seed in range(3):
-            for d in (1.8, 2.0, 2.2, 2.4):
-                points, radii, shape = curve(seed + 10, d, steps=200)
-                with self.subTest(seed=seed, d=d):
-                    self.assertFalse(np.any(cube_corners(antialiased(points, radii, shape))))
+    def test_thin_polylines_are_face_connected_wherever_they_are_connected(self):
+        # the selection adds no voxel without a face neighbour, so a polyline has as
+        # many face-connected pieces as 26-connected ones, on tight curves and where
+        # a vessel grazes a face of the volume
+        cases = [curve(seed + 40, d, steps=150, persistence=4.0) for seed in range(12) for d in (1.6, 2.0, 2.4)]
+        rng = np.random.default_rng(1)
+        for _ in range(30):
+            d, z0 = rng.uniform(1.6, 2.4), rng.uniform(-0.8, 0.8)
+            slope = rng.uniform(-0.3, 0.3), rng.uniform(-0.02, 0.02)
+            x = np.linspace(2.0, 40.0, 60)
+            points = np.stack([x, 10.0 + (x - 2.0) * slope[0], z0 + (x - 2.0) * slope[1]])
+            cases.append((points, np.full(60, d / 2), (44, 52, 12)))
+        for i, (points, radii, shape) in enumerate(cases):
+            volume = antialiased(points, radii, shape)
+            with self.subTest(case=i):
+                self.assertEqual(components(volume, 6), components(volume, 26))
 
 
 @NEEDS_SCIPY
@@ -379,13 +435,59 @@ class TopologyTests(unittest.TestCase):
         radii = np.concatenate([np.full(n + 1, d1 / 2), [np.nan], np.full(n + 1, d2 / 2)])
         return points, radii, shape
 
-    def test_vessels_two_voxels_apart_never_touch(self):
+    def test_vessels_two_voxels_apart_touch_only_where_the_default_has_them_touch(self):
+        # the chain of a vessel thinner than sqrt(3) voxels can reach past its
+        # surface, by default as here, so the comparison is with the default
         rng = np.random.default_rng(2)
         for case in range(60):
             d1, d2 = rng.choice([1.0, 1.5, 2.0, 2.2, 2.5, 3.0, 4.0], size=2)
             points, radii, shape = self.pair(rng, d1, d2, 2.0)
             with self.subTest(case=case, d1=d1, d2=d2):
+                if components(antialiased(points, radii, shape)) < 2:
+                    self.assertLess(components(default(points, radii, shape)), 2)
+
+    def test_vessels_sqrt3_across_and_more_than_sqrt3_apart_never_touch(self):
+        # no chain reaches past their surfaces, so no voxel of one may touch the
+        # other; parallel pairs just over sqrt(3) apart are where a voxel outside
+        # the capsules would, were it not for the clearance test
+        rng = np.random.default_rng(6)
+        for case in range(100):
+            d1, d2 = rng.choice([1.8, 2.0, 2.2, 2.5, 3.0, 4.0], size=2)
+            u = rng.normal(size=3)
+            u /= np.linalg.norm(u)
+            w = np.cross(u, rng.normal(size=3))
+            w /= np.linalg.norm(w)
+            separation = d1 / 2 + d2 / 2 + rng.uniform(1.74, 1.85)
+            shape = (int(24.0 + 2 * separation + 14),) * 3
+            centre = (np.array(shape) - 1) / 2.0 + rng.uniform(-0.5, 0.5, 3)
+            n = int(rng.integers(20, 60))
+            first = np.linspace(centre - u * 12.0, centre + u * 12.0, n + 1).T
+            points = np.hstack([first, np.full((3, 1), np.nan), first + (w * separation)[:, None]])
+            radii = np.concatenate([np.full(n + 1, d1 / 2), [np.nan], np.full(n + 1, d2 / 2)])
+            with self.subTest(case=case, d1=d1, d2=d2):
                 self.assertEqual(components(antialiased(points, radii, shape)), 2)
+
+    def test_a_steep_taper_ending_its_polyline_keeps_its_clearance(self):
+        # a two-point taper (r 1.5 -> 3.7-3.8 over 0.6-0.7 voxel) beside a tube
+        # 1.76-1.78 voxels away: behind the thin end the score understates how
+        # near the wide end is, so the clearance is measured from the larger radius
+        cases = [
+            ([[14.7535, 2.1115, 12.3878, 12.8055], [13.7113, 6.4566, 12.4773, 12.0994],
+              [21.2886, 7.5937, 12.1991, 11.8876]], [1.2202, 1.4836, 3.8349]),
+            ([[25.2477, 1.5527, 14.4175, 14.6356], [19.993, 9.3433, 13.7494, 13.2483],
+              [19.0704, 20.1352, 15.1023, 14.9443]], [1.1709, 1.6232, 3.9813]),
+            ([[22.8603, 1.7554, 13.6208, 13.9627], [6.5995, 21.224, 14.0409, 14.4727],
+              [8.4873, 12.5747, 14.923, 15.1438]], [1.2119, 1.5134, 3.6884]),
+        ]
+        for i, (coords, (r_tube, r_thin, r_wide)) in enumerate(cases):
+            coords = np.array(coords)
+            tube_points = np.linspace(coords[:, 0], coords[:, 1], 14).T
+            points = np.hstack([tube_points, np.full((3, 1), np.nan), coords[:, 2:]])
+            radii = np.concatenate([np.full(14, r_tube), [np.nan], [r_thin, r_wide]])
+            for connect in (True, False):
+                with self.subTest(case=i, connect=connect):
+                    self.assertEqual(components(default(points, radii, (28, 28, 28), connect)), 2)
+                    self.assertEqual(components(antialiased(points, radii, (28, 28, 28), connect)), 2)
 
     def test_vessels_more_than_sqrt3_apart_touch_only_where_the_default_has_them_touch(self):
         rng = np.random.default_rng(3)
@@ -396,42 +498,23 @@ class TopologyTests(unittest.TestCase):
                 if components(antialiased(points, radii, shape)) < 2:
                     self.assertLess(components(default(points, radii, shape)), 2)
 
+    WHOLE = [(name, voxel_size) for name in ARCHIVES[:2] for voxel_size in (2.0, 4.0, 8.0)] + [(ARCHIVES[2], 8.0)]
+    SLABS = [(name, shape) for name in ARCHIVES for shape in ((128, 128, 40), (256, 256, 70))]
+
     def test_the_fixtures_have_the_components_they_have_by_default(self):
         # the whole network in the volume: the same number of 26-components
-        for name in ARCHIVES:
-            nodes = load_fixture(name)
-            extent = np.nanmax(nodes[:3], axis=1) - np.nanmin(nodes[:3], axis=1)
-            for voxel_size in (2.0, 4.0, 8.0):
-                shape = tuple(int(e) for e in np.ceil(extent / voxel_size) + 8)
-                with self.subTest(archive=name, voxel_size=voxel_size):
-                    kwargs = {"fit": "voxel_size", "voxel_size": voxel_size}
-                    self.assertEqual(components(process_network(nodes, shape, antialias=True, **kwargs)),
-                                     components(process_network(nodes, shape, **kwargs)))
-            for shape in ((64, 64, 32), (128, 128, 64), (512, 512, 140)):
-                with self.subTest(archive=name, shape=shape):
-                    self.assertEqual(components(process_network(nodes, shape, antialias=True)),
-                                     components(process_network(nodes, shape)))
+        for name, voxel_size in self.WHOLE:
+            with self.subTest(archive=name, voxel_size=voxel_size):
+                self.assertEqual(*fixture_components(name, voxel_size))
 
     def test_where_a_face_cuts_vessels_only_the_pieces_it_cuts_can_differ(self):
         # a vessel running just outside a slab shows its edge in the face plane,
-        # which the default can break in two where the anti-aliased mode does not;
-        # the pieces that touch no face are as many as by default
-        from scipy import ndimage
-
-        def inner_pieces(volume):
-            labels, n = ndimage.label(volume, np.ones((3, 3, 3), dtype=bool))
-            touching = set()
-            for axis in range(3):
-                touching.update(np.unique(np.take(labels, 0, axis=axis)).tolist())
-                touching.update(np.unique(np.take(labels, -1, axis=axis)).tolist())
-            return n - len(touching - {0})
-
-        for name in ARCHIVES:
-            nodes = load_fixture(name)
-            for shape in ((128, 128, 40), (256, 256, 70), (320, 320, 90), (512, 512, 140)):
-                with self.subTest(archive=name, shape=shape):
-                    self.assertEqual(inner_pieces(process_network(nodes, shape, clip_axes=(2,), antialias=True)),
-                                     inner_pieces(process_network(nodes, shape, clip_axes=(2,))))
+        # which the default can break in two where the anti-aliased mode does not
+        # (Lnet_i5_s1 in 256 x 256 x 70); the pieces that touch no face are as many
+        # as by default
+        for name, shape in self.SLABS:
+            with self.subTest(archive=name, shape=shape):
+                self.assertEqual(*slab_pieces(name, shape))
 
     def test_tapers_and_junctions_have_no_holes_or_seams(self):
         from scipy import ndimage
@@ -499,6 +582,29 @@ class PropertyTests(unittest.TestCase):
             with self.subTest(case=case):
                 self.assertFalse(np.any(volume & ~grown & ~enclosed))
 
+    def test_without_the_chain_every_voxel_lies_near_a_capsule(self):
+        rng = np.random.default_rng(14)
+        reference = reference_voxeliser()
+        for case in range(12):
+            shape = (24, 22, 20)
+            points, radii = random_polylines(rng, shape, 4)
+            volume = antialiased(points, radii, shape, connect=False).astype(bool)
+            grown = reference.rasterise_segments(points, radii + 0.5, shape, connect=False).astype(bool)
+            v = np.pad(volume, 1)
+            enclosed = (v[:-2, 1:-1, 1:-1] & v[2:, 1:-1, 1:-1] & v[1:-1, :-2, 1:-1] & v[1:-1, 2:, 1:-1]
+                        & v[1:-1, 1:-1, :-2] & v[1:-1, 1:-1, 2:])
+            with self.subTest(case=case):
+                self.assertFalse(np.any(volume & ~grown & ~enclosed))
+                np.testing.assert_array_equal(antialiased(points, radii, shape, connect=False), volume)
+
+    def test_a_smooth_polyline_thinner_than_the_cube_threshold_holds_no_cube(self):
+        for seed in range(3):
+            for d in (1.8, 2.0, 2.2, 2.4):
+                points, radii, shape = curve(seed + 10, d, steps=200)
+                for connect in (True, False):
+                    with self.subTest(seed=seed, d=d, connect=connect):
+                        self.assertFalse(np.any(cube_corners(antialiased(points, radii, shape, connect))))
+
     def test_the_chain_is_drawn_and_sub_voxel_vessels_render_as_by_default(self):
         rng = np.random.default_rng(12)
         for case in range(20):
@@ -527,15 +633,55 @@ class PropertyTests(unittest.TestCase):
         order = np.concatenate([piece for piece in pieces[::-1] if len(piece)])
         np.testing.assert_array_equal(antialiased(points[:, order], radii[order], shape), first)
 
-    def test_reaches_the_volume_from_a_window_of_a_larger_network(self):
-        # a network passed whole with a small volume draws only what lies in it
+    def test_a_window_of_a_network_is_the_crop_of_the_whole(self):
+        # a network passed whole with a small volume draws what lies in it, as the
+        # whole network drawn at once and cropped
         nodes = load_fixture("Lnet_i5_s1.npz")
         full = process_network(nodes, (240, 210, 180), fit="voxel_size", voxel_size=2.0, antialias=True)
         points, radii = computeVoxel.fit_to_volume(nodes, (240, 210, 180), fit="voxel_size", voxel_size=2.0)
-        window = antialiased(points - np.array([[90.0], [80.0], [60.0]]), radii, (64, 64, 64))
-        crop = full[90:154, 80:144, 60:124]
-        self.assertGreater(int(window.sum()), 0)
-        self.assertLessEqual(int((window != crop).sum()), 0.01 * int(crop.sum()))
+        for corner in ((90, 80, 60), (100, 60, 40), (40, 120, 90)):
+            window = antialiased(points - np.array(corner, dtype=float)[:, None], radii, (64, 64, 64))
+            crop = full[corner[0]:corner[0] + 64, corner[1]:corner[1] + 64, corner[2]:corner[2] + 64]
+            with self.subTest(corner=corner):
+                self.assertGreater(int(window.sum()), 0)
+                np.testing.assert_array_equal(window, crop)
+
+    def test_a_long_segment_costs_what_the_volume_holds(self):
+        # one segment 1000 voxels long through a 64^3 volume examines only the
+        # voxels near the volume, not its whole bounding box
+        centre = np.array([32.3, 31.7, 32.1])
+        axis = np.ones(3) / math.sqrt(3.0)
+        points = np.stack([centre - 500 * axis, centre + 500 * axis], axis=1)
+        start = time.perf_counter()
+        volume = antialiased(points, np.array([1.0, 1.0]), (64, 64, 64))
+        self.assertLess(time.perf_counter() - start, 20.0)
+        self.assertGreater(int(volume.sum()), 0)
+
+
+@SLOW
+@NEEDS_SCIPY
+class FixtureTopologySweep(unittest.TestCase):
+    """The fixtures' components over every voxel size, fit and slab the CHANGELOG reports."""
+
+    def test_whole_networks_have_the_default_components(self):
+        for name in ARCHIVES:
+            for voxel_size in (2.0, 4.0, 8.0):
+                with self.subTest(archive=name, voxel_size=voxel_size):
+                    self.assertEqual(*fixture_components(name, voxel_size))
+            nodes = load_fixture(name)
+            for shape in ((64, 64, 32), (128, 128, 64), (512, 512, 140)):
+                with self.subTest(archive=name, shape=shape):
+                    self.assertEqual(components(process_network(nodes, shape, antialias=True)),
+                                     components(process_network(nodes, shape)))
+
+    def test_slabs_keep_the_default_pieces_that_touch_no_face(self):
+        # 3 archives x 8 slabs x 2 clippings: 48 renders
+        for name in ARCHIVES:
+            for shape in ((64, 64, 20), (96, 96, 30), (128, 128, 40), (160, 160, 50), (200, 200, 60),
+                          (256, 256, 70), (320, 320, 90), (512, 512, 140)):
+                for clip in ((2,), (1, 2)):
+                    with self.subTest(archive=name, shape=shape, clip=clip):
+                        self.assertEqual(*slab_pieces(name, shape, clip))
 
 
 @SLOW

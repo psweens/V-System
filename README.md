@@ -270,10 +270,12 @@ near the surface then get a count: the plane's share of the capsule's volume,
 from a coverage ramp one voxel wide, rounded by error diffusion along the
 vessel (half of each plane's rounding remainder carried into the next). The
 count is filled with the voxels nearest the surface from inside out, chain
-voxels first. A vessel below 2.45 voxels across never completes a 2 × 2 × 2
-cube, and a voxel outside a capsule is drawn only where it cannot touch a
-vessel more than √3 voxels away. The face-connected chain is unioned in as
-by default (`connect`), and a voxel enclosed by six drawn neighbours is set.
+voxels first. In a vessel below 2.45 voxels across the count never completes
+a 2 × 2 × 2 cube. A voxel outside a capsule is drawn only where it cannot
+touch a vessel more than √3 voxels away. That distance is measured from each
+capsule's axis less its larger radius, so it holds along steep tapers too.
+The face-connected chain is unioned in as by default (`connect`), and a
+voxel enclosed by six drawn neighbours is set.
 The full rule is in `computeVoxel._rasterise_antialiased`.
 
 Smoothing the capsules' coverage and thresholding it, the obvious
@@ -326,15 +328,19 @@ What the mode guarantees, and where it stops:
   touch another capsule more than √3 voxels away. Two vessels that far apart
   surface to surface, which includes the 2-voxel separation in the
   acceptance tests, therefore touch only where the default has them touch.
-  Rendered whole, the fixture networks have the same 26-components as by
+  Vessels √3 voxels across or more never touch at that distance; thinner ones
+  touch only through their chains, which reach past their surfaces as by
+  default. Rendered whole, the fixture networks have the same 26-components as by
   default. Where a volume face cuts vessels, the pieces touching that face
   can differ: a vessel running just outside a slab shows its edge in the face
   plane, and the default may break that edge in two where the mode keeps it
   whole, or the mode may show a one-voxel piece the default leaves out. The
   pieces that touch no face are as many as by default (measured on 48
   clipped renders of the fixtures).
-- **Necks.** Below 2.45 voxels across a vessel holds no 2 × 2 × 2 cube, so it
-  has no opening to pinch and no necks of any length (tortuous two-voxel
+- **Necks.** Below 2.45 voxels across, a smooth vessel holds no 2 × 2 × 2
+  cube. One can appear only where a voxel enclosed at a sharp kink is filled,
+  or where the vessel meets another polyline. So a smooth thin vessel has no
+  opening to pinch and no necks of any length (tortuous two-voxel
   vessels: 38.8 per mm of any length by default, none anti-aliased). Above
   that, a vessel is too thin for an unbroken 2 × 2 × 2 opening (one costs about
   four voxels per unit length, 27 % over π r² at two voxels across) yet thick
@@ -347,12 +353,18 @@ What the mode guarantees, and where it stops:
   points within a polyline, since the counts are carried along it: reversing
   every polyline of a foam network changes about 4 % of its voxels.
 - **Cost.** Segments more than 8 voxels beyond their reach outside the volume
-  are skipped, so a window of a large network costs what the window holds
-  (0.1 to 0.35 times the default's time on 64³ and 128³ windows of the foam
-  network). On whole networks at 2 µm it takes 0.4 to 1.3 times the
-  default's time. Thick vessels sampled every fraction of a voxel cost up to
-  about 3 times, as do 1 µm renders of 28 µm vessels. Peak memory is about
-  1.5 times the default's.
+  are skipped, and only the voxels near the volume are examined. So a window
+  of a large network, or a long segment through a small volume, costs what
+  the window holds: 0.1 to 0.4 times the default's time on 64³ and 128³
+  windows of the foam network. Such a window matches the crop of the whole
+  rendering except within the run-in of a vessel cut by its margin: none of
+  the fixture windows tested differs, 0.4 % of a foam window does.
+  - On whole networks at 2 µm it takes 0.4 to 1.3 times the default's time.
+  - Thick vessels sampled every fraction of a voxel cost 1.7 to 2.2 times.
+  - 1 µm and 0.5 µm renders of 28 µm vessels cost 2.4 to 3 times.
+  - Besides the volume, it needs 35 to 50 MB on 256³ windows at 2 µm,
+    where the default needs the volume alone. A single polyline of 50,000
+    points needs about 0.2 GB.
 
 The command line does not expose the mode; `vsystem` writes what 3.9 wrote.
 `antialias=False` is the default, and with it both functions draw what 3.9
@@ -2010,18 +2022,25 @@ Anti-aliased, it checks:
 - oblique and tortuous two-voxel vessels have at most 0.4 short necks per mm
   at 2 µm, where the default has more, and a smooth vessel thinner than 2.45
   voxels holds no 2 × 2 × 2 cube;
-- vessels 2 voxels apart never touch, and vessels more than √3 apart touch
-  only where the default has them touch;
+- vessels √3 voxels across or more and more than √3 apart never touch, a
+  steep taper ending its polyline included, and vessels more than √3 apart,
+  thinner ones included, touch only where the default has them touch;
 - the fixtures have the default's 26-components when rendered whole, and
   where a face cuts them, the pieces touching no face are as many as by
-  default;
+  default. With `VSYSTEM_SLOW_TESTS=1`, this extends to every voxel size,
+  fit and slab the CHANGELOG reports;
+- thin polylines are face-connected wherever they are connected, on tight
+  curves and along volume faces;
 - tapers and junctions render as one face-connected piece, with no enclosed
   cavity and no plane across a taper far below its cross-section;
 - every voxel lies within half a voxel of a capsule, on a chain or between six
-  drawn neighbours, the chain is drawn, and sub-voxel vessels render as by
-  default;
-- the result is deterministic, independent of the order of the polylines, and
-  a window of a network matches the same crop of the whole.
+  drawn neighbours, with `connect` and without it, the chain is drawn, and
+  sub-voxel vessels render as by default;
+- tubes keep their area without the chain too;
+- the result is deterministic and independent of the order of the
+  polylines;
+- three windows of a fixture equal the crop of the whole, and a segment 1,000
+  voxels long through a 64³ volume costs what the volume holds.
 
 With `VSYSTEM_SLOW_TESTS=1` it measures the default against the anti-aliased
 mode, giving the tables in *Anti-aliased rendering*.

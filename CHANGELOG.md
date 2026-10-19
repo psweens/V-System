@@ -24,7 +24,8 @@ voxeliser.
   `ValueError`. `antialias=False` runs 3.9's code unchanged.
 - The rule (stated in full in `computeVoxel._rasterise_antialiased`),
   polyline by polyline:
-  - Polylines and segments are read as by default.
+  - Polylines and segments are read as by default. A segment whose radius
+    is not finite is drawn as its chain alone, as by default.
   - Each segment has a dominant axis, kept along the polyline with a
     hysteresis of 0.1.
   - Every voxel whose coverage ramp clip(0.5 + r_eff − dist, 0, 1), with
@@ -41,7 +42,8 @@ voxeliser.
   - A voxel outside the capsules is drawn only if every capsule more than
     √3 from its owner's (gap measured at the axes' closest points, which
     never under-estimates it) is more than √3 + max(0.5, √3/2 − r_min)
-    from it.
+    from it. The distance to a capsule is taken as the distance to its axis
+    less its larger radius, which never exceeds it, along a steep taper too.
   - In planes below 2.45 voxels across, voxels are taken one at a time,
     skipping one that would complete a 2 × 2 × 2 cube with the polyline's
     drawn voxels. With `connect`, one with no face neighbour among them is
@@ -49,13 +51,19 @@ voxeliser.
   - The chain is unioned in with `connect`.
   - Finally, every unset voxel with six set face neighbours is set.
   - Segments more than 8 voxels beyond their reach outside the volume are
-    skipped.
+    skipped. Only voxels within 2√3 (r + 0.5) + 9 voxels of the volume are
+    examined, so every plane across a vessel that reaches into the volume is
+    examined whole, and a long segment through a small volume costs what
+    the volume holds.
 - Guarantees:
   - every voxel drawn is on a chain, less than half a voxel outside a
     capsule, or enclosed by its six neighbours;
   - two capsules more than √3 voxels apart surface to surface touch only
     where the default has them touch;
-  - a smooth vessel below 2.45 voxels across holds no 2 × 2 × 2 cube;
+  - below 2.45 voxels across the selection completes no 2 × 2 × 2 cube, so
+    a smooth thin vessel holds none. One can appear only where a voxel
+    enclosed at a sharp kink is filled, or where the vessel meets another
+    polyline;
   - the result involves no random numbers and does not depend on the order
     of the polylines. It depends on the order of points within one.
 - No smoothing parameter is exposed. Thresholding the low-passed coverage of
@@ -121,9 +129,14 @@ voxeliser.
     differ: 3 against 2, where 3.9 breaks a grazing edge in two, and 4
     against 5, where the mode adds a one-voxel piece;
   - in 1,200 pairs of tubes 1.74 to 1.9 voxels apart surface to surface
-    (diameters 1-4, parallel and skew), none touched under 3.10 that did not
-    under 3.9;
-  - none of 300 pairs 2 voxels apart touched under either.
+    (diameters 1-4, parallel and skew), and 300 pairs 2 voxels apart, none
+    touched under 3.10 that did not under 3.9. Vessels thinner than √3
+    voxels can touch through their chains under both, as the chain reaches
+    up to √3/2 − r past their surfaces;
+  - a two-point taper from r 1.5 to 3.8 over 0.65 voxel ending its polyline,
+    1.78 voxels from a tube, stays apart from it. Measuring the clearance from
+    the score at the clamped projection would have let them touch, since
+    behind the thin end the score understates how near the wide end is.
 
 ### Compatibility
 

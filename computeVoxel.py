@@ -317,7 +317,7 @@ _AA_CUBE_FREE = 2.45            # planes of a smaller mean diameter complete no 
 _AA_SUPPORT = 0.5               # a voxel is drawn only within r_eff + this of the centre line
 _AA_SEPARATION = math.sqrt(3.0)  # capsules farther apart than this never touch, as by default
 _AA_CULL = 8.0                  # segments this far beyond their reach outside the volume are skipped
-_AA_CHUNK = 1 << 19             # candidate voxels, or voxel-segment pairs, evaluated at a time
+_AA_CHUNK = 1 << 16             # candidate voxels, or voxel-segment pairs, evaluated at a time
 _AA_CELL = 8                    # cell side of the segment grid behind the clearance test
 _AA_SLAB = 32                   # x planes examined at a time by _fill_enclosed
 
@@ -337,7 +337,11 @@ def _rasterise_antialiased(points, radii, shape, connect):
        the first point to the first repeat of the second, with their radii.
        A segment whose bounding box, grown by its larger radius plus
        1 + _AA_CULL voxels, misses the volume is skipped, splitting its
-       polyline there.
+       polyline there, and a segment with a radius that is not finite is
+       drawn as its chain alone, as by default. Only the voxels within the
+       volume grown by 2 sqrt(3) (r + 0.5) + 1 + _AA_CULL voxels are
+       examined, so every plane across a vessel that reaches into the
+       volume is examined whole.
     2. Runs. Each segment of a polyline has a dominant axis k, kept from the
        segment before, with the sign of u_k, while |u_k| >= max|u| - 0.1 and
        the sign holds, and otherwise argmax |u|. A run is a maximal stretch
@@ -351,7 +355,7 @@ def _rasterise_antialiased(points, radii, shape, connect):
        segment of the polyline, half a voxel or more inside r_eff, is drawn.
        Any other whose ramp is positive against some segment, or that lies
        within sqrt(3)/2 of one, is a candidate, owned by the segment of
-       lowest score among those (the earlier on a tie).
+       lowest score among those (the earlier on equal computed scores).
     4. Counts. A slice is the candidates owned by one run that lie in one
        lattice plane x_k = c, and slices are ordered along the polyline. A
        slice's target T is the sum of their ramps; with the interior it
@@ -370,8 +374,9 @@ def _rasterise_antialiased(points, radii, shape, connect):
        capsule, s > 0, is eligible only if every capsule whose surface lies
        more than sqrt(3) from its owner's (measured at the two axes' closest
        points, which never under-estimates the gap) is more than sqrt(3) +
-       max(0.5, sqrt(3)/2 - r_min) away from it, r_min the capsule's smaller
-       radius.
+       max(0.5, sqrt(3)/2 - r_min) away from it, the distance to a capsule
+       being taken as the distance to its axis less its larger radius and
+       r_min being its smaller radius.
     6. Selection. A slice takes its eligible candidates by score, then
        position. In a slice whose candidates' mean diameter is below 2.45
        they are taken one at a time, skipping a candidate that would
@@ -394,15 +399,19 @@ def _rasterise_antialiased(points, radii, shape, connect):
     and a cube's centres cannot all lie within 0.707 of a line) and the
     selection completes none: a thin vessel holds a cube only where its
     chain and interior alone form one, which those of a smooth vessel do
-    not, or where it meets another polyline, so no 2 x 2 x 2 opening pinches
-    it into necks. The result depends on the order of points along a
+    not, where step 7 fills a voxel enclosed at a sharp kink, or where it
+    meets another polyline, so no 2 x 2 x 2 opening pinches a smooth thin
+    vessel into necks. The result depends on the order of points along a
     polyline, not on the order of the polylines, and involves no random
     numbers.
     """
     volume = np.zeros(shape, dtype=np.uint8)
-    a, b, ra, rb, starts = _aa_segments(points, radii, shape)
+    a, b, ra, rb, starts, bare = _aa_segments(points, radii, shape)
+    if connect:
+        for p0, p1 in zip(*bare):
+            rasterise_line(volume, p0, p1)
     if len(a):
-        clearance = _Clearance(a, b, ra, rb)
+        clearance = _Clearance(a, b, ra, rb, shape)
         bounds = np.append(starts, len(a)).tolist()
         for first, last in zip(bounds[:-1], bounds[1:]):
             _aa_polyline(volume, a[first:last], b[first:last], ra[first:last], rb[first:last],
@@ -414,7 +423,8 @@ def _rasterise_antialiased(points, radii, shape, connect):
 def _aa_segments(points, radii, shape):
     """
     Step 1 of _rasterise_antialiased: the segments as arrays a, b (m, 3) and
-    ra, rb (m,), and the index of each polyline's first segment.
+    ra, rb (m,), the index of each polyline's first segment, and the ends of
+    the segments whose radius is not finite, of which only the chain is drawn.
     """
     n = points.shape[1]
     valid = ~np.isnan(points[0])
@@ -437,7 +447,8 @@ def _aa_segments(points, radii, shape):
     index = np.flatnonzero(keep)
     starts = np.ones(len(index), dtype=bool)
     starts[1:] = (np.diff(index) != 1) | (run[index][1:] != run[index][:-1])
-    return a[index], b[index], ra[index], rb[index], np.flatnonzero(starts)
+    bare = np.flatnonzero(np.all(np.isfinite(a) & np.isfinite(b), axis=1) & ~(np.isfinite(ra) & np.isfinite(rb)))
+    return a[index], b[index], ra[index], rb[index], np.flatnonzero(starts), (a[bare], b[bare])
 
 
 def _box_points(lo, hi):
@@ -455,6 +466,31 @@ def _box_points(lo, hi):
     points[:, 1] = y + np.repeat(lo[:, 1], sizes)
     points[:, 2] = z + np.repeat(lo[:, 2], sizes)
     return points, sizes
+
+
+def _slabs(lo, hi, limit):
+    """
+    The boxes [lo_i, hi_i] cut along x into slabs of as many x planes as keep
+    them within `limit` points (one plane at least): their lo and hi, and the
+    box of each.
+    """
+    extent = hi - lo + 1
+    width = np.maximum(limit // np.maximum(extent[:, 1] * extent[:, 2], 1), 1)
+    count = np.maximum(-(-extent[:, 0] // width), 1)
+    box = np.repeat(np.arange(len(lo)), count)
+    k = np.arange(len(box)) - np.repeat(np.cumsum(count) - count, count)
+    slab_lo, slab_hi = lo[box], hi[box]
+    slab_lo[:, 0] = lo[box, 0] + k * width[box]
+    slab_hi[:, 0] = np.minimum(slab_lo[:, 0] + width[box] - 1, hi[box, 0])
+    return slab_lo, slab_hi, box
+
+
+def _member(values, sorted_keys):
+    """Whether each of `values` is among `sorted_keys` (ascending)."""
+    if not len(sorted_keys):
+        return np.zeros(len(values), dtype=bool)
+    at = np.minimum(np.searchsorted(sorted_keys, values), len(sorted_keys) - 1)
+    return sorted_keys[at] == values
 
 
 def _keys(points, origin, strides):
@@ -510,6 +546,9 @@ def _best(key, score, *columns):
     return (key[order], score[order]) + tuple(c[order] for c in columns)
 
 
+# the offsets of a voxel's 3 x 3 x 3 neighbourhood
+_NEIGHBOURS = np.array([(i, j, k) for i in (-1, 0, 1) for j in (-1, 0, 1) for k in (-1, 0, 1)], dtype=np.int64)
+
 # the seven other voxels of each of the eight 2 x 2 x 2 cubes holding a voxel
 _CUBES = [[(cx + i, cy + j, cz + k) for i in (0, 1) for j in (0, 1) for k in (0, 1)
            if (cx + i, cy + j, cz + k) != (0, 0, 0)]
@@ -525,26 +564,32 @@ def _aa_polyline(volume, a, b, ra, rb, first, connect, clearance):
     axis, sign, run = _aa_runs(d / np.sqrt(length2)[:, None])
 
     # the voxel centres within reach of each segment (r + 0.5, or sqrt(3)/2 for
-    # the chain), and a frame holding them and their neighbours, for integer keys
+    # the chain), as far as they can matter inside the volume: each box is cut
+    # back to the volume grown by twice the widest plane across the vessel,
+    # one voxel and _AA_CULL; and a frame holding them and their neighbours,
+    # for integer keys
     reach = np.maximum(np.maximum(ra, rb) + _AA_SUPPORT, math.sqrt(3.0) / 2.0)[:, None]
-    lo = np.ceil(np.minimum(a, b) - reach).astype(np.int64)
-    hi = np.floor(np.maximum(a, b) + reach).astype(np.int64)
+    margin = np.ceil(2.0 * math.sqrt(3.0) * reach) + 1.0 + _AA_CULL
+    lo = np.maximum(np.ceil(np.minimum(a, b) - reach), -margin).astype(np.int64)
+    hi = np.minimum(np.floor(np.maximum(a, b) + reach), np.asarray(shape) - 1 + margin).astype(np.int64)
+    hi = np.maximum(hi, lo - 1)
     origin = lo.min(axis=0) - 1
     dims = hi.max(axis=0) - origin + 2
     strides = np.array([dims[1] * dims[2], dims[2], 1], dtype=np.int64)
 
     # step 3: the interior is drawn at once; every band candidate once, with its owner
     interior = np.zeros(int(np.prod(dims)), dtype=bool)
-    found = []
-    for i, j in _chunks(np.prod(hi - lo + 1, axis=1), _AA_CHUNK):
-        g, n = _box_points(lo[i:j], hi[i:j])
-        seg = np.repeat(np.arange(i, j), n)
-        step = np.repeat(d[i:j], n, axis=0)
-        w = g - np.repeat(a[i:j], n, axis=0)
-        t = np.clip(np.einsum("ij,ij->i", w, step) / np.repeat(length2[i:j], n), 0.0, 1.0)
+    slab_lo, slab_hi, slab_seg = _slabs(lo, hi, _AA_CHUNK)
+    found, held = [], 0
+    for i, j in _chunks(np.prod(slab_hi - slab_lo + 1, axis=1), _AA_CHUNK):
+        g, n = _box_points(slab_lo[i:j], slab_hi[i:j])
+        seg = np.repeat(slab_seg[i:j], n)
+        step = np.repeat(d[slab_seg[i:j]], n, axis=0)
+        w = g - np.repeat(a[slab_seg[i:j]], n, axis=0)
+        t = np.clip(np.einsum("ij,ij->i", w, step) / length2[seg], 0.0, 1.0)
         w -= t[:, None] * step
         dist = np.sqrt(np.einsum("ij,ij->i", w, w))
-        r = np.repeat(ra[i:j], n) + t * np.repeat(rb[i:j] - ra[i:j], n)
+        r = ra[seg] + t * (rb[seg] - ra[seg])
         ramp = 0.5 + np.sqrt(np.maximum(r * r - 1.0 / 12.0, 0.0)) - dist
         inner = ramp >= 1.0
         if np.any(inner):
@@ -552,6 +597,12 @@ def _aa_polyline(volume, a, b, ra, rb, first, connect, clearance):
             _draw(volume, g[inner])
         near = ~inner & ((ramp > 0.0) | (dist <= math.sqrt(3.0) / 2.0))
         found.append(_best(_keys(g[near], origin, strides), dist[near] - r[near], seg[near], t[near], dist[near], r[near]))
+        held += int(near.sum())
+        if held > 2 * _AA_CHUNK:            # merge as we go, so memory follows the band
+            merged = _best(*(np.concatenate(c) for c in zip(*found)))
+            keep = ~interior[merged[0]]
+            found = [tuple(c[keep] for c in merged)]
+            held = int(keep.sum())
     key, score, seg, t, dist, r = _best(*(np.concatenate(c) for c in zip(*found)))
     band = ~interior[key]
     key, score, seg, t, dist, r = key[band], score[band], seg[band], t[band], dist[band], r[band]
@@ -559,9 +610,9 @@ def _aa_polyline(volume, a, b, ra, rb, first, connect, clearance):
     if connect:
         chain = np.concatenate([_line_voxels(a[i], b[i]) for i in range(m)], axis=1).T
         _draw(volume, chain)
+        chain = chain[np.all((chain >= lo.min(axis=0)) & (chain <= hi.max(axis=0)), axis=1)]
         chain = np.unique(_keys(chain, origin, strides))
-        at = np.minimum(np.searchsorted(chain, key), len(chain) - 1)
-        is_chain = chain[at] == key
+        is_chain = _member(key, chain)
     else:
         chain = np.zeros(0, dtype=np.int64)
         is_chain = np.zeros(len(key), dtype=bool)
@@ -594,10 +645,14 @@ def _aa_polyline(volume, a, b, ra, rb, first, connect, clearance):
     thick = order[(rank < want[osid]) & ~thin[osid]]
     _draw(volume, g[thick])
     if np.any(thin):
-        drawn = set(chain.tolist())
-        drawn.update(key[thick].tolist())
-        drawn.update(np.flatnonzero(interior).tolist())
-        _draw(volume, g[_aa_thin(order[thin[osid]], key, g, is_chain, sid, want, drawn, strides, shape, connect)])
+        # the polyline's voxels drawn so far, as far as the thin slices can meet them
+        taken = order[thin[osid]]
+        offsets = _NEIGHBOURS @ strides
+        nearby = np.unique(np.concatenate([np.unique((key[taken[i:i + _AA_CHUNK]][:, None] + offsets).ravel())
+                                           for i in range(0, len(taken), _AA_CHUNK)]))
+        drawn = nearby[interior[nearby] | _member(nearby, chain) | _member(nearby, np.sort(key[thick]))]
+        drawn = set(drawn.tolist())
+        _draw(volume, g[_aa_thin(taken, key, g, is_chain, sid, want, drawn, strides, shape, connect)])
 
 
 def _draw(volume, voxels):
@@ -623,28 +678,29 @@ def _aa_thin(order, key, g, is_chain, sid, want, drawn, strides, shape, connect)
         nb = cand[:, f // 2] + (1 if f % 2 else -1)
         bits |= ((~inside | ((nb >= 0) & (nb < shape[f // 2]))).astype(np.int64)) << f
     added = []
-    index = order.tolist()
-    slice_of = sid[order].tolist()
-    keys = key[order].tolist()
-    chained = is_chain[order].tolist()
-    masks = bits.tolist()
     counts = want.tolist()
     taken, current = 0, -1
-    for i, x in enumerate(keys):
-        if slice_of[i] != current:
-            current, taken = slice_of[i], 0
-        if taken >= counts[current]:
-            continue
-        if chained[i]:
+    for start in range(0, len(order), _AA_CHUNK):          # lists a block at a time
+        block = slice(start, start + _AA_CHUNK)
+        index = order[block].tolist()
+        slice_of = sid[order[block]].tolist()
+        chained = is_chain[order[block]].tolist()
+        masks = bits[block].tolist()
+        for i, x in enumerate(key[order[block]].tolist()):
+            if slice_of[i] != current:
+                current, taken = slice_of[i], 0
+            if taken >= counts[current]:
+                continue
+            if chained[i]:
+                taken += 1
+                continue
+            if connect and not any(masks[i] >> f & 1 and x + faces[f] in drawn for f in range(6)):
+                continue
+            if any(all(x + o in drawn for o in cube) for cube in cubes):
+                continue
+            drawn.add(x)
+            added.append(index[i])
             taken += 1
-            continue
-        if connect and not any(masks[i] >> f & 1 and x + faces[f] in drawn for f in range(6)):
-            continue
-        if any(all(x + o in drawn for o in cube) for cube in cubes):
-            continue
-        drawn.add(x)
-        added.append(index[i])
-        taken += 1
     return np.array(added, dtype=np.int64)
 
 
@@ -654,22 +710,33 @@ class _Clearance:
     _rasterise_antialiased.
     """
 
-    def __init__(self, a, b, ra, rb):
+    def __init__(self, a, b, ra, rb, shape):
         self.a, self.ra, self.rb = a, ra, rb
         self.d = b - a
         self.length2 = np.einsum("ij,ij->i", self.d, self.d)
+        self.rmax = np.maximum(ra, rb)
         # how far outside its capsule a voxel drawn for the segment may lie (the
         # band, or the chain of a segment thinner than sqrt(3)/2), plus sqrt(3)
         self.clear = _AA_SEPARATION + np.maximum(_AA_SUPPORT, math.sqrt(3.0) / 2.0 - np.minimum(ra, rb))
-        reach = (np.maximum(ra, rb) + self.clear)[:, None]
-        lo = np.floor((np.minimum(a, b) - reach) / _AA_CELL).astype(np.int64)
-        hi = np.floor((np.maximum(a, b) + reach) / _AA_CELL).astype(np.int64)
+        reach = (self.rmax + self.clear)[:, None]
+        # the cells a candidate can fall in: the volume grown by the widest margin
+        # of _aa_polyline's boxes
+        margin = math.ceil(2.0 * math.sqrt(3.0) * max(float(self.rmax.max()) + _AA_SUPPORT, math.sqrt(3.0) / 2.0))
+        margin += 1.0 + _AA_CULL
+        first = np.floor(-margin / _AA_CELL)
+        last = np.floor((np.asarray(shape) - 1 + margin) / _AA_CELL)
+        lo = np.maximum(np.floor((np.minimum(a, b) - reach) / _AA_CELL), first).astype(np.int64)
+        hi = np.minimum(np.floor((np.maximum(a, b) + reach) / _AA_CELL), last).astype(np.int64)
+        hi = np.maximum(hi, lo - 1)
         self.origin = lo.min(axis=0)
         self.dims = hi.max(axis=0) - self.origin + 1
         self.strides = np.array([self.dims[1] * self.dims[2], self.dims[2], 1], dtype=np.int64)
-        cells, n = _box_points(lo, hi)
-        segments = np.repeat(np.arange(len(lo)), n)
-        keys = _keys(cells, self.origin, self.strides)
+        keys, segments = [], []
+        for i, j in _chunks(np.prod(hi - lo + 1, axis=1), _AA_CHUNK):
+            cells, n = _box_points(lo[i:j], hi[i:j])
+            keys.append(_keys(cells, self.origin, self.strides))
+            segments.append(np.repeat(np.arange(i, j), n))
+        keys, segments = np.concatenate(keys), np.concatenate(segments)
         order = np.argsort(keys, kind="stable")
         self.keys, self.segments = keys[order], segments[order]
 
@@ -677,7 +744,9 @@ class _Clearance:
         """
         For voxels x (n, 3) outside the capsules of segments `owner`: whether
         every capsule more than _AA_SEPARATION from the owner's lies farther
-        than its clearance from the voxel.
+        than its clearance from the voxel. The distance to a capsule is taken
+        as the distance to its axis less its larger radius, which never
+        exceeds it, tapered or not.
         """
         allowed = np.ones(len(x), dtype=bool)
         cell = np.floor_divide(x, _AA_CELL)
@@ -692,7 +761,7 @@ class _Clearance:
             w = x[voxel] - self.a[m]
             t = np.clip(np.einsum("ij,ij->i", w, self.d[m]) / self.length2[m], 0.0, 1.0)
             w -= t[:, None] * self.d[m]
-            near = np.sqrt(np.einsum("ij,ij->i", w, w)) - (self.ra[m] + t * (self.rb[m] - self.ra[m])) <= self.clear[m]
+            near = np.sqrt(np.einsum("ij,ij->i", w, w)) - self.rmax[m] <= self.clear[m]
             voxel, m = voxel[near], m[near]
             allowed[voxel[self.gap(owner[voxel], m) > _AA_SEPARATION]] = False
         return allowed
