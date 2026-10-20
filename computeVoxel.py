@@ -644,9 +644,12 @@ def _aa_polyline(volume, a, b, ra, rb, first, connect, clearance):
     rank = np.arange(len(order)) - np.searchsorted(osid, np.arange(ns))[osid]
     thick = order[(rank < want[osid]) & ~thin[osid]]
     _draw(volume, g[thick])
-    if np.any(thin):
+    # the eligible candidates of the thin slices, in rank order. Thin slices
+    # may have none (every candidate in them ineligible, which leaves no chain
+    # voxel among them either), and then add nothing; the chain is drawn above
+    taken = order[thin[osid]]
+    if len(taken):
         # the polyline's voxels drawn so far, as far as the thin slices can meet them
-        taken = order[thin[osid]]
         offsets = _NEIGHBOURS @ strides
         nearby = np.unique(np.concatenate([np.unique((key[taken[i:i + _AA_CHUNK]][:, None] + offsets).ravel())
                                            for i in range(0, len(taken), _AA_CHUNK)]))

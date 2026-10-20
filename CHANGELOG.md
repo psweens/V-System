@@ -1,5 +1,86 @@
 # Changelog
 
+## 3.10.1
+
+Version 3.10.1 fixes a crash in the anti-aliased voxeliser and changes
+nothing 3.10.0 drew.
+
+### Voxeliser
+
+- `rasterise_segments(..., antialias=True)`, and `process_network` with it,
+  raised `ValueError: need at least one array to concatenate` on a polyline
+  with lattice planes below 2.45 voxels across in which no candidate voxel
+  was eligible. Step 6 gathered the voxels already drawn around the thin
+  slices' candidates with `np.concatenate` over their chunks, and there were
+  none. Short segments near the cube threshold produce such slices: past a
+  segment's thin end, a slice's candidates are owned by the end, eligible
+  only inside the capsule, and can all lie outside it. A two-point taper
+  from radius 1.18 to 1.76 voxels over 0.27 voxel has one such slice, of
+  mean diameter 2.35 and a single candidate. Library networks rendered at
+  2 µm met it in about one member in four (see Compatibility), and 3.10.0
+  raised on the fixtures Lnet_i5_s1 whole at 8 µm and Lnet_i9_s3 at 2 µm in
+  256³ and whole at 4 and 8 µm without the chain.
+- Such slices now add nothing, which is what the selection gives them: with
+  no eligible candidate there is none to take. Chain voxels are always
+  eligible, so none is among such a slice's candidates, and with `connect`
+  the chain is drawn whole as before. Every input 3.10.0 rendered is drawn bit for bit as
+  3.10.0 drew it.
+- No other step of the anti-aliased path passes an empty array to
+  `np.concatenate`, `np.stack` or a reduction: a polyline has at least one
+  segment, each segment's box yields a chunk even when it is empty, the
+  candidates are reduced only after the check that some exist, and
+  `_Clearance` is built only for a network with segments. Degenerate inputs
+  (no columns, a single point, all NaN, zero and non-finite radii, repeated
+  points, segments far outside the volume, volumes 1 and 0 voxels on a side)
+  render without raising.
+
+### Tests
+
+- `tests/test_antialias.ShortPolylineTests`:
+  - the two-point taper above, with and without the chain: it renders, the
+    chain is drawn, and every voxel lies within half a voxel of the capsule,
+    on the chain or between six drawn neighbours;
+  - Lnet_i5_s1 whole at 8 µm without the chain renders under the same
+    guarantee;
+  - 2,000 short polylines, each in a volume of its own and with and without
+    the chain: 2 to 4 points, segments 0.1 to 3 voxels long, radii 0.5 to
+    2.5 voxels with tapers, starting anywhere in the volume or up to 1.5
+    voxels outside it and next to a face half the time. Every voxel meets
+    the guarantee above. 3.10.0 raised on 183 of the 4,000 renders;
+  - 600 pairs of such polylines 0.01 to 0.15 voxel more than √3 apart
+    surface to surface, half of them a polyline and a parallel copy: where
+    the anti-aliased render joins the two in one 26-component, so does the
+    default. The gap is taken as the distance between the centre lines less
+    both largest radii, which never exceeds it.
+- With the new tests, `tests/test_antialias.py` runs in about 20 s more.
+
+### Compatibility
+
+- `antialias=False` runs the code 3.10.0 ran, which draws what 3.9 drew;
+  the comparison with the 3.9.0 voxeliser and the pinned-release tests
+  pass unchanged. The constants of the rule (`_AA_*`) are unchanged.
+- Against 3.10.0 (075fdd6), on every input it rendered without raising, the
+  anti-aliased volumes are identical: the 3.10 benchmark fixtures (the three
+  Lnet archives at 2 µm in 256³, whole at 4 and 8 µm and in two slabs, and
+  the foam and capillary_bed networks grown at d_min 4 µm and rendered at
+  2 µm in 256³, with and without the chain), the tubes, curves and random
+  polylines of the 3.10 tests, and 20,000 short polylines in small volumes:
+  19,463 renders compared, 943 on which 3.10.0 raised.
+- Library networks: 240 members grown with `vsystem-library --count 240
+  --seed 7` (80 each of tree, mesh and tumour, R 2.52 to 25, 510 to 1.19
+  million segments), placed at 0.5 units per voxel (d_min 4 µm at 2 µm
+  voxels). Each was rendered in a 256³ window on its centre with and
+  without the chain, in a 256³ window at a random place over it, and in
+  four 64³ windows on random points of it: 1,680 renders, none raising,
+  every voxel within half a voxel of a capsule, on a chain or enclosed, and
+  each identical to 3.10.0's wherever 3.10.0 rendered it. 3.10.0 raised on
+  137 of them (30, 30 and 37 of the 256³ windows, 40 of the 960 64³ ones),
+  on 68 members: 32 tumour, 23 mesh and 13 tree.
+- `library_version` is 3.10.1, and the code hash changes with
+  `computeVoxel.py`, so a library begun under 3.10.0 refuses to resume
+  under 3.10.1, as any change of the generator does. Library members are
+  grown as under 3.10.0. pyproject version 3.10.1.
+
 ## 3.10.0
 
 Version 3.10 adds an opt-in anti-aliased mode to the voxeliser:

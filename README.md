@@ -2042,6 +2042,12 @@ Anti-aliased, it checks:
   polylines;
 - three windows of a fixture equal the crop of the whole, and a segment 1,000
   voxels long through a 64³ volume costs what the volume holds.
+- 2,000 short polylines (2 to 4 points, segments 0.1 to 3 voxels long, radii
+  0.5 to 2.5 voxels with tapers, at and beyond the volume's faces) render
+  with every voxel near a capsule, on a chain or enclosed, with `connect` and
+  without it, and 600 pairs of them just over √3 apart touch only where the
+  default has them touch (from 3.10.1, which renders the short tapers 3.10.0
+  raised on).
 
 With `VSYSTEM_SLOW_TESTS=1` it measures the default against the anti-aliased
 mode, giving the tables in *Anti-aliased rendering*.

@@ -39,6 +39,11 @@ Anti-aliased. Measured as the CHANGELOG states the acceptance criteria:
     deterministic and independent of the order of the polylines; a window
     of a network is the crop of the whole; a segment far longer than the
     volume costs what the volume holds.
+  - short polylines (2-4 points, segments 0.1-3 voxels long, radii 0.5-2.5
+    voxels with tapers, at and beyond the volume's faces) render, as 3.10.0
+    did not where every candidate of their thin slices was ineligible, with
+    every voxel near a capsule, on a chain or enclosed, and pairs of them
+    more than sqrt(3) apart touch only where 3.9 has them touch.
 
 The comparison of 3.9 with 3.10 that the CHANGELOG reports (area bias, CV,
 short necks per mm, components, runtime on a foam and a capillary_bed
@@ -279,6 +284,48 @@ def random_polylines(rng, shape, count):
         columns += [p, np.full((3, 1), np.nan)]
         radii += [r, [np.nan]]
     return np.hstack(columns), np.concatenate(radii)
+
+
+def short_polyline(rng, shape):
+    """
+    2-4 points, segments 0.1-3 voxels long, radii 0.5-2.5 voxels with tapers,
+    starting anywhere in the volume or up to 1.5 voxels outside it, and next
+    to one of its faces half the time.
+    """
+    n = int(rng.integers(2, 5))
+    steps = rng.normal(size=(n - 1, 3))
+    steps *= (rng.uniform(0.1, 3.0, n - 1) / np.linalg.norm(steps, axis=1))[:, None]
+    start = rng.uniform(-1.5, np.array(shape) + 0.5)
+    if rng.random() < 0.5:
+        axis = int(rng.integers(3))
+        start[axis] = rng.uniform(-1.0, 1.0) + (shape[axis] - 1 if rng.random() < 0.5 else 0)
+    points = (start + np.vstack([np.zeros(3), np.cumsum(steps, axis=0)])).T
+    return points, rng.uniform(0.5, 2.5, n)
+
+
+def axis_distance(p, q):
+    """
+    The least distance between the centre lines of polylines p and q (3, n),
+    at most 0.008 voxel above it for segments up to 3 voxels long: p's
+    segments sampled 201 times each, against q's segments exactly.
+    """
+    s = np.linspace(0.0, 1.0, 201)[:, None]
+    x = np.concatenate([p[:, i] + s * (p[:, i + 1] - p[:, i]) for i in range(p.shape[1] - 1)])
+    best = np.inf
+    for j in range(q.shape[1] - 1):
+        a, d = q[:, j], q[:, j + 1] - q[:, j]
+        t = np.clip((x - a) @ d / (d @ d), 0.0, 1.0)
+        best = min(best, float(np.min(np.linalg.norm(x - a - t[:, None] * d, axis=1))))
+    return best
+
+
+def near_a_capsule_on_a_chain_or_enclosed(reference, volume, points, radii, connect):
+    """Whether every voxel of `volume` lies within half a voxel of a capsule, on a chain or between six drawn ones."""
+    grown = reference.rasterise_segments(points, radii + 0.5, volume.shape, connect=connect).astype(bool)
+    v = np.pad(volume.astype(bool), 1)
+    enclosed = (v[:-2, 1:-1, 1:-1] & v[2:, 1:-1, 1:-1] & v[1:-1, :-2, 1:-1] & v[1:-1, 2:, 1:-1]
+                & v[1:-1, 1:-1, :-2] & v[1:-1, 1:-1, 2:])
+    return not np.any(volume.astype(bool) & ~grown & ~enclosed)
 
 
 class DefaultTests(unittest.TestCase):
@@ -656,6 +703,103 @@ class PropertyTests(unittest.TestCase):
         volume = antialiased(points, np.array([1.0, 1.0]), (64, 64, 64))
         self.assertLess(time.perf_counter() - start, 20.0)
         self.assertGreater(int(volume.sum()), 0)
+
+
+class ShortPolylineTests(unittest.TestCase):
+    """
+    Short polylines near the cube threshold, which 3.10.0 could not render:
+    where every candidate of a polyline's thin slices was ineligible, step 6
+    passed an empty list to np.concatenate and raised ValueError.
+    """
+
+    @classmethod
+    def setUpClass(cls):
+        cls.reference = reference_voxeliser()
+
+    def test_a_short_taper_with_no_eligible_thin_candidate_renders(self):
+        points = np.array([[27.468945637687412, 27.70146939734675], [18.96360394242091, 18.997378676328186],
+                           [9.229805839742673, 9.08784129577368]])
+        radii = np.array([1.1764849336660148, 1.764727400499022])
+        shape = (47, 23, 20)
+        self.assertEqual(int(default(points, radii, shape).sum()), 19)
+        chain = np.zeros(shape, dtype=np.uint8)
+        computeVoxel.rasterise_line(chain, points[:, 0], points[:, 1])
+        for connect in (True, False):
+            with self.subTest(connect=connect):
+                volume = antialiased(points, radii, shape, connect)
+                self.assertGreater(int(volume.sum()), 0)
+                self.assertTrue(near_a_capsule_on_a_chain_or_enclosed(self.reference, volume, points, radii, connect))
+                if connect:
+                    self.assertFalse(np.any(chain.astype(bool) & ~volume.astype(bool)))
+
+    def test_a_fixture_without_the_chain_renders(self):
+        # Lnet_i5_s1 whole at 8 um voxels without the chain raised in 3.10.0
+        nodes = load_fixture("Lnet_i5_s1.npz")
+        extent = np.nanmax(nodes[:3], axis=1) - np.nanmin(nodes[:3], axis=1)
+        shape = tuple(int(e) for e in np.ceil(extent / 8.0) + 8)
+        points, radii = computeVoxel.fit_to_volume(nodes, shape, fit="voxel_size", voxel_size=8.0)
+        volume = antialiased(points, radii, shape, connect=False)
+        self.assertGreater(int(volume.sum()), 0)
+        self.assertTrue(near_a_capsule_on_a_chain_or_enclosed(self.reference, volume, points, radii, False))
+
+    def test_every_short_polyline_renders_near_its_capsule_on_its_chain_or_enclosed(self):
+        # 2000 polylines, a polyline to a volume, each with and without the chain
+        rng = np.random.default_rng(310)
+        for case in range(2000):
+            shape = tuple(int(s) for s in rng.integers(6, 16, size=3))
+            points, radii = short_polyline(rng, shape)
+            for connect in (True, False):
+                with self.subTest(case=case, connect=connect):
+                    volume = antialiased(points, radii, shape, connect)
+                    self.assertTrue(near_a_capsule_on_a_chain_or_enclosed(self.reference, volume, points, radii,
+                                                                          connect))
+
+    @NEEDS_SCIPY
+    def test_short_polylines_more_than_sqrt3_apart_touch_only_where_the_default_has_them_touch(self):
+        # 600 pairs whose capsules lie 0.01-0.15 voxel more than sqrt(3) apart
+        # surface to surface (the distance between their centre lines less both
+        # largest radii, which never exceeds the gap), half of them a polyline
+        # and a parallel copy of it; where the anti-aliased render joins the two
+        # in one 26-component, so must the default
+        from scipy import ndimage
+        rng = np.random.default_rng(311)
+        s26 = np.ones((3, 3, 3), dtype=bool)
+
+        def joined(both, first, second):
+            labels = ndimage.label(both, s26)[0]
+            return bool(set(labels[first.astype(bool)].tolist()) & set(labels[second.astype(bool)].tolist()) - {0})
+
+        case = 0
+        while case < 600:
+            shape = tuple(int(s) for s in rng.integers(10, 18, size=3))
+            p, rp = short_polyline(rng, shape)
+            if rng.random() < 0.5:
+                rp[:] = rp[0]
+            if rng.random() < 0.5:
+                q, rq = p.copy(), np.full(p.shape[1], rng.uniform(0.5, 2.5))
+                w = np.cross(p[:, -1] - p[:, 0], rng.normal(size=3))
+            else:
+                q, rq = short_polyline(rng, shape)
+                q = q - q[:, :1] + p[:, :1]
+                w = rng.normal(size=3)
+            w /= np.linalg.norm(w)
+            target = math.sqrt(3.0) + rng.uniform(0.01, 0.15) + rp.max() + rq.max()
+            lo, hi = 0.0, target + 8.0                    # q moved along w until its axis is `target` from p's
+            for _ in range(40):
+                mid = 0.5 * (lo + hi)
+                lo, hi = (mid, hi) if axis_distance(p, q + (mid * w)[:, None]) < target else (lo, mid)
+            q = q + (hi * w)[:, None]
+            if axis_distance(p, q) - rp.max() - rq.max() <= math.sqrt(3.0) + 0.008:
+                continue
+            points = np.hstack([p, np.full((3, 1), np.nan), q])
+            radii = np.concatenate([rp, [np.nan], rq])
+            for connect in (True, False):
+                with self.subTest(case=case, connect=connect):
+                    if joined(antialiased(points, radii, shape, connect), antialiased(p, rp, shape, connect),
+                              antialiased(q, rq, shape, connect)):
+                        self.assertTrue(joined(default(points, radii, shape, connect), default(p, rp, shape, connect),
+                                               default(q, rq, shape, connect)))
+            case += 1
 
 
 @SLOW
